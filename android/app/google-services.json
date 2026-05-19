@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "382479866723",
+    "project_id": "agan-ee7ee",
+    "storage_bucket": "agan-ee7ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:382479866723:android:2cc0773a7657b594a65156",
+        "android_client_info": {
+          "package_name": "com.example.restorant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA20KbaJiIdbeciPSgXhEyD1x9EZ24Kz18"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
