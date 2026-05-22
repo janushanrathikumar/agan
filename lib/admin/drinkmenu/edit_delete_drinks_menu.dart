@@ -5,6 +5,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
+// வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க இந்த இம்போர்ட்டுகள் தேவை
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:ui_web' as ui_web;
+import 'dart:html' as html;
+
 const kPrimary = Color(0xFFA63334);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
@@ -27,8 +32,9 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
   }
 
   Future<Map<String, String>> _loadCategories() async {
-    final q =
-        await FirebaseFirestore.instance.collection('menu_category').get();
+    final q = await FirebaseFirestore.instance
+        .collection('menu_category')
+        .get();
     final m = <String, String>{};
     for (final d in q.docs) {
       final data = (d.data()) as Map<String, dynamic>;
@@ -48,8 +54,9 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
         content: Text('This will remove "$name".'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(c, true),
@@ -62,32 +69,84 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
 
     try {
       if (imageFileName != null && imageFileName.isNotEmpty) {
-        final ref =
-            FirebaseStorage.instance.ref('drinks_images/$imageFileName');
+        final ref = FirebaseStorage.instance.ref(
+          'drinks_images/$imageFileName',
+        );
         try {
           await ref.delete();
         } catch (_) {}
       }
       await doc.reference.delete();
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Deleted')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Deleted')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
       }
     }
   }
 
+  // வெப் பிளாட்ஃபார்மில் CORS எர்ரர் இல்லாமல் இமேஜ் காட்ட உதவும் பொதுவான விட்ஜெட்
+  Widget _buildWebSafeImage({
+    required String url,
+    required double size,
+    required Widget fallback,
+  }) {
+    if (url.isEmpty) return fallback;
+
+    if (kIsWeb) {
+      final String viewId =
+          'img-${url.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
+
+      ui_web.platformViewRegistry.registerViewFactory(
+        viewId,
+        (int viewId) => html.ImageElement()
+          ..src = url
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.objectFit = 'cover',
+      );
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: size,
+          width: size,
+          child: HtmlElementView(
+            viewType: viewId,
+          ), // viewType சரியாகச் சேர்க்கப்பட்டுள்ளது
+        ),
+      );
+    } else {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          url,
+          height: size,
+          width: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback,
+        ),
+      );
+    }
+  }
+
   Future<void> _editDrink(
-      DocumentSnapshot doc, Map<String, String> cats) async {
+    DocumentSnapshot doc,
+    Map<String, String> cats,
+  ) async {
     final data = (doc.data() as Map<String, dynamic>?) ?? {};
     final nameCtrl = TextEditingController(text: data['name'] as String? ?? '');
     final noteCtrl = TextEditingController(text: data['note'] as String? ?? '');
-    final priceCtrl =
-        TextEditingController(text: (data['price']?.toString() ?? ''));
+    final priceCtrl = TextEditingController(
+      text: (data['price']?.toString() ?? ''),
+    );
     String? category = data['category'] as String?;
     String status = (data['status'] as String?) ?? 'on';
     String? imageUrl = data['imageUrl'] as String?;
@@ -112,8 +171,10 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
               imageQuality: 90,
             );
             if (x == null) return;
-            setS(() async {
-              newImgBytes = await x.readAsBytes();
+            // async தவற்றினைத் தவிர்க்க வெளியே bytes மாற்றி செட் செய்யப்பட்டுள்ளது
+            final bytes = await x.readAsBytes();
+            setS(() {
+              newImgBytes = bytes;
               newImgFileName = x.name;
             });
           }
@@ -149,12 +210,16 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
               String? uploadedFileName;
 
               if (newImgBytes != null) {
-                final safeBase = (newImgFileName ?? nm)
-                    .replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_');
+                final safeBase = (newImgFileName ?? nm).replaceAll(
+                  RegExp(r'[^a-zA-Z0-9._-]+'),
+                  '_',
+                );
                 final fn = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
                 final ref = FirebaseStorage.instance.ref('drinks_images/$fn');
-                await ref.putData(newImgBytes!,
-                    SettableMetadata(contentType: guessCT(newImgFileName)));
+                await ref.putData(
+                  newImgBytes!,
+                  SettableMetadata(contentType: guessCT(newImgFileName)),
+                );
                 uploadedUrl = await ref.getDownloadURL();
                 uploadedFileName = fn;
 
@@ -170,12 +235,14 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
 
               final update = <String, dynamic>{
                 'name': nm,
-                'note':
-                    noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+                'note': noteCtrl.text.trim().isEmpty
+                    ? null
+                    : noteCtrl.text.trim(),
                 'price': pr,
                 'category': category,
-                'categoryIconUrl':
-                    (category != null) ? (cats[category] ?? '') : null,
+                'categoryIconUrl': (category != null)
+                    ? (cats[category] ?? '')
+                    : null,
                 'status': status,
                 'updatedAt': FieldValue.serverTimestamp(),
               };
@@ -187,8 +254,9 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
               await doc.reference.update(update);
               if (mounted) Navigator.pop(context);
             } catch (e) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text('Update failed: $e')));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
             }
           }
 
@@ -203,38 +271,47 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                    height: 4,
-                    width: 40,
-                    decoration: BoxDecoration(
-                        color: kMuted, borderRadius: BorderRadius.circular(2))),
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: kMuted,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox(
-                        height: 64,
-                        width: 64,
-                        child: newImgBytes != null
-                            ? Image.memory(newImgBytes!, fit: BoxFit.cover)
-                            : (imageUrl != null && imageUrl!.isNotEmpty
-                                ? Image.network(imageUrl!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(
-                                        Icons.broken_image,
-                                        color: kWhite))
-                                : const Icon(Icons.image_not_supported,
-                                    color: kWhite)),
-                      ),
+                    SizedBox(
+                      height: 64,
+                      width: 64,
+                      child: newImgBytes != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(
+                                newImgBytes!,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : _buildWebSafeImage(
+                              url: imageUrl ?? '',
+                              size: 64,
+                              fallback: const Icon(
+                                Icons.image_not_supported,
+                                color: kWhite,
+                              ),
+                            ),
                     ),
                     const SizedBox(width: 12),
                     OutlinedButton.icon(
                       onPressed: pickNew,
                       icon: const Icon(Icons.image, color: kWhite),
-                      label: const Text('Change image',
-                          style: TextStyle(color: kWhite)),
+                      label: const Text(
+                        'Change image',
+                        style: TextStyle(color: kWhite),
+                      ),
                       style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: kMuted)),
+                        side: const BorderSide(color: kMuted),
+                      ),
                     ),
                   ],
                 ),
@@ -243,9 +320,13 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
                 const SizedBox(height: 8),
                 _tf('Note (optional)', noteCtrl),
                 const SizedBox(height: 8),
-                _tf('Price', priceCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true)),
+                _tf(
+                  'Price',
+                  priceCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 // Category
                 InputDecorator(
@@ -282,12 +363,13 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
                       isExpanded: true,
                       items: const [
                         DropdownMenuItem(
-                            value: 'on',
-                            child: Text('on', style: TextStyle(color: kWhite))),
+                          value: 'on',
+                          child: Text('on', style: TextStyle(color: kWhite)),
+                        ),
                         DropdownMenuItem(
-                            value: 'off',
-                            child:
-                                Text('off', style: TextStyle(color: kWhite))),
+                          value: 'off',
+                          child: Text('off', style: TextStyle(color: kWhite)),
+                        ),
                       ],
                       onChanged: (v) => setS(() => status = v ?? 'on'),
                     ),
@@ -298,12 +380,15 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
                   width: double.infinity,
                   child: FilledButton(
                     style: FilledButton.styleFrom(
-                        backgroundColor: kPrimary,
-                        foregroundColor: kWhite,
-                        padding: const EdgeInsets.symmetric(vertical: 14)),
+                      backgroundColor: kPrimary,
+                      foregroundColor: kWhite,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                     onPressed: save,
-                    child: const Text('Save changes',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Save changes',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
@@ -331,8 +416,11 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
           }
           if (catSnap.hasError) {
             return Center(
-                child: Text('Category load error: ${catSnap.error}',
-                    style: const TextStyle(color: Colors.redAccent)));
+              child: Text(
+                'Category load error: ${catSnap.error}',
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            );
           }
           final cats = catSnap.data ?? {};
 
@@ -347,14 +435,17 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
               }
               if (snap.hasError) {
                 return Center(
-                    child: Text('Error: ${snap.error}',
-                        style: const TextStyle(color: Colors.redAccent)));
+                  child: Text(
+                    'Error: ${snap.error}',
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                );
               }
               final docs = snap.data?.docs ?? [];
               if (docs.isEmpty) {
                 return const Center(
-                    child:
-                        Text('No drinks yet', style: TextStyle(color: kWhite)));
+                  child: Text('No drinks yet', style: TextStyle(color: kWhite)),
+                );
               }
 
               return ListView.separated(
@@ -377,25 +468,23 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
                       side: const BorderSide(color: kMuted),
                     ),
                     child: ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: imageUrl.isNotEmpty
-                            ? Image.network(
-                                imageUrl,
-                                height: 48,
-                                width: 48,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.broken_image,
-                                    color: kWhite),
-                              )
-                            : const Icon(Icons.local_drink, color: kWhite),
+                      // திருத்தப்பட்ட பகுதி: பிரதான லிஸ்டில் வெப் இமேஜ் பயன்படுத்தப்பட்டுள்ளது
+                      leading: _buildWebSafeImage(
+                        url: imageUrl,
+                        size: 48,
+                        fallback: const Icon(Icons.local_drink, color: kWhite),
                       ),
-                      title: Text('$name • RM $price',
-                          style: const TextStyle(
-                              color: kWhite, fontWeight: FontWeight.w600)),
-                      subtitle: Text('Category: $category   Status: $status',
-                          style: const TextStyle(color: kMuted)),
+                      title: Text(
+                        '$name • RM $price',
+                        style: const TextStyle(
+                          color: kWhite,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Category: $category   Status: $status',
+                        style: const TextStyle(color: kMuted),
+                      ),
                       trailing: Wrap(
                         spacing: 8,
                         children: [
@@ -406,8 +495,10 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
                           ),
                           IconButton(
                             tooltip: 'Delete',
-                            icon: const Icon(Icons.delete,
-                                color: Colors.redAccent),
+                            icon: const Icon(
+                              Icons.delete,
+                              color: Colors.redAccent,
+                            ),
                             onPressed: () => _deleteDrink(d),
                           ),
                         ],
@@ -424,22 +515,25 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
   }
 
   InputDecoration _dec(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: kMuted),
-        filled: true,
-        fillColor: const Color(0xFF2F2E2D),
-        enabledBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: kMuted),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: kPrimary, width: 2),
-          borderRadius: BorderRadius.circular(12),
-        ),
-      );
+    labelText: label,
+    labelStyle: const TextStyle(color: kMuted),
+    filled: true,
+    fillColor: const Color(0xFF2F2E2D),
+    enabledBorder: OutlineInputBorder(
+      borderSide: const BorderSide(color: kMuted),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderSide: const BorderSide(color: kPrimary, width: 2),
+      borderRadius: BorderRadius.circular(12),
+    ),
+  );
 
-  Widget _tf(String label, TextEditingController c,
-      {TextInputType? keyboardType}) {
+  Widget _tf(
+    String label,
+    TextEditingController c, {
+    TextInputType? keyboardType,
+  }) {
     return TextField(
       controller: c,
       keyboardType: keyboardType,
@@ -449,6 +543,7 @@ class _EditDeleteDrinksMenuPageState extends State<EditDeleteDrinksMenuPage> {
   }
 }
 
+// திருத்தப்பட்ட பகுதி: கேட்டகிரி ஐகானும் வெப் பிரவுசரில் தெரியும் வகையில் viewType உடன் மாற்றப்பட்டுள்ளது
 class _CategoryIcon extends StatelessWidget {
   final String? iconUrl;
   const _CategoryIcon({this.iconUrl});
@@ -456,18 +551,46 @@ class _CategoryIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = iconUrl ?? '';
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: url.isNotEmpty
-          ? Image.network(
-              url,
-              height: 20,
-              width: 20,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.broken_image, color: kMuted, size: 18),
-            )
-          : const Icon(Icons.image_not_supported, color: kMuted, size: 18),
-    );
+    if (url.isEmpty) {
+      return const Icon(Icons.image_not_supported, color: kMuted, size: 18);
+    }
+
+    if (kIsWeb) {
+      final String viewId =
+          'drink-cat-img-${url.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
+
+      ui_web.platformViewRegistry.registerViewFactory(
+        viewId,
+        (int viewId) => html.ImageElement()
+          ..src = url
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.objectFit = 'cover',
+      );
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          height: 20,
+          width: 20,
+          child: HtmlElementView(
+            viewType: viewId,
+          ), // viewType சரியாக மாற்றப்பட்டுள்ளது
+        ),
+      );
+    } else {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.network(
+          url,
+          height: 20,
+          width: 20,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, color: kMuted, size: 18),
+        ),
+      );
+    }
   }
 }

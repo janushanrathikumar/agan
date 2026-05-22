@@ -1,14 +1,15 @@
 // lib/startup_page/start_page.dart
 import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:restorant/startup page/signin_page.dart';
+import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது
 
-// Palette
-const kPrimary = Color(0xFFA26334);
-const kBg = Color(0xFF2A2928);
-const kMuted = Color(0xFFB7B7B6);
-const kWhite = Color(0xFFFFFFFF);
+// லோகோவில் இருந்து எடுக்கப்பட்ட நிறங்கள் (Palette based on Logo)
+const kPrimary = Color(0xFFE49024); // ஆரஞ்சு நிறம் (Mountains/Banner)
+const kBg = Color(0xFF112A18); // அடர் பச்சை நிறம் (Dark Green - Background)
+const kDarkGreen = Color(0xFF194D25); // லோகோ பச்சை நிறம் (Logo Forest Green)
+const kMuted = Color(0xFFA1B3A1); // சற்று மங்கலான பச்சை/சாம்பல்
+const kWhite = Color(0xFFF7F7F2); // கிரீம் வெள்ளை (Cream/Off-white)
 
 class StartPage extends StatefulWidget {
   const StartPage({super.key});
@@ -20,32 +21,44 @@ class _StartPageState extends State<StartPage> {
   final PageController _controller = PageController();
   int _currentIndex = 0;
 
-  final _slides = const [
-    {
-      'image': 'assets/slide1.png',
-      'title': 'Order like a King',
-      'text': 'Skip the line. Order your favourite coffee in a few taps.',
-    },
-    {
-      'image': 'assets/slide2.png',
-      'title': 'Fast Delivery',
-      'text': 'Get it to your table or door quickly.',
-    },
-    {
-      'image': 'assets/slide3.png',
-      'title': 'Earn Rewards',
-      'text': 'Collect points. Unlock exclusive offers.',
-    },
-    {
-      'image': 'assets/slide4.png',
-      'title': 'Stay Connected',
-      'text': 'Track orders and get updates.',
-    },
-  ];
+  // மொழியை மாற்றும் Function
+  void _toggleLanguage() {
+    setState(() {
+      if (AppLanguage.currentLanguage == 'de') {
+        AppLanguage.currentLanguage = 'en';
+      } else {
+        AppLanguage.currentLanguage = 'de';
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 720;
+
+    // ஸ்லைடு டேட்டா (Language file-ல் இருந்து Text எடுக்கப்படுகிறது)
+    final _slides = [
+      {
+        'image': 'assets/slide1.png',
+        'title': AppLanguage.getText('title_1'),
+        'text': AppLanguage.getText('text_1'),
+      },
+      {
+        'image': 'assets/slide2.png',
+        'title': AppLanguage.getText('title_2'),
+        'text': AppLanguage.getText('text_2'),
+      },
+      {
+        'image': 'assets/slide3.png',
+        'title': AppLanguage.getText('title_3'),
+        'text': AppLanguage.getText('text_3'),
+      },
+      {
+        'image': 'assets/slide4.png',
+        'title': AppLanguage.getText('title_4'),
+        'text': AppLanguage.getText('text_4'),
+      },
+    ];
 
     return Scaffold(
       backgroundColor: kBg,
@@ -58,7 +71,10 @@ class _StartPageState extends State<StartPage> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF2A2928), Color(0xFF221F1E)],
+                colors: [
+                  Color(0xFF194D25),
+                  Color(0xFF0C1E11),
+                ], // லோகோ பச்சை Gradient
               ),
             ),
           ),
@@ -83,7 +99,7 @@ class _StartPageState extends State<StartPage> {
               height: 260,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: kMuted.withOpacity(0.12),
+                color: kPrimary.withOpacity(0.12),
               ),
             ),
           ),
@@ -93,15 +109,41 @@ class _StartPageState extends State<StartPage> {
               children: [
                 const SizedBox(height: 16),
 
-                // Skip button (top-right)
-                Align(
-                  alignment: Alignment.topRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pushReplacementNamed(
-                      context,
-                      SignInPage.route,
-                    ),
-                    child: const Text('Skip', style: TextStyle(color: kMuted)),
+                // Top Bar (Language Toggle & Skip button)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Language Toggle Button
+                      TextButton.icon(
+                        onPressed: _toggleLanguage,
+                        icon: const Icon(
+                          Icons.language,
+                          color: kWhite,
+                          size: 20,
+                        ),
+                        label: Text(
+                          AppLanguage.getText('lang_toggle'),
+                          style: const TextStyle(
+                            color: kWhite,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+
+                      // Skip button
+                      TextButton(
+                        onPressed: () => Navigator.pushReplacementNamed(
+                          context,
+                          SignInPage.route,
+                        ),
+                        child: Text(
+                          AppLanguage.getText('skip'),
+                          style: const TextStyle(color: kMuted),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -133,14 +175,14 @@ class _StartPageState extends State<StartPage> {
                                     vertical: isWide ? 28 : 22,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: kWhite.withOpacity(0.06),
+                                    color: kWhite.withOpacity(0.08),
                                     borderRadius: BorderRadius.circular(24),
                                     border: Border.all(
-                                      color: kWhite.withOpacity(0.10),
+                                      color: kWhite.withOpacity(0.15),
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.35),
+                                        color: Colors.black.withOpacity(0.25),
                                         blurRadius: 24,
                                         offset: const Offset(0, 16),
                                       ),
@@ -222,8 +264,8 @@ class _StartPageState extends State<StartPage> {
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(
-                              color: kWhite.withOpacity(0.22),
-                              width: 1,
+                              color: kPrimary.withOpacity(0.8),
+                              width: 1.5,
                             ),
                             foregroundColor: kWhite,
                             shape: RoundedRectangleBorder(
@@ -235,7 +277,7 @@ class _StartPageState extends State<StartPage> {
                             context,
                             SignInPage.route,
                           ),
-                          child: const Text('Sign Up'),
+                          child: Text(AppLanguage.getText('sign_up')),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -243,7 +285,8 @@ class _StartPageState extends State<StartPage> {
                         child: FilledButton(
                           style: FilledButton.styleFrom(
                             backgroundColor: kPrimary,
-                            foregroundColor: kWhite,
+                            foregroundColor:
+                                Colors.white, // Text color on Orange button
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -264,8 +307,9 @@ class _StartPageState extends State<StartPage> {
                           },
                           child: Text(
                             _currentIndex == _slides.length - 1
-                                ? 'Log In'
-                                : 'Next',
+                                ? AppLanguage.getText('log_in')
+                                : AppLanguage.getText('next'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),

@@ -2,14 +2,71 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'checkout.dart';
+import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது (path-ஐ சரிபார்க்கவும்)
 
-// --- unified palette ---
-const kPrimary = Color(0xFFA26334); // coffee brown
-const kBg = Color(0xFF2A2928);
-const kMuted = Color(0xFFB7B7B6);
-const kWhite = Color(0xFFFFFFFF);
+// வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க இந்த இம்போர்ட்டுகள் தேவை
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:ui_web' as ui_web;
+import 'dart:html' as html;
+
+// --- லோகோ நிறங்கள் ---
+const kPrimary = Color(0xFFE49024); // Orange
+const kBg = Color(0xFF112A18); // Dark Green
+const kMuted = Color(0xFFA1B3A1); // Muted Green
+const kWhite = Color(0xFFF7F7F2); // Cream White
+const kDarkCard = Color(0xFF194D25); // Card Background Green
 
 enum _MenuKind { drinks, foods }
+
+// வெப் பிளாட்ஃபார்மில் CORS எர்ரர் இல்லாமல் இமேஜ் காட்ட உதவும் பொதுவான விட்ஜெட்
+class _WebSafeImage extends StatelessWidget {
+  final String imageUrl;
+  final double? width;
+  final double? height;
+  final Widget fallback;
+
+  const _WebSafeImage({
+    required this.imageUrl,
+    this.width,
+    this.height,
+    required this.fallback,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) return fallback;
+
+    if (kIsWeb) {
+      final String viewId =
+          'menu-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
+
+      ui_web.platformViewRegistry.registerViewFactory(
+        viewId,
+        (int viewId) => html.ImageElement()
+          ..src = imageUrl
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.objectFit = 'cover'
+          ..style.borderRadius = '12px', // படங்களின் ஓரங்களை வளைக்க
+      );
+
+      return SizedBox(
+        width: width,
+        height: height,
+        child: HtmlElementView(viewType: viewId),
+      );
+    } else {
+      return Image.network(
+        imageUrl,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => fallback,
+      );
+    }
+  }
+}
 
 class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
@@ -20,16 +77,14 @@ class MenuPage extends StatefulWidget {
 class _MenuPageState extends State<MenuPage> {
   _MenuKind _kind = _MenuKind.drinks;
   String? _selectedCategory;
-
-  // Stream for all menu categories, fetched once.
   late final Stream<QuerySnapshot> _categoryStream;
 
   @override
   void initState() {
     super.initState();
-    // 1. Fetch ALL menu_category documents once.
-    _categoryStream =
-        FirebaseFirestore.instance.collection('menu_category').snapshots();
+    _categoryStream = FirebaseFirestore.instance
+        .collection('menu_category')
+        .snapshots();
   }
 
   @override
@@ -41,11 +96,9 @@ class _MenuPageState extends State<MenuPage> {
       builder: (context, authSnap) {
         final uid = authSnap.data?.uid;
 
-        // 2. Wrap the entire MenuPage content in a StreamBuilder for categories
         return StreamBuilder<QuerySnapshot>(
           stream: _categoryStream,
           builder: (context, categorySnap) {
-            // Display loading indicator while categories are fetched
             if (categorySnap.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 backgroundColor: kBg,
@@ -60,9 +113,13 @@ class _MenuPageState extends State<MenuPage> {
               appBar: AppBar(
                 backgroundColor: kBg,
                 foregroundColor: kWhite,
-                title: const Text('Menu',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, color: kWhite)),
+                title: Text(
+                  AppLanguage.getText('menu'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: kWhite,
+                  ),
+                ),
                 elevation: 0,
                 bottom: PreferredSize(
                   preferredSize: const Size.fromHeight(54),
@@ -72,7 +129,6 @@ class _MenuPageState extends State<MenuPage> {
                       kind: _kind,
                       onChanged: (k) => setState(() {
                         _kind = k;
-                        // Reset selected category when switching menu kind
                         _selectedCategory = null;
                       }),
                     ),
@@ -85,10 +141,9 @@ class _MenuPageState extends State<MenuPage> {
                     width: leftW,
                     child: _CategoryRail(
                       kind: _kind,
-                      allCategoryDocs: allCategoryDocs, // Pass all categories
+                      allCategoryDocs: allCategoryDocs,
                       selected: _selectedCategory,
                       onResolvedFirst: (first) {
-                        // Only update state if the selection has actually changed
                         if (_selectedCategory != first) {
                           setState(() => _selectedCategory = first);
                         }
@@ -96,7 +151,10 @@ class _MenuPageState extends State<MenuPage> {
                       onSelect: (c) => setState(() => _selectedCategory = c),
                     ),
                   ),
-                  const VerticalDivider(width: 1, color: Color(0xFF3A3938)),
+                  const VerticalDivider(
+                    width: 1,
+                    color: kMuted,
+                  ), // Divider நிறம் மாற்றம்
                   Expanded(
                     child: _MenuGrid(
                       kind: _kind,
@@ -106,7 +164,6 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                 ],
               ),
-              // ... (FloatingActionButton remains the same)
               floatingActionButton: uid == null
                   ? null
                   : StreamBuilder<QuerySnapshot>(
@@ -124,14 +181,26 @@ class _MenuPageState extends State<MenuPage> {
                           final q = (m['qty'] as num?)?.toInt() ?? 1;
                           total += p * q;
                         }
+
+                        // Cart-ல் items இருந்தால் மட்டும் FAB காட்டவும்
+                        if (total == 0) return const SizedBox.shrink();
+
                         return FloatingActionButton.extended(
                           backgroundColor: kPrimary,
                           foregroundColor: kWhite,
-                          icon: const Icon(Icons.chat_bubble_outline),
-                          label: Text('RM ${total.toStringAsFixed(2)}'),
+                          icon: const Icon(
+                            Icons.shopping_cart_outlined,
+                          ), // Icon changed
+                          label: Text(
+                            'CHF ${total.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           onPressed: () {
-                            Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => CheckoutPage(uid: uid)));
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => CheckoutPage(uid: uid),
+                              ),
+                            );
                           },
                         );
                       },
@@ -163,17 +232,22 @@ class _TopSwitch extends StatelessWidget {
         color: kWhite,
         selectedColor: kWhite,
         fillColor: kPrimary,
-        borderColor: kMuted,
+        borderColor: kPrimary.withOpacity(0.5),
         selectedBorderColor: kPrimary,
-        children: const [
+        children: [
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child:
-                Text('Drinks', style: TextStyle(fontWeight: FontWeight.w700)),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              AppLanguage.getText('drinks'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Text('Food', style: TextStyle(fontWeight: FontWeight.w700)),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              AppLanguage.getText('foods'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -181,23 +255,21 @@ class _TopSwitch extends StatelessWidget {
   }
 }
 
-// --- Category Rail (FIXED) ---
+// --- Category Rail ---
 class _CategoryRail extends StatelessWidget {
   final _MenuKind kind;
-  final List<QueryDocumentSnapshot>
-      allCategoryDocs; // All categories fetched once by parent
+  final List<QueryDocumentSnapshot> allCategoryDocs;
   final String? selected;
   final ValueChanged<String?> onSelect;
   final ValueChanged<String?> onResolvedFirst;
   const _CategoryRail({
     required this.kind,
-    required this.allCategoryDocs, // Updated constructor
+    required this.allCategoryDocs,
     required this.selected,
     required this.onSelect,
     required this.onResolvedFirst,
   });
 
-  // NEW: Helper to get the stream query based on the current menu kind
   Query _getMenuQuery() {
     final col = kind == _MenuKind.drinks ? 'drinks' : 'foods';
     return FirebaseFirestore.instance
@@ -208,16 +280,11 @@ class _CategoryRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF242322),
-      // Only StreamBuilder needed is for the *items* to figure out availability.
-      // The Category Rail itself is rebuilt constantly with the parent state updates,
-      // but the StreamBuilder will cache its state while the selection is processed.
+      color: const Color(0xFF0C1E11), // லோகோவின் மிக அடர்ந்த பச்சை
       child: StreamBuilder<QuerySnapshot>(
-        key: ValueKey(
-            kind), // KEY ADDED: Forces StreamBuilder to reset on kind change
+        key: ValueKey(kind),
         stream: _getMenuQuery().snapshots(),
         builder: (context, itemsSnap) {
-          // 1. Determine which categories are available (contain 'on' items)
           final availableCategoryNames = <String>{};
           for (final d in (itemsSnap.data?.docs ?? [])) {
             final m = (d.data() as Map<String, dynamic>?) ?? {};
@@ -225,36 +292,40 @@ class _CategoryRail extends StatelessWidget {
             if (cat.isNotEmpty) availableCategoryNames.add(cat);
           }
 
-          // 2. Filter the ALL categories list using the AVAILABLE category names
           final filteredCategoryDocs = allCategoryDocs
               .where((doc) => availableCategoryNames.contains(doc.id))
               .toList(growable: false);
 
           if (filteredCategoryDocs.isEmpty) {
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => onResolvedFirst(null));
-            return const Center(
-                child: Text('No categories',
-                    style: TextStyle(color: kWhite, fontSize: 10)));
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => onResolvedFirst(null),
+            );
+            return Center(
+              child: Text(
+                AppLanguage.getText('no_categories'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: kMuted, fontSize: 10),
+              ),
+            );
           }
 
-          final categoryNames =
-              filteredCategoryDocs.map((d) => d.id).toList(growable: false);
+          final categoryNames = filteredCategoryDocs
+              .map((d) => d.id)
+              .toList(growable: false);
 
-          // 3. Auto-select the first category if none is selected or the selected one vanished
           if (selected == null || !categoryNames.contains(selected)) {
             WidgetsBinding.instance.addPostFrameCallback(
-                (_) => onResolvedFirst(categoryNames.first));
+              (_) => onResolvedFirst(categoryNames.first),
+            );
           }
 
-          // 4. Display Loading indicator ONLY while the items stream is connecting for the first time
           if (itemsSnap.connectionState == ConnectionState.waiting &&
               !itemsSnap.hasData) {
             return const Center(
-                child: CircularProgressIndicator(color: kPrimary));
+              child: CircularProgressIndicator(color: kPrimary),
+            );
           }
 
-          // 5. Use the filtered list to build the ListView
           return ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 12),
             itemCount: filteredCategoryDocs.length,
@@ -264,20 +335,26 @@ class _CategoryRail extends StatelessWidget {
               final data = (d.data() as Map<String, dynamic>?) ?? {};
               final name = d.id;
               final iconUrl = (data['iconUrl'] as String?) ?? '';
-              // Use the 'selected' property from the parent widget state
               final isSel = selected == name;
 
               return InkWell(
-                // When selecting, simply call the parent setState
                 onTap: () => onSelect(name),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 8),
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color:
-                        isSel ? kPrimary.withOpacity(0.25) : Colors.transparent,
+                    color: isSel
+                        ? kPrimary.withOpacity(0.25)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSel
+                          ? kPrimary.withOpacity(0.5)
+                          : Colors.transparent,
+                    ),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -290,10 +367,10 @@ class _CategoryRail extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: kWhite,
-                            fontSize: 12,
-                            fontWeight:
-                                isSel ? FontWeight.w700 : FontWeight.w500),
+                          color: isSel ? kWhite : kMuted,
+                          fontSize: 11,
+                          fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
@@ -314,25 +391,26 @@ class _CatIconLarge extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: url.isNotEmpty
-          ? Image.network(url,
-              height: 44,
-              width: 44,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.broken_image, color: kMuted, size: 36))
-          : const Icon(Icons.image, color: kMuted, size: 36),
+      child: _WebSafeImage(
+        imageUrl: url,
+        width: 44,
+        height: 44,
+        fallback: const Icon(Icons.fastfood, color: kMuted, size: 30),
+      ),
     );
   }
 }
 
-// Right grid
+// --- Menu Grid (FIXED: 2 Items per row on mobile) ---
 class _MenuGrid extends StatelessWidget {
   final _MenuKind kind;
   final String? category;
   final void Function(Map<String, dynamic> item) onTapItem;
-  const _MenuGrid(
-      {required this.kind, required this.category, required this.onTapItem});
+  const _MenuGrid({
+    required this.kind,
+    required this.category,
+    required this.onTapItem,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -345,33 +423,54 @@ class _MenuGrid extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: q.snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting)
-          return const Center(child: CircularProgressIndicator());
-        if (snap.hasError)
-          return Center(
-              child: Text('Error: ${snap.error}',
-                  style: const TextStyle(color: Colors.redAccent)));
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty)
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Center(
-              child: Text('No items', style: TextStyle(color: kWhite)));
+            child: CircularProgressIndicator(color: kPrimary),
+          );
+        }
+        if (snap.hasError) {
+          return Center(
+            child: Text(
+              'Error: ${snap.error}',
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          );
+        }
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Center(
+            child: Text(
+              AppLanguage.getText('no_items'),
+              style: const TextStyle(color: kWhite),
+            ),
+          );
+        }
 
         final w = MediaQuery.of(context).size.width;
-        final cross = w >= 1400
-            ? 4
-            : w >= 1100
-                ? 3
-                : w >= 800
-                    ? 2
-                    : 1;
+
+        // --- திருத்தப்பட்ட Grid Logic ---
+        // மொபைலில் சரியாக 2 ஐட்டம்கள் வரும்படி அமைக்கப்பட்டுள்ளது.
+        int crossCount = 2; // மொபைல்/சிறிய திரைகளுக்கு டீஃபால்ட்
+        if (w >= 1200)
+          crossCount = 5;
+        else if (w >= 900)
+          crossCount = 4;
+        else if (w >= 600)
+          crossCount = 3;
 
         return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          padding: const EdgeInsets.fromLTRB(
+            12,
+            12,
+            12,
+            80,
+          ), // FAB மறைக்காமல் இருக்க கீழே அதிக இடம்
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: cross,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 0.66),
+            crossAxisCount: crossCount,
+            mainAxisSpacing: 12, // இடைவெளி குறைக்கப்பட்டுள்ளது
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.72, // படத்தின் உயரத்தை சீரமைக்க
+          ),
           itemCount: docs.length,
           itemBuilder: (_, i) {
             final m = (docs[i].data() as Map<String, dynamic>?) ?? {};
@@ -383,50 +482,67 @@ class _MenuGrid extends StatelessWidget {
               onTap: () => onTapItem(m),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2F2E2D),
+                  color: kWhite.withOpacity(
+                    0.06,
+                  ), // அடர் பச்சை பின்னணியில் லேசான வெள்ளை
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: kMuted),
+                  border: Border.all(color: kWhite.withOpacity(0.1)),
                 ),
-                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Flexible(
-                      flex: 3,
+                    // படத்திற்கான பகுதி
+                    Expanded(
+                      flex: 5,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: imageUrl.isNotEmpty
-                            ? Image.network(imageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.broken_image,
-                                    color: kWhite,
-                                    size: 40))
-                            : Container(
-                                color: const Color(0xFF3A3938),
-                                child: const Icon(Icons.image, color: kWhite)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                        child: _WebSafeImage(
+                          imageUrl: imageUrl,
+                          fallback: Container(
+                            color: kDarkCard,
+                            child: const Icon(
+                              Icons.image,
+                              color: kMuted,
+                              size: 40,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Flexible(
-                      flex: 1,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(name,
+                    // எழுத்துக்களுக்கான பகுதி
+                    Expanded(
+                      flex: 3,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              name,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                  color: kWhite,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16)),
-                          const SizedBox(height: 4),
-                          Text('RM ${price.toStringAsFixed(2)}',
+                                color: kWhite,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'CHF ${price.toStringAsFixed(2)}',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                  color: kWhite, fontWeight: FontWeight.w600)),
-                        ],
+                                color:
+                                    kPrimary, // விலையை ஆரஞ்சு நிறத்தில் காட்ட
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -450,8 +566,12 @@ Future<String?> _ensureUid() async {
 }
 
 /// Bottom sheet and “Add to chat” write
-void _showItemSheet(BuildContext context, _MenuKind kind,
-    Map<String, dynamic> item, String? uidHint) {
+void _showItemSheet(
+  BuildContext context,
+  _MenuKind kind,
+  Map<String, dynamic> item,
+  String? uidHint,
+) {
   final name = (item['name'] as String?) ?? '';
   final imageUrl = (item['imageUrl'] as String?) ?? '';
   final price = ((item['price'] as num?) ?? 0).toDouble();
@@ -463,15 +583,12 @@ void _showItemSheet(BuildContext context, _MenuKind kind,
     isScrollControlled: true,
     backgroundColor: kBg,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
     builder: (ctx) {
       int qty = 1;
-
-      // Drinks options
-      String drinkType = 'Hot'; // Hot / Iced
-      String sugar = 'Normal'; // Normal / Half
-
-      // Foods extra note
+      String drinkType = 'Hot';
+      String sugar = 'Normal';
       final noteCtrl = TextEditingController();
 
       double total() => price * qty;
@@ -491,15 +608,13 @@ void _showItemSheet(BuildContext context, _MenuKind kind,
         };
 
         if (kind == _MenuKind.drinks) {
-          payload.addAll({
-            'type': drinkType, // Hot / Iced
-            'sugar': sugar, // Normal / Half
-          });
+          payload.addAll({'type': drinkType, 'sugar': sugar});
         } else {
           payload.addAll({
             'note': dbNote,
-            'extraNote':
-                noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+            'extraNote': noteCtrl.text.trim().isEmpty
+                ? null
+                : noteCtrl.text.trim(),
           });
         }
 
@@ -513,171 +628,215 @@ void _showItemSheet(BuildContext context, _MenuKind kind,
       return StatefulBuilder(
         builder: (ctx, setS) => Padding(
           padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                    height: 4,
-                    width: 40,
-                    decoration: BoxDecoration(
-                        color: kMuted, borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 12),
+                  height: 5,
+                  width: 50,
+                  decoration: BoxDecoration(
+                    color: kMuted.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: imageUrl.isNotEmpty
-                          ? Image.network(imageUrl,
-                              width: 110,
-                              height: 110,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                  Icons.broken_image,
-                                  color: kWhite,
-                                  size: 40))
-                          : Container(
-                              width: 110,
-                              height: 110,
-                              color: const Color(0xFF3A3938),
-                              child: const Icon(Icons.image, color: kWhite)),
+                      borderRadius: BorderRadius.circular(16),
+                      child: _WebSafeImage(
+                        imageUrl: imageUrl,
+                        width: 100,
+                        height: 100,
+                        fallback: Container(
+                          width: 100,
+                          height: 100,
+                          color: kDarkCard,
+                          child: const Icon(
+                            Icons.image,
+                            color: kMuted,
+                            size: 40,
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(name,
-                              style: const TextStyle(
-                                  color: kWhite,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 18)),
-                          const SizedBox(height: 6),
-                          Text('RM ${price.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  color: kWhite, fontWeight: FontWeight.w600)),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: kWhite,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 20,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'CHF ${price.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: kPrimary,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
                           if (kind == _MenuKind.foods && dbNote.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(dbNote,
-                                style: const TextStyle(
-                                    color: kMuted, fontSize: 12)),
+                            const SizedBox(height: 8),
+                            Text(
+                              dbNote,
+                              style: const TextStyle(
+                                color: kMuted,
+                                fontSize: 13,
+                              ),
+                            ),
                           ],
                         ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 if (kind == _MenuKind.drinks) ...[
-                  _SectionTitle('Type'),
+                  _SectionTitle(AppLanguage.getText('type')),
                   _ChipRow(
                     values: const ['Hot', 'Iced'],
                     selected: drinkType,
                     onChanged: (v) => setS(() => drinkType = v),
                   ),
-                  const SizedBox(height: 10),
-                  _SectionTitle('Sugar'),
+                  const SizedBox(height: 16),
+                  _SectionTitle(AppLanguage.getText('sugar')),
                   _ChipRow(
                     values: const ['Normal', 'Half'],
                     selected: sugar,
                     onChanged: (v) => setS(() => sugar = v),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
                 ] else ...[
-                  _SectionTitle('Note (optional)'),
+                  _SectionTitle(AppLanguage.getText('note_optional')),
                   TextField(
                     controller: noteCtrl,
                     maxLines: 2,
                     style: const TextStyle(color: kWhite),
                     decoration: InputDecoration(
-                      hintText: 'Any preference…',
+                      hintText: '...',
                       hintStyle: const TextStyle(color: kMuted),
                       filled: true,
-                      fillColor: const Color(0xFF2F2E2D),
+                      fillColor: kWhite.withOpacity(0.05),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: kMuted),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: kMuted),
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: kPrimary, width: 2),
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: kPrimary,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 20),
                 ],
-                _SectionTitle('Quantity'),
+                _SectionTitle(AppLanguage.getText('quantity')),
                 Row(
                   children: [
                     _QtyBtn(
-                        icon: Icons.remove,
-                        onTap: () => setS(() => qty = qty > 1 ? qty - 1 : 1)),
+                      icon: Icons.remove,
+                      onTap: () => setS(() => qty = qty > 1 ? qty - 1 : 1),
+                    ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text('$qty',
-                          style: const TextStyle(
-                              color: kWhite,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        '$qty',
+                        style: const TextStyle(
+                          color: kWhite,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                     _QtyBtn(icon: Icons.add, onTap: () => setS(() => qty++)),
                     const Spacer(),
-                    Text('Total: RM ${total().toStringAsFixed(2)}',
-                        style: const TextStyle(
-                            color: kWhite, fontWeight: FontWeight.w700)),
+                    Text(
+                      '${AppLanguage.getText('total')} CHF ${total().toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: kMuted),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: kPrimary.withOpacity(0.8)),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         onPressed: () async {
                           await addToChat();
                           if (context.mounted) {
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Added to chat')));
+                              SnackBar(
+                                content: Text(
+                                  AppLanguage.getText('added_to_cart'),
+                                ),
+                                backgroundColor: kPrimary,
+                              ),
+                            );
                           }
                         },
-                        child: const Text('Add to chat',
-                            style: TextStyle(color: kWhite)),
+                        child: Text(
+                          AppLanguage.getText('add_to_cart'),
+                          style: const TextStyle(color: kWhite),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
                         style: FilledButton.styleFrom(
-                            backgroundColor: kPrimary,
-                            foregroundColor: kWhite,
-                            padding: const EdgeInsets.symmetric(vertical: 14)),
+                          backgroundColor: kPrimary,
+                          foregroundColor: kWhite,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                         onPressed: () async {
                           await addToChat();
                           if (context.mounted) {
                             Navigator.pop(ctx);
                             final uid = await _ensureUid();
                             if (uid != null && context.mounted) {
-                              Navigator.of(context).push(MaterialPageRoute(
-                                  builder: (_) => CheckoutPage(uid: uid)));
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => CheckoutPage(uid: uid),
+                                ),
+                              );
                             }
                           }
                         },
-                        child: const Text('Buy now',
-                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        child: Text(
+                          AppLanguage.getText('buy_now'),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
                     ),
                   ],
@@ -701,8 +860,15 @@ class _SectionTitle extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text, style: const TextStyle(color: kMuted, fontSize: 12)),
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: kMuted,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -712,21 +878,29 @@ class _ChipRow extends StatelessWidget {
   final List<String> values;
   final String selected;
   final ValueChanged<String> onChanged;
-  const _ChipRow(
-      {required this.values, required this.selected, required this.onChanged});
+  const _ChipRow({
+    required this.values,
+    required this.selected,
+    required this.onChanged,
+  });
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 8,
+      spacing: 10,
       children: values.map((v) {
         final on = v == selected;
         return ChoiceChip(
           label: Text(v),
           selected: on,
-          labelStyle: const TextStyle(color: kWhite),
+          labelStyle: TextStyle(
+            color: on ? kWhite : kMuted,
+            fontWeight: on ? FontWeight.bold : FontWeight.normal,
+          ),
           selectedColor: kPrimary,
-          backgroundColor: const Color(0xFF2F2E2D),
-          side: const BorderSide(color: kMuted),
+          backgroundColor: kWhite.withOpacity(0.05),
+          showCheckmark:
+              false, // Checkmark-ஐ நீக்கினால் வடிவமைப்பு அழகாக இருக்கும்
+          side: BorderSide(color: on ? kPrimary : kMuted.withOpacity(0.3)),
           onSelected: (_) => onChanged(v),
         );
       }).toList(),
@@ -742,17 +916,17 @@ class _QtyBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Ink(
       decoration: BoxDecoration(
-        color: const Color(0xFF2F2E2D),
+        color: kWhite.withOpacity(0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kMuted),
+        border: Border.all(color: kMuted.withOpacity(0.4)),
       ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-        child: const SizedBox(
+        child: SizedBox(
           width: 40,
           height: 40,
-          child: Icon(Icons.add, color: kWhite),
+          child: Icon(icon, color: kWhite, size: 20),
         ),
       ),
     );

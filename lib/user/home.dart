@@ -1,15 +1,17 @@
+// lib/user/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:restorant/app_bar.dart';
 import 'package:restorant/user/qr_scanner_page.dart';
+import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது (path-ஐ உங்கள் ப்ராஜெக்டிற்கு ஏற்ப சரிபார்க்கவும்)
 
-// --- Shared palette (same as StartPage / AppShell) ---
-const kPrimary = Color(0xFFA26334);
-const kBg = Color(0xFF2A2928);
-const kMuted = Color(0xFFB7B7B6);
-const kWhite = Color(0xFFFFFFFF);
+// --- Shared palette (லோகோ நிறங்கள்) ---
+const kPrimary = Color(0xFFE49024); // Orange
+const kBg = Color(0xFF112A18); // Dark Green
+const kMuted = Color(0xFFA1B3A1); // Muted Green
+const kWhite = Color(0xFFF7F7F2); // Cream White
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -29,8 +31,11 @@ class HomePage extends StatelessWidget {
 
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Take Away selected'),
+      SnackBar(
+        content: Text(
+          AppLanguage.getText('take_away_selected'),
+          style: const TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: kPrimary,
       ),
     );
@@ -43,7 +48,7 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // NEW: Function to navigate to the Rewards tab in AppShell
+  // Function to navigate to the Rewards tab in AppShell
   void _navigateToRewardsTab(BuildContext context) {
     // Navigate to AppShell Reward tab (index 2)
     Navigator.popUntil(context, (route) => route.isFirst);
@@ -57,16 +62,15 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBg,
-      // MODIFIED: AppBar now shows a logo on the left instead of a text title
       appBar: AppBar(
-        backgroundColor: kBg,
+        backgroundColor: kBg, // கரும்பச்சை பின்னணி
         elevation: 0,
-        automaticallyImplyLeading: false, // Ensures no back arrow appears
+        automaticallyImplyLeading: false,
         title: Padding(
           padding: const EdgeInsets.only(top: 8.0),
           child: Image.asset(
-            'assets/logo.jpeg', // Path to your logo
-            height: 35, // Adjust size as needed
+            'assets/logo.jpeg', // உங்களின் லோகோ Path
+            height: 45, // லோகோ தெளிவாக தெரிய அளவை சற்று அதிகரித்துள்ளேன்
           ),
         ),
       ),
@@ -74,33 +78,26 @@ class HomePage extends StatelessWidget {
         child: StreamBuilder<User?>(
           stream: FirebaseAuth.instance.userChanges(),
           builder: (context, snap) {
-            // REMOVED: No longer need the user's name for a greeting
-            // final u = snap.data;
-            // final name = ...
-
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // REMOVED: "Hi, $name" text and the SizedBox below it are gone
-
                   // Top shortcuts: Rewards | Balance | QR
                   Row(
                     children: [
                       Expanded(
                         child: _TopCard(
-                          label: 'Rewards',
+                          label: AppLanguage.getText('rewards'),
                           icon: Icons.loyalty,
                           color: kPrimary,
-                          // MODIFIED: onTap now navigates to the rewards tab
                           onTap: () => _navigateToRewardsTab(context),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _TopCard(
-                          label: 'Balance',
+                          label: AppLanguage.getText('balance'),
                           icon: Icons.account_balance_wallet,
                           color: kPrimary,
                           onTap: () {},
@@ -109,7 +106,7 @@ class HomePage extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _TopCard(
-                          label: 'QR Scanner',
+                          label: AppLanguage.getText('qr_scanner'),
                           icon: Icons.qr_code_scanner,
                           color: kPrimary,
                           onTap: () {
@@ -130,12 +127,12 @@ class HomePage extends StatelessWidget {
                   // Advertisement poster
                   Container(
                     decoration: BoxDecoration(
-                      color: kWhite.withOpacity(0.06),
+                      color: kWhite.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: kWhite.withOpacity(0.1)),
+                      border: Border.all(color: kWhite.withOpacity(0.15)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.35),
+                          color: Colors.black.withOpacity(0.25),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -164,7 +161,7 @@ class HomePage extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _BigActionButton(
-                          label: 'Dine In',
+                          label: AppLanguage.getText('dine_in'),
                           icon: Icons.restaurant,
                           color: kPrimary,
                           onTap: () {
@@ -180,7 +177,7 @@ class HomePage extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _BigActionButton(
-                          label: 'Take Away',
+                          label: AppLanguage.getText('take_away'),
                           icon: Icons.shopping_bag,
                           color: kPrimary,
                           onTap: () => _saveTakeAway(context),
@@ -198,7 +195,7 @@ class HomePage extends StatelessWidget {
   }
 }
 
-// Unchanged helper widgets below...
+// Helper widgets...
 
 class _TopCard extends StatelessWidget {
   final String label;
@@ -215,7 +212,7 @@ class _TopCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: kWhite.withOpacity(0.05),
+      color: kWhite.withOpacity(0.08), // பட்டன்களின் பின்னணி நிறம்
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -234,6 +231,9 @@ class _TopCard extends StatelessWidget {
                   color: kWhite,
                 ),
                 textAlign: TextAlign.center,
+                maxLines:
+                    1, // எழுத்துக்கள் நீளமாக இருந்தால் அடுத்த வரிக்கு செல்லாமல் தடுக்க
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -258,7 +258,7 @@ class _BigActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color,
+      color: color, // ஆரஞ்சு நிறம்
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -274,6 +274,7 @@ class _BigActionButton extends StatelessWidget {
                 style: const TextStyle(
                   color: kWhite,
                   fontWeight: FontWeight.w700,
+                  fontSize: 16,
                 ),
               ),
             ],

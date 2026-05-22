@@ -6,6 +6,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'edit_delete_foods_menu.dart';
 
+// வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க இந்த இம்போர்ட்டுகள் தேவை
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:ui_web' as ui_web;
+import 'dart:html' as html;
+
 const kPrimary = Color(0xFFA63334);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
@@ -94,8 +99,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
         throw Exception('Pick a food image.');
       }
 
-      final safeBase =
-          (_imgFileName ?? name).replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_');
+      final safeBase = (_imgFileName ?? name).replaceAll(
+        RegExp(r'[^a-zA-Z0-9._-]+'),
+        '_',
+      );
       final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
       final imgRef = FirebaseStorage.instance.ref('foods_images/$fileName');
 
@@ -118,9 +125,9 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Food saved')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Food saved')));
       _name.clear();
       _note.clear();
       _price.clear();
@@ -176,11 +183,15 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                       children: [
                         Icon(Icons.image, size: 36, color: kMuted),
                         SizedBox(height: 8),
-                        Text('Tap to choose food image',
-                            style: TextStyle(color: kWhite)),
+                        Text(
+                          'Tap to choose food image',
+                          style: TextStyle(color: kWhite),
+                        ),
                         SizedBox(height: 4),
-                        Text('(PNG/JPG, up to ~1MB)',
-                            style: TextStyle(color: Colors.white70)),
+                        Text(
+                          '(PNG/JPG, up to ~1MB)',
+                          style: TextStyle(color: Colors.white70),
+                        ),
                       ],
                     ),
             ),
@@ -220,8 +231,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                     );
                   }
                   if (snap.hasError) {
-                    return Text('Error: ${snap.error}',
-                        style: const TextStyle(color: Colors.redAccent));
+                    return Text(
+                      'Error: ${snap.error}',
+                      style: const TextStyle(color: Colors.redAccent),
+                    );
                   }
                   final docs = snap.data?.docs ?? [];
 
@@ -235,7 +248,8 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                     iconMap[name] = iconUrl;
                   }
                   names.sort(
-                      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+                    (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+                  );
 
                   if (_selectedCategory != null &&
                       !names.contains(_selectedCategory)) {
@@ -246,8 +260,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Menu category',
-                          style: TextStyle(color: kMuted, fontSize: 12)),
+                      const Text(
+                        'Menu category',
+                        style: TextStyle(color: kMuted, fontSize: 12),
+                      ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: _selectedCategory,
@@ -260,8 +276,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                                   children: [
                                     _CategoryIcon(iconUrl: iconMap[n]),
                                     const SizedBox(width: 8),
-                                    Text(n,
-                                        style: const TextStyle(color: kWhite)),
+                                    Text(
+                                      n,
+                                      style: const TextStyle(color: kWhite),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -270,8 +288,9 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                         onChanged: (v) {
                           setState(() {
                             _selectedCategory = v;
-                            _selectedCategoryIconUrl =
-                                v == null ? null : iconMap[v];
+                            _selectedCategoryIconUrl = v == null
+                                ? null
+                                : iconMap[v];
                           });
                         },
                         decoration: InputDecoration(
@@ -282,17 +301,23 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderSide:
-                                const BorderSide(color: kPrimary, width: 2),
+                            borderSide: const BorderSide(
+                              color: kPrimary,
+                              width: 2,
+                            ),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 12),
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
                         ),
                         iconEnabledColor: kWhite,
                         style: const TextStyle(color: kWhite),
-                        hint: const Text('Select category',
-                            style: TextStyle(color: kMuted)),
+                        hint: const Text(
+                          'Select category',
+                          style: TextStyle(color: kMuted),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       if (_selectedCategoryIconUrl != null &&
@@ -301,8 +326,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                           children: [
                             _CategoryIcon(iconUrl: _selectedCategoryIconUrl),
                             const SizedBox(width: 8),
-                            Text(_selectedCategory ?? '',
-                                style: const TextStyle(color: kWhite)),
+                            Text(
+                              _selectedCategory ?? '',
+                              style: const TextStyle(color: kWhite),
+                            ),
                           ],
                         ),
                     ],
@@ -324,15 +351,20 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
               style: FilledButton.styleFrom(
                 backgroundColor: kPrimary,
                 foregroundColor: kWhite,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
               ),
               child: _saving
                   ? const SizedBox(
                       height: 18,
                       width: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: kWhite))
+                        strokeWidth: 2,
+                        color: kWhite,
+                      ),
+                    )
                   : const Text('Save'),
             ),
           ),
@@ -344,8 +376,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.edit, color: kWhite),
-                  label:
-                      const Text('Edit Foods', style: TextStyle(color: kWhite)),
+                  label: const Text(
+                    'Edit Foods',
+                    style: TextStyle(color: kWhite),
+                  ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: kMuted),
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -354,7 +388,8 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => const EditDeleteFoodsMenuPage()),
+                        builder: (_) => const EditDeleteFoodsMenuPage(),
+                      ),
                     );
                   },
                 ),
@@ -363,8 +398,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.delete, color: Colors.redAccent),
-                  label: const Text('Delete Foods',
-                      style: TextStyle(color: kWhite)),
+                  label: const Text(
+                    'Delete Foods',
+                    style: TextStyle(color: kWhite),
+                  ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: kMuted),
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -373,7 +410,8 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => const EditDeleteFoodsMenuPage()),
+                        builder: (_) => const EditDeleteFoodsMenuPage(),
+                      ),
                     );
                   },
                 ),
@@ -412,6 +450,7 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
   }
 }
 
+// திருத்தப்பட்ட பகுதி: கேட்டகிரி ஐகான் வெப் பிரவுசரில் தெரியும்படி மாற்றப்பட்டுள்ளது
 class _CategoryIcon extends StatelessWidget {
   final String? iconUrl;
   const _CategoryIcon({this.iconUrl});
@@ -419,18 +458,48 @@ class _CategoryIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = iconUrl ?? '';
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: url.isNotEmpty
-          ? Image.network(
-              url,
-              height: 24,
-              width: 24,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.broken_image, color: kMuted, size: 20),
-            )
-          : const Icon(Icons.image_not_supported, color: kMuted, size: 20),
-    );
+    if (url.isEmpty) {
+      return const Icon(Icons.image_not_supported, color: kMuted, size: 20);
+    }
+
+    if (kIsWeb) {
+      // வெப்பில் CORS பிளாக்கிங்கைத் தவிர்க்க HTML View பயன்படுத்துகிறது
+      final String viewId =
+          'add-food-cat-img-${url.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
+
+      ui_web.platformViewRegistry.registerViewFactory(
+        viewId,
+        (int viewId) => html.ImageElement()
+          ..src = url
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.objectFit = 'cover',
+      );
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          height: 24,
+          width: 24,
+          child: HtmlElementView(
+            viewType: viewId,
+          ), // 'viewType' சரியாகச் சேர்க்கப்பட்டுள்ளது
+        ),
+      );
+    } else {
+      // ஆண்ட்ராய்டு/ஐஓஎஸ் போன்களுக்கு
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.network(
+          url,
+          height: 24,
+          width: 24,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, color: kMuted, size: 20),
+        ),
+      );
+    }
   }
 }
