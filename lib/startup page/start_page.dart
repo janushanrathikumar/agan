@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:restorant/startup page/signin_page.dart';
 import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது
 
-// லோகோவில் இருந்து எடுக்கப்பட்ட நிறங்கள் (Palette based on Logo)
+
 const kPrimary = Color(0xFFE49024); // ஆரஞ்சு நிறம் (Mountains/Banner)
 const kBg = Color(0xFF112A18); // அடர் பச்சை நிறம் (Dark Green - Background)
 const kDarkGreen = Color(0xFF194D25); // லோகோ பச்சை நிறம் (Logo Forest Green)

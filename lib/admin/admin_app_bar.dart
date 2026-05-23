@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'add_category.dart';
 import 'add_food_menu.dart';
 import 'drinkmenu/add_drinks_menu.dart';
+import 'add_menu_chocie.dart';
 
 // --- Color Constants (Defined in the original file) ---
 const kPrimary = Color(0xFFA26334);
@@ -94,9 +95,7 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                     case 'add_food':
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const AddFoodMenuPage(),
-                        ),
+                        MaterialPageRoute(builder: (_) => const AddMenuPage()),
                       );
                       break;
                     case 'add_category':
@@ -104,6 +103,14 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                         context,
                         MaterialPageRoute(
                           builder: (_) => const AddCategoryPage(),
+                        ),
+                      );
+                      break;
+                    case 'add_menu_choice':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AddMenuChoicePage(),
                         ),
                       );
                       break;
@@ -120,24 +127,36 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                   PopupMenuItem<String>(
                     value: 'add_food',
                     child: _buildMenuItemChild(
-                        Icons.fastfood_rounded, 'Add Food Menu'),
+                      Icons.fastfood_rounded,
+                      'Add Menu',
+                    ),
                   ),
                   // Enhanced Menu Item: Add Drinks Menu
                   PopupMenuItem<String>(
                     value: 'add_drinks',
                     child: _buildMenuItemChild(
-                        Icons.local_bar_rounded, 'Add Drinks Menu'),
+                      Icons.local_bar_rounded,
+                      'Add Drinks Menu',
+                    ),
                   ),
                   // Enhanced Menu Item: Add Menu Category
                   PopupMenuItem<String>(
                     value: 'add_category',
                     child: _buildMenuItemChild(
-                        Icons.category_rounded, 'Add Menu Category'),
+                      Icons.category_rounded,
+                      'Add Menu Category',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'add_menu_choice',
+                    child: _buildMenuItemChild(
+                      Icons.select_all_rounded,
+                      'Add Menu Choice',
+                    ),
                   ),
                 ],
               ),
               const SizedBox(width: 12),
-
               // Page Title
               Expanded(
                 child: Column(
@@ -165,17 +184,23 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
               // Logout Button (Unchanged)
               IconButton(
                 tooltip: "Log out",
-                icon:
-                    const Icon(Icons.logout_rounded, color: kPrimary, size: 26),
+                icon: const Icon(
+                  Icons.logout_rounded,
+                  color: kPrimary,
+                  size: 26,
+                ),
                 onPressed: () async {
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
                       backgroundColor: kBg,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                      title: const Text("Confirm Logout",
-                          style: TextStyle(color: kWhite)),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      title: const Text(
+                        "Confirm Logout",
+                        style: TextStyle(color: kWhite),
+                      ),
                       content: const Text(
                         "Are you sure you want to sign out?",
                         style: TextStyle(color: kMuted),
@@ -183,20 +208,28 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text("Cancel",
-                              style: TextStyle(color: kMuted)),
+                          child: const Text(
+                            "Cancel",
+                            style: TextStyle(color: kMuted),
+                          ),
                         ),
                         FilledButton(
                           style: FilledButton.styleFrom(
-                              backgroundColor: kPrimary,
-                              foregroundColor: kWhite,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10))),
+                            backgroundColor: kPrimary,
+                            foregroundColor: kWhite,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
                           onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text("Log Out",
-                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            "Log Out",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),

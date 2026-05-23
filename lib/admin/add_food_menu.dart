@@ -1,48 +1,122 @@
-// lib/add_food_menu.dart
+// lib/add_menu_item.dart
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'edit_delete_foods_menu.dart';
 
-// வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க இந்த இம்போர்ட்டுகள் தேவை
+import 'choice_dialog.dart';
+import 'manage_menu_items.dart';
+
+// Web Image CORS error avoidance imports
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
-const kPrimary = Color(0xFFA63334);
+// --- Your Exact Color Constants ---
+const kPrimary = Color(0xFFA26334);
 const kBg = Color(0xFF2A2928);
-const kMuted = Color(0xFFB7B7B6);
 const kWhite = Color(0xFFFFFFFF);
+const kMuted = Color(0xFFB7B7B6);
+const kFieldBg = Color(0xFF383735);
+// ----------------------------------
 
-class AddFoodMenuPage extends StatefulWidget {
-  const AddFoodMenuPage({super.key});
+// 🟢 Helper class for dynamic Additional Option rows
+class AdditionalOptionField {
+  final TextEditingController name = TextEditingController();
+  final TextEditingController price = TextEditingController();
+  final TextEditingController catalog = TextEditingController();
 
-  @override
-  State<AddFoodMenuPage> createState() => _AddFoodMenuPageState();
+  void dispose() {
+    name.dispose();
+    price.dispose();
+    catalog.dispose();
+  }
 }
 
-class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
+class AddMenuPage extends StatefulWidget {
+  const AddMenuPage({super.key});
+
+  @override
+  State<AddMenuPage> createState() => _AddMenuPageState();
+}
+
+class _AddMenuPageState extends State<AddMenuPage> {
   final _name = TextEditingController();
   final _note = TextEditingController();
   final _price = TextEditingController();
 
+  // 🟢 List to store dynamic additional option fields
+  List<AdditionalOptionField> _additionalOptions = [];
+
   Uint8List? _imgBytes;
   String? _imgFileName;
 
-  String? _selectedCategory; // menu_category doc id
-  String? _selectedCategoryIconUrl; // iconUrl from menu_category
+  String? _selectedCategory;
+  String? _selectedCategoryIconUrl;
+
+  String _itemType = 'food'; // 'food' or 'drink'
+
+  List<Map<String, dynamic>> _allAvailableChoices = [];
+  List<Map<String, dynamic>> _selectedMenuChoices = [];
+  String? _dropdownChoiceValue;
 
   bool _saving = false;
   String? _err;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAvailableMenuChoices();
+  }
 
   @override
   void dispose() {
     _name.dispose();
     _note.dispose();
     _price.dispose();
+    for (var opt in _additionalOptions) {
+      opt.dispose();
+    }
     super.dispose();
+  }
+
+  // 🟢 Add / Remove option fields
+  void _addOptionField() =>
+      setState(() => _additionalOptions.add(AdditionalOptionField()));
+
+  void _removeOptionField(int index) {
+    _additionalOptions[index].dispose();
+    setState(() => _additionalOptions.removeAt(index));
+  }
+
+  Future<void> _fetchAvailableMenuChoices() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('menu_choices')
+          .get();
+      if (mounted) {
+        setState(() {
+          _allAvailableChoices = snap.docs
+              .map((doc) => {'id': doc.id, ...doc.data()})
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching choices: $e");
+    }
+  }
+
+  void _openEditChoiceDialog(Map<String, dynamic> choiceData) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ChoiceDialog(
+        docId: choiceData['id'],
+        existingHeading: choiceData['heading'] ?? '',
+        existingOptions: List<String>.from(choiceData['options'] ?? []),
+      ),
+    ).then((_) => _fetchAvailableMenuChoices());
   }
 
   Future<void> _pickImage() async {
@@ -63,19 +137,10 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
 
   String _guessContentType(String? filename) {
     final ext = filename?.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'webp':
-        return 'image/webp';
-      case 'gif':
-        return 'image/gif';
-      case 'bmp':
-        return 'image/bmp';
-      default:
-        return 'image/png';
-    }
+    if (ext == 'jpg' || ext == 'jpeg') return 'image/jpeg';
+    if (ext == 'webp') return 'image/webp';
+    if (ext == 'png') return 'image/png';
+    return 'image/jpeg';
   }
 
   Future<void> _save() async {
@@ -89,30 +154,37 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
       final note = _note.text.trim();
       final price = double.tryParse(_price.text.trim());
 
-      if (name.isEmpty || price == null) {
+      if (name.isEmpty || price == null)
         throw Exception('Name and valid price are required.');
-      }
-      if (_selectedCategory == null) {
-        throw Exception('Select a menu category.');
-      }
-      if (_imgBytes == null) {
-        throw Exception('Pick a food image.');
-      }
+      if (_selectedCategory == null) throw Exception('Select a category.');
+      if (_imgBytes == null) throw Exception('Pick an image.');
+
+      // 🟢 Serialize Additional Options
+      List<Map<String, dynamic>> optionsData = _additionalOptions.map((opt) {
+        return {
+          'name': opt.name.text.trim(),
+          'price': double.tryParse(opt.price.text.trim()) ?? 0,
+          'catalog': opt.catalog.text.trim(),
+        };
+      }).toList();
 
       final safeBase = (_imgFileName ?? name).replaceAll(
         RegExp(r'[^a-zA-Z0-9._-]+'),
         '_',
       );
       final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
-      final imgRef = FirebaseStorage.instance.ref('foods_images/$fileName');
+      final imgRef = FirebaseStorage.instance.ref('menu_images/$fileName');
 
       await imgRef.putData(
         _imgBytes!,
         SettableMetadata(contentType: _guessContentType(_imgFileName)),
       );
       final imageUrl = await imgRef.getDownloadURL();
+      final List<String> choiceIds = _selectedMenuChoices
+          .map((c) => c['id'] as String)
+          .toList();
 
-      await FirebaseFirestore.instance.collection('foods').add({
+      await FirebaseFirestore.instance.collection('menu_items').add({
         'name': name,
         'note': note.isEmpty ? null : note,
         'price': price,
@@ -120,14 +192,21 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
         'categoryIconUrl': _selectedCategoryIconUrl,
         'imageUrl': imageUrl,
         'imageFileName': fileName,
-        'status': 'on', // required
+        'menuChoices': choiceIds,
+        'additionalOptions': optionsData, // 🟢 Saved with isOptional
+        'status': 'on',
+        'itemType': _itemType,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Food saved')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Saved successfully'),
+          backgroundColor: kPrimary,
+        ),
+      );
+
       _name.clear();
       _note.clear();
       _price.clear();
@@ -136,6 +215,12 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
         _imgFileName = null;
         _selectedCategory = null;
         _selectedCategoryIconUrl = null;
+        _selectedMenuChoices.clear();
+        _dropdownChoiceValue = null;
+        for (var opt in _additionalOptions) {
+          opt.dispose();
+        }
+        _additionalOptions.clear();
       });
     } catch (e) {
       setState(() => _err = e.toString());
@@ -151,294 +236,457 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
       appBar: AppBar(
         backgroundColor: kBg,
         foregroundColor: kWhite,
-        title: const Text('Add Food Menu'),
+        title: const Text('Add Menu Item'),
         elevation: 0,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         children: [
-          // Image picker
-          InkWell(
-            onTap: _pickImage,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              height: 180,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2F2E2D),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: kMuted),
-              ),
-              alignment: Alignment.center,
-              child: _imgBytes != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.memory(
-                        _imgBytes!,
-                        height: 160,
-                        fit: BoxFit.contain,
+          // ── Type Selector ───────────────────────────────────────────
+          Container(
+            decoration: BoxDecoration(
+              color: kFieldBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kPrimary.withOpacity(0.5)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<String>(
+                    title: const Text(
+                      'Food',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    value: 'food',
+                    groupValue: _itemType,
+                    activeColor: kPrimary,
+                    onChanged: (val) => setState(() => _itemType = val!),
+                  ),
+                ),
+                Container(width: 1, height: 40, color: kMuted.withOpacity(0.3)),
+                Expanded(
+                  child: RadioListTile<String>(
+                    title: const Text(
+                      'Drink',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    value: 'drink',
+                    groupValue: _itemType,
+                    activeColor: kPrimary,
+                    onChanged: (val) => setState(() => _itemType = val!),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Basic Info ──────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kFieldBg.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                _input(label: 'Item Name', controller: _name),
+                const SizedBox(height: 12),
+                _input(
+                  label: 'Price',
+                  controller: _price,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Menu Choices ────────────────────────────────────────────
+          const Text(
+            'Menu Choices',
+            style: TextStyle(
+              color: kWhite,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: kFieldBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kMuted.withOpacity(0.3)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _dropdownChoiceValue,
+                isExpanded: true,
+                dropdownColor: kFieldBg,
+                icon: const Icon(Icons.arrow_drop_down, color: kWhite),
+                hint: const Text(
+                  'Select Menu Choice',
+                  style: TextStyle(color: kMuted),
+                ),
+                items: _allAvailableChoices
+                    .map(
+                      (choice) => DropdownMenuItem<String>(
+                        value: choice['id'],
+                        child: Text(
+                          choice['heading'] ?? 'Unnamed',
+                          style: const TextStyle(color: kWhite),
+                        ),
                       ),
                     )
-                  : const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.image, size: 36, color: kMuted),
-                        SizedBox(height: 8),
-                        Text(
-                          'Tap to choose food image',
-                          style: TextStyle(color: kWhite),
+                    .toList(),
+                onChanged: (newId) {
+                  if (newId != null &&
+                      !_selectedMenuChoices.any((c) => c['id'] == newId)) {
+                    setState(() {
+                      _selectedMenuChoices.add(
+                        _allAvailableChoices.firstWhere(
+                          (c) => c['id'] == newId,
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          '(PNG/JPG, up to ~1MB)',
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          _input(label: 'Food name', controller: _name),
-          const SizedBox(height: 12),
-          _input(label: 'Note (optional)', controller: _note),
-          const SizedBox(height: 12),
-          _input(
-            label: 'Price',
-            controller: _price,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          ),
-          const SizedBox(height: 16),
-
-          // Menu category dropdown with icon
-          Card(
-            color: const Color(0xFF2F2E2D),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: kMuted),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('menu_category')
-                    .orderBy('createdAt', descending: false)
-                    .snapshots(),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: LinearProgressIndicator(),
-                    );
+                      );
+                      _dropdownChoiceValue = null;
+                    });
                   }
-                  if (snap.hasError) {
-                    return Text(
-                      'Error: ${snap.error}',
-                      style: const TextStyle(color: Colors.redAccent),
-                    );
-                  }
-                  final docs = snap.data?.docs ?? [];
-
-                  final names = <String>[];
-                  final iconMap = <String, String>{};
-                  for (final d in docs) {
-                    final data = (d.data() as Map<String, dynamic>?) ?? {};
-                    final name = d.id; // doc id
-                    final iconUrl = (data['iconUrl'] as String?) ?? '';
-                    names.add(name);
-                    iconMap[name] = iconUrl;
-                  }
-                  names.sort(
-                    (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-                  );
-
-                  if (_selectedCategory != null &&
-                      !names.contains(_selectedCategory)) {
-                    _selectedCategory = null;
-                    _selectedCategoryIconUrl = null;
-                  }
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Menu category',
-                        style: TextStyle(color: kMuted, fontSize: 12),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: _selectedCategory,
-                        dropdownColor: const Color(0xFF2F2E2D),
-                        items: names
-                            .map(
-                              (n) => DropdownMenuItem(
-                                value: n,
-                                child: Row(
-                                  children: [
-                                    _CategoryIcon(iconUrl: iconMap[n]),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      n,
-                                      style: const TextStyle(color: kWhite),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) {
-                          setState(() {
-                            _selectedCategory = v;
-                            _selectedCategoryIconUrl = v == null
-                                ? null
-                                : iconMap[v];
-                          });
-                        },
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: const Color(0xFF2F2E2D),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: const BorderSide(color: kMuted),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: const BorderSide(
-                              color: kPrimary,
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                        ),
-                        iconEnabledColor: kWhite,
-                        style: const TextStyle(color: kWhite),
-                        hint: const Text(
-                          'Select category',
-                          style: TextStyle(color: kMuted),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_selectedCategoryIconUrl != null &&
-                          _selectedCategoryIconUrl!.isNotEmpty)
-                        Row(
-                          children: [
-                            _CategoryIcon(iconUrl: _selectedCategoryIconUrl),
-                            const SizedBox(width: 8),
-                            Text(
-                              _selectedCategory ?? '',
-                              style: const TextStyle(color: kWhite),
-                            ),
-                          ],
-                        ),
-                    ],
-                  );
                 },
               ),
             ),
           ),
+          const SizedBox(height: 12),
 
-          const SizedBox(height: 16),
-          if (_err != null)
-            Text(_err!, style: const TextStyle(color: Colors.redAccent)),
+          if (_selectedMenuChoices.isNotEmpty)
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _selectedMenuChoices.length,
+              itemBuilder: (context, index) {
+                final choice = _selectedMenuChoices[index];
+                final String optionsPreview = (choice['options'] ?? []).join(
+                  ', ',
+                );
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: kFieldBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    title: Text(
+                      choice['heading'] ?? '',
+                      style: const TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      optionsPreview,
+                      style: const TextStyle(color: kMuted),
+                      maxLines: 1,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: kMuted, size: 20),
+                          onPressed: () => _openEditChoiceDialog(choice),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.redAccent,
+                            size: 20,
+                          ),
+                          onPressed: () => setState(
+                            () => _selectedMenuChoices.removeAt(index),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          const SizedBox(height: 24),
+
+          // ── Additional Options ──────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Additional Options',
+                style: TextStyle(
+                  color: kWhite,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle, color: kPrimary, size: 30),
+                onPressed: _addOptionField,
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
 
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _additionalOptions.length,
+            itemBuilder: (context, index) {
+              final opt = _additionalOptions[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kFieldBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kPrimary.withOpacity(0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header label
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.add_box_outlined,
+                            color: kPrimary,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Option ${index + 1}',
+                            style: const TextStyle(
+                              color: kPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Row 1: Option Name + Price
+                    Row(
+                      children: [
+                        Expanded(child: _miniInput('Option Name', opt.name)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _miniInput('Price', opt.price, isNumber: true),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Row 2: Catalog Code
+                    _miniInput('Catalog Code', opt.catalog),
+
+                    // Delete button
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.redAccent),
+                        onPressed: () => _removeOptionField(index),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // ── Description / Category / Image ──────────────────────────
+          const Text(
+            'Item Details',
+            style: TextStyle(
+              color: kWhite,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kFieldBg.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                _input(
+                  label: 'Description (optional)',
+                  controller: _note,
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: kFieldBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('menu_category')
+                        .snapshots(),
+                    builder: (context, snap) {
+                      if (!snap.hasData) return const LinearProgressIndicator();
+                      final names = snap.data!.docs.map((d) => d.id).toList();
+                      return DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedCategory,
+                          isExpanded: true,
+                          dropdownColor: kFieldBg,
+                          hint: const Text(
+                            'Menu Category',
+                            style: TextStyle(color: kMuted),
+                          ),
+                          items: names
+                              .map(
+                                (n) => DropdownMenuItem(
+                                  value: n,
+                                  child: Text(
+                                    n,
+                                    style: const TextStyle(color: kWhite),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _selectedCategory = v),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: _pickImage,
+                  child: Container(
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: kFieldBg,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: _imgBytes != null
+                        ? Image.memory(_imgBytes!, height: 130)
+                        : const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.add_photo_alternate,
+                                size: 36,
+                                color: kPrimary,
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Select Image',
+                                style: TextStyle(color: kWhite),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Error ───────────────────────────────────────────────────
+          if (_err != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _err!,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+
+          // ── Save Button ─────────────────────────────────────────────
           SizedBox(
             width: double.infinity,
+            height: 52,
             child: FilledButton(
               onPressed: _saving ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: kPrimary,
                 foregroundColor: kWhite,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
-                ),
               ),
               child: _saving
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: kWhite,
-                      ),
-                    )
-                  : const Text('Save'),
+                  ? const CircularProgressIndicator(color: kWhite)
+                  : const Text(
+                      'Save Menu Item',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
 
-          // Edit and Delete -> same manage page
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.edit, color: kWhite),
-                  label: const Text(
-                    'Edit Foods',
-                    style: TextStyle(color: kWhite),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: kMuted),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EditDeleteFoodsMenuPage(),
-                      ),
-                    );
-                  },
-                ),
+          // ── Manage Menu Items ───────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.settings, color: kWhite, size: 18),
+              label: const Text(
+                'Manage Menu Items',
+                style: TextStyle(color: kWhite),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                  label: const Text(
-                    'Delete Foods',
-                    style: TextStyle(color: kWhite),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: kMuted),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EditDeleteFoodsMenuPage(),
-                      ),
-                    );
-                  },
-                ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: kMuted.withOpacity(0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-            ],
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ManageMenuItemsPage()),
+              ),
+            ),
           ),
+          const SizedBox(height: 40),
         ],
       ),
     );
   }
 
+  // ── Input Widgets ─────────────────────────────────────────────────────
+
   Widget _input({
     required String label,
     required TextEditingController controller,
     TextInputType? keyboardType,
+    int maxLines = 1,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      maxLines: maxLines,
       style: const TextStyle(color: kWhite),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: kMuted),
+        labelStyle: TextStyle(color: kMuted.withOpacity(0.8)),
         filled: true,
-        fillColor: const Color(0xFF2F2E2D),
+        fillColor: kFieldBg,
         enabledBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: kMuted),
+          borderSide: BorderSide(color: kMuted.withOpacity(0.3)),
           borderRadius: BorderRadius.circular(12),
         ),
         focusedBorder: OutlineInputBorder(
@@ -448,58 +696,27 @@ class _AddFoodMenuPageState extends State<AddFoodMenuPage> {
       ),
     );
   }
-}
 
-// திருத்தப்பட்ட பகுதி: கேட்டகிரி ஐகான் வெப் பிரவுசரில் தெரியும்படி மாற்றப்பட்டுள்ளது
-class _CategoryIcon extends StatelessWidget {
-  final String? iconUrl;
-  const _CategoryIcon({this.iconUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    final url = iconUrl ?? '';
-    if (url.isEmpty) {
-      return const Icon(Icons.image_not_supported, color: kMuted, size: 20);
-    }
-
-    if (kIsWeb) {
-      // வெப்பில் CORS பிளாக்கிங்கைத் தவிர்க்க HTML View பயன்படுத்துகிறது
-      final String viewId =
-          'add-food-cat-img-${url.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int viewId) => html.ImageElement()
-          ..src = url
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover',
-      );
-
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-          height: 24,
-          width: 24,
-          child: HtmlElementView(
-            viewType: viewId,
-          ), // 'viewType' சரியாகச் சேர்க்கப்பட்டுள்ளது
+  Widget _miniInput(
+    String label,
+    TextEditingController controller, {
+    bool isNumber = false,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      style: const TextStyle(color: kWhite, fontSize: 12),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: kMuted, fontSize: 12),
+        filled: true,
+        fillColor: kBg,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        focusedBorder: OutlineInputBorder(
+          borderSide: const BorderSide(color: kPrimary),
+          borderRadius: BorderRadius.circular(8),
         ),
-      );
-    } else {
-      // ஆண்ட்ராய்டு/ஐஓஎஸ் போன்களுக்கு
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Image.network(
-          url,
-          height: 24,
-          width: 24,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.broken_image, color: kMuted, size: 20),
-        ),
-      );
-    }
+      ),
+    );
   }
 }

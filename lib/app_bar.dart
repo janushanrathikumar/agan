@@ -4,6 +4,8 @@ import 'package:restorant/startup%20page/signin_page.dart';
 
 import 'package:restorant/user/home.dart';
 import 'package:restorant/user/menu.dart';
+import 'package:restorant/user/OrderDetails.dart';
+import 'package:restorant/user/AccountPage.dart';
 
 import 'userscreen/signin_page.dart';
 import 'userscreen/signup_page.dart';
@@ -51,14 +53,15 @@ class _AppShellState extends State<AppShell> {
         const MenuPage(),
       ),
       _TabDef(
-        AppLanguage.getText('reward'),
+        AppLanguage.getText('Orders'),
         Icons.card_giftcard,
-        _CenterLabel(AppLanguage.getText('reward')),
+         const MyOrdersPage(),
       ),
       _TabDef(
         AppLanguage.getText('account'),
         Icons.person,
-        _CenterLabel(AppLanguage.getText('account')),
+       // _CenterLabel(AppLanguage.getText('account')),
+          const AccountPage(),
       ),
     ];
 
