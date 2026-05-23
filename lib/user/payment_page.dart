@@ -136,7 +136,7 @@ class _PaymentPageState extends State<PaymentPage> {
       final orderRef2 = firestore2.collection('BillOrder').doc(customId);
       final orderData2 = {
         'cartItems': cartItemsForDb2,
-        'hotelId': 'AGAN_RESTAURANT',
+        'hotelId': 'jKuRDFBYEfDUzLdROtoM',
         'hotelName': 'Agan Restaurant',
         'paymentMethod': 'cash',
         'status': 'New',
