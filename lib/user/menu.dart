@@ -1,3 +1,4 @@
+// lib/user/menu.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,7 +9,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
-// --- Color Constants ---
 const kPrimary = Color(0xFFE49024);
 const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
@@ -33,13 +33,12 @@ class _WebSafeImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (imageUrl.isEmpty) return fallback;
-
     if (kIsWeb) {
       final String viewId =
           'menu-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
       ui_web.platformViewRegistry.registerViewFactory(
         viewId,
-        (int viewId) => html.ImageElement()
+        (int _) => html.ImageElement()
           ..src = imageUrl
           ..style.border = 'none'
           ..style.width = '100%'
@@ -52,19 +51,19 @@ class _WebSafeImage extends StatelessWidget {
         height: height,
         child: HtmlElementView(viewType: viewId),
       );
-    } else {
-      return Image.network(
-        imageUrl,
-        width: width,
-        height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => fallback,
-      );
     }
+    return Image.network(
+      imageUrl,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
   }
 }
 
 class MenuPage extends StatefulWidget {
+  // 🟢 tableNo passed from HomePage ('Take-Away', 'T5', etc.)
   final String? tableNo;
   const MenuPage({super.key, this.tableNo});
 
@@ -119,6 +118,38 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                 ),
                 elevation: 0,
+                // 🟢 Show table badge in app bar
+                actions: [
+                  if (widget.tableNo != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kPrimary.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: kPrimary.withOpacity(0.5),
+                            ),
+                          ),
+                          child: Text(
+                            widget.tableNo == 'Take-Away'
+                                ? '🛍 Take-Away'
+                                : '🪑 ${widget.tableNo}',
+                            style: const TextStyle(
+                              color: kPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
                 bottom: PreferredSize(
                   preferredSize: const Size.fromHeight(54),
                   child: Padding(
@@ -153,12 +184,21 @@ class _MenuPageState extends State<MenuPage> {
                     child: _MenuGrid(
                       kind: _kind,
                       category: _selectedCategory,
-                      onTapItem: (m) => _showItemSheet(context, _kind, m, uid),
+                      onTapItem: (m) => _showItemSheet(
+                        context,
+                        _kind,
+                        m,
+                        uid,
+                        widget.tableNo,
+                      ),
                     ),
                   ),
                 ],
               ),
-              floatingActionButton: uid == null ? null : _CartFAB(uid: uid),
+              // 🟢 FAB passes tableNo to CheckoutPage
+              floatingActionButton: uid == null
+                  ? null
+                  : _CartFAB(uid: uid, tableNo: widget.tableNo),
             );
           },
         );
@@ -167,10 +207,11 @@ class _MenuPageState extends State<MenuPage> {
   }
 }
 
-// ── Cart FAB ────────────────────────────────────────────────────────────────
+// ── Cart FAB ─────────────────────────────────────────────────────────────────
 class _CartFAB extends StatelessWidget {
   final String uid;
-  const _CartFAB({required this.uid});
+  final String? tableNo;
+  const _CartFAB({required this.uid, this.tableNo});
 
   @override
   Widget build(BuildContext context) {
@@ -185,9 +226,9 @@ class _CartFAB extends StatelessWidget {
         double total = 0;
         for (final d in docs) {
           final m = (d.data() as Map<String, dynamic>? ?? {});
-          final p = (m['price'] as num?)?.toDouble() ?? 0;
-          final q = (m['qty'] as num?)?.toInt() ?? 1;
-          total += p * q;
+          total +=
+              ((m['price'] as num?)?.toDouble() ?? 0) *
+              ((m['qty'] as num?)?.toInt() ?? 1);
         }
         if (total == 0) return const SizedBox.shrink();
         return FloatingActionButton.extended(
@@ -198,16 +239,19 @@ class _CartFAB extends StatelessWidget {
             'CHF ${total.toStringAsFixed(2)}',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          onPressed: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => CheckoutPage(uid: uid))),
+          // 🟢 Pass tableNo
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => CheckoutPage(uid: uid, tableNo: tableNo),
+            ),
+          ),
         );
       },
     );
   }
 }
 
-// ── Top Switch ───────────────────────────────────────────────────────────────
+// ── Top Switch ────────────────────────────────────────────────────────────────
 class _TopSwitch extends StatelessWidget {
   final _MenuKind kind;
   final ValueChanged<_MenuKind> onChanged;
@@ -249,7 +293,7 @@ class _TopSwitch extends StatelessWidget {
   }
 }
 
-// ── Category Rail ────────────────────────────────────────────────────────────
+// ── Category Rail ─────────────────────────────────────────────────────────────
 class _CategoryRail extends StatelessWidget {
   final _MenuKind kind;
   final List<QueryDocumentSnapshot> allCategoryDocs;
@@ -287,7 +331,6 @@ class _CategoryRail extends StatelessWidget {
             final cat = (m['category'] as String?) ?? '';
             if (cat.isNotEmpty) availableCategoryNames.add(cat);
           }
-
           final filteredCategoryDocs = allCategoryDocs
               .where((doc) => availableCategoryNames.contains(doc.id))
               .toList(growable: false);
@@ -325,7 +368,6 @@ class _CategoryRail extends StatelessWidget {
               final name = d.id;
               final iconUrl = (data['iconUrl'] as String?) ?? '';
               final isSel = selected == name;
-
               return InkWell(
                 onTap: () => onSelect(name),
                 child: Container(
@@ -347,7 +389,19 @@ class _CategoryRail extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      _CatIconLarge(url: iconUrl),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: _WebSafeImage(
+                          imageUrl: iconUrl,
+                          width: 44,
+                          height: 44,
+                          fallback: const Icon(
+                            Icons.fastfood,
+                            color: kMuted,
+                            size: 30,
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         name,
@@ -372,26 +426,11 @@ class _CategoryRail extends StatelessWidget {
   }
 }
 
-class _CatIconLarge extends StatelessWidget {
-  final String url;
-  const _CatIconLarge({required this.url});
-  @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(8),
-    child: _WebSafeImage(
-      imageUrl: url,
-      width: 44,
-      height: 44,
-      fallback: const Icon(Icons.fastfood, color: kMuted, size: 30),
-    ),
-  );
-}
-
-// ── Menu Grid ────────────────────────────────────────────────────────────────
+// ── Menu Grid ─────────────────────────────────────────────────────────────────
 class _MenuGrid extends StatelessWidget {
   final _MenuKind kind;
   final String? category;
-  final void Function(Map<String, dynamic> item) onTapItem;
+  final void Function(Map<String, dynamic>) onTapItem;
 
   const _MenuGrid({
     required this.kind,
@@ -406,7 +445,6 @@ class _MenuGrid extends StatelessWidget {
         .collection('menu_items')
         .where('itemType', isEqualTo: type)
         .where('status', isEqualTo: 'on');
-
     if (category != null) q = q.where('category', isEqualTo: category);
 
     return StreamBuilder<QuerySnapshot>(
@@ -448,7 +486,6 @@ class _MenuGrid extends StatelessWidget {
             final name = (m['name'] as String?) ?? '';
             final price = (m['price'] as num?)?.toDouble() ?? 0;
             final imageUrl = (m['imageUrl'] as String?) ?? '';
-
             return InkWell(
               onTap: () => onTapItem(m),
               child: Container(
@@ -481,7 +518,7 @@ class _MenuGrid extends StatelessWidget {
                     Expanded(
                       flex: 3,
                       child: Padding(
-                        padding: const EdgeInsets.all(8.0),
+                        padding: const EdgeInsets.all(8),
                         child: Column(
                           children: [
                             Text(
@@ -520,7 +557,7 @@ class _MenuGrid extends StatelessWidget {
   }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 Future<String?> _ensureUid() async {
   final auth = FirebaseAuth.instance;
   final u = auth.currentUser;
@@ -529,25 +566,22 @@ Future<String?> _ensureUid() async {
   return cred.user?.uid;
 }
 
-// ── Item Bottom Sheet ────────────────────────────────────────────────────────
+// ── Item Bottom Sheet ─────────────────────────────────────────────────────────
 void _showItemSheet(
   BuildContext context,
   _MenuKind kind,
   Map<String, dynamic> item,
   String? uidHint,
+  String? tableNo, // 🟢 passed through
 ) {
   final name = (item['name'] as String?) ?? '';
   final imageUrl = (item['imageUrl'] as String?) ?? '';
   final basePrice = ((item['price'] as num?) ?? 0).toDouble();
   final dbNote = (item['note'] as String?) ?? '';
   final category = (item['category'] as String?) ?? '';
-
-  // ── Menu Choices: list of choice-group IDs linked to this item ──
   final List<String> menuChoiceIds = List<String>.from(
     item['menuChoices'] ?? [],
   );
-
-  // ── Additional Options: [{name, price, catalog}] ────────────────
   final List<Map<String, dynamic>> additionalOptions =
       (item['additionalOptions'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -565,11 +599,7 @@ void _showItemSheet(
       String drinkType = 'Hot';
       String sugar = 'Normal';
       final noteCtrl = TextEditingController();
-
-      // selectedChoice[groupId] = chosen option string
       final Map<String, String?> selectedChoice = {};
-
-      // selectedAddOns: index of additionalOptions that user toggled on
       final Set<int> selectedAddOns = {};
 
       double computeTotal() {
@@ -584,23 +614,20 @@ void _showItemSheet(
       Future<void> addToChat(StateSetter setS) async {
         final uid = uidHint ?? await _ensureUid();
         if (uid == null) return;
-
-        final List<Map<String, dynamic>> chosenAddOns = selectedAddOns
+        final chosenAddOns = selectedAddOns
             .map((i) => additionalOptions[i])
             .toList();
-
         final payload = <String, dynamic>{
           'kind': kind == _MenuKind.drinks ? 'drink' : 'food',
           'name': name,
           'imageUrl': imageUrl,
-          'price': computeTotal() / qty, // unit price incl. add-ons
+          'price': computeTotal() / qty,
           'qty': qty,
           'category': category,
           'menuChoices': selectedChoice,
           'additionalOptions': chosenAddOns,
           'createdAt': FieldValue.serverTimestamp(),
         };
-
         if (kind == _MenuKind.drinks) {
           payload.addAll({'type': drinkType, 'sugar': sugar});
         } else {
@@ -611,7 +638,6 @@ void _showItemSheet(
                 : noteCtrl.text.trim(),
           });
         }
-
         await FirebaseFirestore.instance
             .collection('chat')
             .doc(uid)
@@ -631,7 +657,6 @@ void _showItemSheet(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Handle bar
                 Container(
                   height: 5,
                   width: 50,
@@ -641,8 +666,6 @@ void _showItemSheet(
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // ── Item header ──────────────────────────────────
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -697,8 +720,6 @@ void _showItemSheet(
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // ── Drink options ────────────────────────────────
                 if (kind == _MenuKind.drinks) ...[
                   _SectionTitle(AppLanguage.getText('type')),
                   _ChipRow(
@@ -715,7 +736,6 @@ void _showItemSheet(
                   ),
                   const SizedBox(height: 16),
                 ] else ...[
-                  // ── Extra note for food ──────────────────────
                   _SectionTitle(AppLanguage.getText('note_optional')),
                   TextField(
                     controller: noteCtrl,
@@ -734,34 +754,27 @@ void _showItemSheet(
                   ),
                   const SizedBox(height: 20),
                 ],
-
-                // ── Menu Choices (radio per group) ───────────────
                 if (menuChoiceIds.isNotEmpty) ...[
                   _MenuChoicesSection(
                     choiceIds: menuChoiceIds,
                     selectedChoice: selectedChoice,
-                    onChanged: (groupId, val) =>
-                        setS(() => selectedChoice[groupId] = val),
+                    onChanged: (gid, val) =>
+                        setS(() => selectedChoice[gid] = val),
                   ),
                   const SizedBox(height: 16),
                 ],
-
-                // ── Additional Options (checkboxes) ──────────────
                 if (additionalOptions.isNotEmpty) ...[
                   _AdditionalOptionsSection(
                     options: additionalOptions,
                     selected: selectedAddOns,
                     onToggle: (idx) => setS(() {
-                      if (selectedAddOns.contains(idx))
-                        selectedAddOns.remove(idx);
-                      else
-                        selectedAddOns.add(idx);
+                      selectedAddOns.contains(idx)
+                          ? selectedAddOns.remove(idx)
+                          : selectedAddOns.add(idx);
                     }),
                   ),
                   const SizedBox(height: 16),
                 ],
-
-                // ── Quantity ─────────────────────────────────────
                 _SectionTitle(AppLanguage.getText('quantity')),
                 Row(
                   children: [
@@ -793,8 +806,6 @@ void _showItemSheet(
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // ── Action Buttons ───────────────────────────────
                 Row(
                   children: [
                     Expanded(
@@ -845,7 +856,9 @@ void _showItemSheet(
                             if (uid != null)
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => CheckoutPage(uid: uid),
+                                  // 🟢 tableNo passed here too
+                                  builder: (_) =>
+                                      CheckoutPage(uid: uid, tableNo: tableNo),
                                 ),
                               );
                           }
@@ -867,8 +880,7 @@ void _showItemSheet(
   );
 }
 
-// ── Menu Choices Section ─────────────────────────────────────────────────────
-// Loads each choice group from Firestore and shows a radio list
+// ── Menu Choices Section ──────────────────────────────────────────────────────
 class _MenuChoicesSection extends StatelessWidget {
   final List<String> choiceIds;
   final Map<String, String?> selectedChoice;
@@ -892,13 +904,11 @@ class _MenuChoicesSection extends StatelessWidget {
         ),
       ),
       builder: (context, snap) {
-        if (!snap.hasData) {
+        if (!snap.hasData)
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: LinearProgressIndicator(color: kPrimary),
           );
-        }
-
         final docs = snap.data!.where((d) => d.exists).toList();
         if (docs.isEmpty) return const SizedBox.shrink();
 
@@ -909,7 +919,6 @@ class _MenuChoicesSection extends StatelessWidget {
             final heading = (data['heading'] as String?) ?? '';
             final options = List<String>.from(data['options'] ?? []);
             final groupId = doc.id;
-
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
@@ -921,7 +930,6 @@ class _MenuChoicesSection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Heading + "required" badge
                   Row(
                     children: [
                       Text(
@@ -954,7 +962,6 @@ class _MenuChoicesSection extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Radio options
                   ...options.map((opt) {
                     final isSelected = selectedChoice[groupId] == opt;
                     return InkWell(
@@ -1014,8 +1021,7 @@ class _MenuChoicesSection extends StatelessWidget {
   }
 }
 
-// ── Additional Options Section ───────────────────────────────────────────────
-// Shows add-on checkboxes the user can optionally toggle
+// ── Additional Options Section ────────────────────────────────────────────────
 class _AdditionalOptionsSection extends StatelessWidget {
   final List<Map<String, dynamic>> options;
   final Set<int> selected;
@@ -1073,7 +1079,6 @@ class _AdditionalOptionsSection extends StatelessWidget {
             final optName = (opt['name'] as String?) ?? '';
             final optPrice = ((opt['price'] as num?) ?? 0).toDouble();
             final isSelected = selected.contains(i);
-
             return InkWell(
               onTap: () => onToggle(i),
               borderRadius: BorderRadius.circular(8),
@@ -1081,7 +1086,6 @@ class _AdditionalOptionsSection extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
                 child: Row(
                   children: [
-                    // Checkbox
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       width: 20,
@@ -1131,7 +1135,7 @@ class _AdditionalOptionsSection extends StatelessWidget {
   }
 }
 
-// ── Small reusable widgets ───────────────────────────────────────────────────
+// ── Small widgets ─────────────────────────────────────────────────────────────
 class _SectionTitle extends StatelessWidget {
   final String text;
   const _SectionTitle(this.text);

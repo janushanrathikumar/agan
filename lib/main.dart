@@ -7,11 +7,16 @@ import 'package:restorant/startup%20page/signin_page.dart';
 import 'package:restorant/startup%20page/start_page.dart';
 import 'package:restorant/userscreen/signup_page.dart'; // உங்களின் சரியான Path-ஐ உறுதிப்படுத்தவும்
 import 'firebase_options.dart';
+import 'secondary_firebase_options.dart';
 import 'app_bar.dart'; // AppShell / Home Page இங்கே உள்ளதால் இது இணைக்கப்பட்டுள்ளது
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(
+    name: 'SecondaryDb', // இந்த பெயர் PaymentPage-ல் நாம் பயன்படுத்தியது
+    options: SecondaryFirebaseOptions.currentPlatform, // புதிய க்ளாஸை இங்கே அழைக்கிறோம்
+  );
   runApp(const MyApp());
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart'; // 🟢 Secondary App-க்கு தேவை
 
 // Web Image CORS error avoidance imports
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -74,7 +75,7 @@ class PaymentPage extends StatefulWidget {
 class _PaymentPageState extends State<PaymentPage> {
   bool _isSubmitting = false;
 
-  // 🟢 Directly Save Order to DB
+  // 🟢 2 டேட்டாபேஸ்களிலும் ஆர்டரை சேமிக்கும் லாஜிக்
   Future<void> _submitOrder(
     double total,
     Map<String, dynamic> delivery,
@@ -82,7 +83,13 @@ class _PaymentPageState extends State<PaymentPage> {
   ) async {
     setState(() => _isSubmitting = true);
 
-    final firestore = FirebaseFirestore.instance;
+    // Default Firestore (உங்கள் தற்போதைய ஆப்)
+    final firestore1 = FirebaseFirestore.instance;
+
+    // Secondary Firestore (ez8testdb) - main.dart-ல் 'SecondaryDb' என பெயர் வைத்துள்ளோம்
+    final secondaryApp = Firebase.app('SecondaryDb');
+    final firestore2 = FirebaseFirestore.instanceFor(app: secondaryApp);
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       setState(() => _isSubmitting = false);
@@ -90,39 +97,83 @@ class _PaymentPageState extends State<PaymentPage> {
     }
 
     try {
-      // 1. Prepare items
-      final itemsList = cartDocs
+      // --- 1. தற்போதைய ஆப்க்கான டேட்டாவைத் தயாரித்தல் ---
+      final itemsList1 = cartDocs
           .map((d) => d.data() as Map<String, dynamic>)
           .toList();
 
-      // 2. Create new order document
-      final orderRef = firestore.collection('orders').doc();
-      await orderRef.set({
-        'order_id': orderRef.id,
+      final orderRef1 = firestore1.collection('orders').doc();
+      final orderData1 = {
+        'order_id': orderRef1.id,
         'uid': user.uid,
         'delivery_method': delivery['delivery_method'] ?? 'Take_Away',
         'table_no': delivery['table_no'] ?? 'N/A',
-        'status': 'New', // Kitchen will see this
+        'status': 'New',
         'total': total,
-        'items': itemsList,
+        'items': itemsList1,
         'timestamp': FieldValue.serverTimestamp(),
-      });
+      };
 
-      // 3. Clear Cart (Delete chat items)
-      final batch = firestore.batch();
+      // --- 2. ez8testdb BillOrder ஸ்ட்ரக்சருக்கான டேட்டாவைத் தயாரித்தல் ---
+
+      // AJ0001 போன்ற Custom ID-ஐ உருவாக்குதல் (உதாரணத்திற்கு டைம்ஸ்டாம்ப் பயன்படுத்தப்பட்டுள்ளது)
+      String customId =
+          'AJ${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+      final List<Map<String, dynamic>> cartItemsForDb2 = cartDocs.map((d) {
+        final m = d.data() as Map<String, dynamic>;
+        return {
+          'comment': m['note'] ?? '',
+          'dishName': m['name'] ?? '',
+          'hotelId': 'AGAN_RESTAURANT', // உங்கள் கடையின் ID-ஐ மாற்றிக்கொள்ளலாம்
+          'options': [], // தேவைப்பட்டால் ஆப்ஷன்களைச் சேர்க்கலாம்
+          'price': (m['price'] as num?)?.toDouble() ?? 0.0,
+          'quantity': (m['qty'] as num?)?.toInt() ?? 1,
+          'userId': user.uid,
+        };
+      }).toList();
+
+      final orderRef2 = firestore2.collection('BillOrder').doc(customId);
+      final orderData2 = {
+        'cartItems': cartItemsForDb2,
+        'hotelId': 'AGAN_RESTAURANT',
+        'hotelName': 'Agan Restaurant',
+        'paymentMethod': 'cash',
+        'status': 'New',
+        'timestamp': FieldValue.serverTimestamp(),
+        'total': total,
+        'userId': user.uid,
+      };
+
+      // Shipping Address இருந்தால் சேர்ப்பது
+      if (delivery['delivery_method'] != 'Take_Away') {
+        orderData2['shippingAddress'] = {
+          'address': delivery['address'] ?? '',
+          'name': user.displayName ?? 'Customer',
+          'mobile': delivery['phone'] ?? '',
+          'country': 'Germany',
+        };
+      }
+
+      // --- 3. இரண்டு டேட்டாபேஸிலும் ஒரே நேரத்தில் டேட்டாவை சேமித்தல் ---
+      await Future.wait([
+        orderRef1.set(orderData1), // Default DB-ல் சேமிக்கிறது
+        orderRef2.set(orderData2), // ez8testdb-ல் சேமிக்கிறது
+      ]);
+
+      // --- 4. கார்ட்டை (Cart) க்ளியர் செய்தல் ---
+      final batch = firestore1.batch();
       for (final doc in cartDocs) {
         batch.delete(doc.reference);
       }
       await batch.commit();
 
-      // 4. Show success & Navigate to Home Screen
+      // --- 5. வெற்றிகரமான மெசேஜ் காட்டுதல் ---
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Order Confirmed! ID: ${orderRef.id.substring(0, 6)}',
-            ),
+            content: Text('Order Confirmed! ID: $customId'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 4),
           ),
@@ -255,7 +306,7 @@ class _PaymentPageState extends State<PaymentPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // 🟢 Item List with Delete Button
+                          // Item List with Delete Button
                           ListView.separated(
                             itemCount: docs.length,
                             shrinkWrap: true,
@@ -348,7 +399,6 @@ class _PaymentPageState extends State<PaymentPage> {
                                             fontSize: 15,
                                           ),
                                         ),
-                                        // 🟢 Delete Button
                                         IconButton(
                                           icon: const Icon(
                                             Icons.delete_outline,
@@ -373,7 +423,7 @@ class _PaymentPageState extends State<PaymentPage> {
                     ),
                   ),
 
-                  // 🟢 Sticky Bottom Footer
+                  // Sticky Bottom Footer
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: const BoxDecoration(
