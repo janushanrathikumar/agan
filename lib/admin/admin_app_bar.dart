@@ -4,9 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 // Assuming these files exist relative to this one, based on your project structure
 import 'add_category.dart';
 import 'add_food_menu.dart';
-import 'drinkmenu/add_drinks_menu.dart';
+import 'admin_order.dart';
 import 'add_menu_chocie.dart';
-
+import 'promotion.dart';
 // --- Color Constants (Defined in the original file) ---
 const kPrimary = Color(0xFFA26334);
 const kBg = Color(0xFF2A2928);
@@ -84,11 +84,11 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                       // Navigates back to the first route in the stack (AdminHome)
                       Navigator.popUntil(context, (route) => route.isFirst);
                       break;
-                    case 'add_drinks':
+                    case 'Order':
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const AddDrinksMenuPage(),
+                          builder: (_) => const AdminOrdersListPage(),
                         ),
                       );
                       break;
@@ -114,6 +114,14 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                         ),
                       );
                       break;
+                     case 'add_promotion':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminPromotionsPage(),
+                        ),
+                      );
+                      break;
                   }
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -133,10 +141,10 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   // Enhanced Menu Item: Add Drinks Menu
                   PopupMenuItem<String>(
-                    value: 'add_drinks',
+                    value: 'Order',
                     child: _buildMenuItemChild(
                       Icons.local_bar_rounded,
-                      'Add Drinks Menu',
+                      'View Orders',
                     ),
                   ),
                   // Enhanced Menu Item: Add Menu Category
@@ -152,6 +160,13 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
                     child: _buildMenuItemChild(
                       Icons.select_all_rounded,
                       'Add Menu Choice',
+                    ),
+                  ),
+                   PopupMenuItem<String>(
+                    value: 'add_promotion',
+                    child: _buildMenuItemChild(
+                      Icons.local_offer_rounded,
+                      'Add Promotion',
                     ),
                   ),
                 ],

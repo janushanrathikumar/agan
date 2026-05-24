@@ -1,3 +1,4 @@
+// lib/user/checkout.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -6,7 +7,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
-// --- Palette ---
 const kPrimary = Color(0xFFA26334);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
@@ -14,15 +14,12 @@ const kWhite = Color(0xFFFFFFFF);
 const kCard = Color(0xFF3A3938);
 const kFooter = Color(0xFF242322);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Web-safe image
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Web-safe image ────────────────────────────────────────────────────────────
 class _WebSafeImage extends StatelessWidget {
   final String imageUrl;
   final double width;
   final double height;
   final Widget fallback;
-
   const _WebSafeImage({
     required this.imageUrl,
     required this.width,
@@ -34,7 +31,7 @@ class _WebSafeImage extends StatelessWidget {
   Widget build(BuildContext context) {
     if (imageUrl.isEmpty) return fallback;
     if (kIsWeb) {
-      final String viewId =
+      final viewId =
           'co-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
       ui_web.platformViewRegistry.registerViewFactory(
         viewId,
@@ -61,13 +58,10 @@ class _WebSafeImage extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CheckoutPage
-// ─────────────────────────────────────────────────────────────────────────────
+// ── CheckoutPage ──────────────────────────────────────────────────────────────
 class CheckoutPage extends StatefulWidget {
   final String uid;
   final String? tableNo;
-
   const CheckoutPage({super.key, required this.uid, this.tableNo});
 
   @override
@@ -75,34 +69,61 @@ class CheckoutPage extends StatefulWidget {
 }
 
 class _CheckoutPageState extends State<CheckoutPage> {
+  // _tableNo: null = not selected, 'Take-Away' = take-away, other = dine-in
   String? _tableNo;
 
   @override
   void initState() {
     super.initState();
     _tableNo = widget.tableNo;
+    // Also try to load from Firestore if not passed
+    if (_tableNo == null) _loadTableFromFirestore();
   }
 
-  // ── Called when user taps "Checkout" ──────────────────────────────────────
-  void _handleCheckout(double total) {
+  Future<void> _loadTableFromFirestore() async {
+    final doc = await FirebaseFirestore.instance
+        .collection('food_delivery')
+        .doc(widget.uid)
+        .get();
+    if (doc.exists) {
+      final method = doc.data()?['delivery_method'] ?? '';
+      final tableNo = doc.data()?['table_no'] ?? '';
+      setState(() {
+        if (method == 'Take_Away') {
+          _tableNo = 'Take-Away';
+        } else if (tableNo.toString().isNotEmpty) {
+          _tableNo = tableNo.toString();
+        }
+      });
+    }
+  }
+
+  void _handleCheckout(double total, List<QueryDocumentSnapshot> docs) {
     if (_tableNo == null || _tableNo!.isEmpty) {
-      _showTableDialog(total);
+      // ✅ Must select table/take-away before checkout
+      _showTablePicker(total, docs);
     } else {
       _goToPayment();
     }
   }
 
-  // ── Dialog: choose Dine-In (scan / type) or Take-Away ────────────────────
-  void _showTableDialog(double total) {
+  void _showTablePicker(double total, List<QueryDocumentSnapshot> docs) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: kCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (_) => _TablePickerSheet(
-        onConfirm: (tableNo) {
+        onConfirm: (tableNo) async {
+          // ✅ Save delivery method to Firestore
+          final bool isTakeAway = tableNo == 'Take-Away';
+          await FirebaseFirestore.instance
+              .collection('food_delivery')
+              .doc(widget.uid)
+              .set({
+                'delivery_method': isTakeAway ? 'Take_Away' : 'Dine_In',
+                'table_no': isTakeAway ? '' : tableNo, // ✅ blank for take-away
+                'timestamp': FieldValue.serverTimestamp(),
+              });
           setState(() => _tableNo = tableNo);
           _goToPayment();
         },
@@ -135,20 +156,28 @@ class _CheckoutPageState extends State<CheckoutPage> {
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
         ),
         centerTitle: true,
-        // Show current table badge if set
         actions: [
           if (_tableNo != null && _tableNo!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 14),
-              child: Chip(
-                backgroundColor: kPrimary.withOpacity(0.2),
-                side: BorderSide(color: kPrimary.withOpacity(0.5)),
-                label: Text(
-                  _tableNo == 'Take-Away' ? '🛍 Take-Away' : '🪑 $_tableNo',
-                  style: const TextStyle(
-                    color: kPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: kPrimary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: kPrimary.withOpacity(0.5)),
+                  ),
+                  child: Text(
+                    _tableNo == 'Take-Away' ? '🛍 Take-Away' : '🪑 $_tableNo',
+                    style: const TextStyle(
+                      color: kPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -163,7 +192,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               child: CircularProgressIndicator(color: kPrimary),
             );
           final docs = snap.data!.docs;
-          if (docs.isEmpty) return _EmptyCart();
+          if (docs.isEmpty) return const _EmptyCart();
 
           double total = 0;
           for (var d in docs) {
@@ -175,26 +204,64 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
           return Column(
             children: [
-              // ── Order list ──────────────────────────────────────────
+              // ── No table banner ──────────────────────────────────
+              if (_tableNo == null || _tableNo!.isEmpty)
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orange,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Please select Dine-In or Take-Away before checkout',
+                          style: TextStyle(color: Colors.orange, fontSize: 13),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _showTablePicker(total, docs),
+                        child: const Text(
+                          'Select',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // ── Order list ───────────────────────────────────────
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 16,
+                    vertical: 12,
                   ),
                   itemCount: docs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (_, i) =>
                       _CartItemTile(doc: docs[i], itemsRef: itemsRef),
                 ),
               ),
 
-              // ── Order summary card ──────────────────────────────────
+              // ── Order summary footer ─────────────────────────────
               _OrderSummary(
                 total: total,
                 tableNo: _tableNo,
-                onCheckout: () => _handleCheckout(total),
-                onChangeTable: () => _showTableDialog(total),
+                onCheckout: () => _handleCheckout(total, docs),
+                onChangeTable: () => _showTablePicker(total, docs),
               ),
             ],
           );
@@ -204,9 +271,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Cart Item Tile
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Cart Item Tile ────────────────────────────────────────────────────────────
 class _CartItemTile extends StatelessWidget {
   final QueryDocumentSnapshot doc;
   final CollectionReference itemsRef;
@@ -219,11 +284,10 @@ class _CartItemTile extends StatelessWidget {
     final price = (m['price'] as num?)?.toDouble() ?? 0;
     final qty = (m['qty'] as num?)?.toInt() ?? 1;
     final imageUrl = (m['imageUrl'] as String?) ?? '';
-
-    // Extra details
     final String? drinkType = m['type'] as String?;
     final String? sugar = m['sugar'] as String?;
     final String? extraNote = m['extraNote'] as String?;
+    final String? note = m['note'] as String?;
     final Map<String, dynamic> choices = Map<String, dynamic>.from(
       m['menuChoices'] ?? {},
     );
@@ -248,161 +312,135 @@ class _CartItemTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: kWhite.withOpacity(0.06)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: _WebSafeImage(
-                  imageUrl: imageUrl,
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: _WebSafeImage(
+                imageUrl: imageUrl,
+                width: 70,
+                height: 70,
+                fallback: Container(
                   width: 70,
                   height: 70,
-                  fallback: Container(
-                    width: 70,
-                    height: 70,
-                    color: kBg,
-                    child: const Icon(Icons.fastfood, color: kMuted, size: 30),
-                  ),
+                  color: kBg,
+                  child: const Icon(Icons.fastfood, color: kMuted, size: 30),
                 ),
               ),
-              const SizedBox(width: 12),
+            ),
+            const SizedBox(width: 10),
 
-              // Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        color: kWhite,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'CHF ${price.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: kPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-
-                    // Drink details
-                    if (drinkType != null)
-                      _DetailChip('$drinkType · $sugar sugar'),
-
-                    // Menu choice selections
-                    ...choices.entries.map(
-                      (e) => _DetailChip('${e.key}: ${e.value}'),
-                    ),
-
-                    // Add-ons
-                    if (addOns.isNotEmpty)
-                      _DetailChip(
-                        '+${addOns.map((a) => a['name']).join(', ')}',
-                      ),
-
-                    // Extra note
-                    if (extraNote != null && extraNote.isNotEmpty)
-                      _DetailChip('📝 $extraNote'),
-                  ],
-                ),
-              ),
-
-              // Qty controls + delete
-              Column(
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _QtyControl(
-                    qty: qty,
-                    onDec: () {
-                      if (qty <= 1) {
-                        itemsRef.doc(doc.id).delete();
-                      } else {
-                        itemsRef.doc(doc.id).update({'qty': qty - 1});
-                      }
-                    },
-                    onInc: () => itemsRef.doc(doc.id).update({'qty': qty + 1}),
-                  ),
-                  const SizedBox(height: 6),
-                  // Subtotal
                   Text(
-                    'CHF ${(price * qty).toStringAsFixed(2)}',
+                    name,
                     style: const TextStyle(
-                      color: kMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      color: kWhite,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'CHF ${price.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: kPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (drinkType != null) _Chip('$drinkType · $sugar sugar'),
+                  ...choices.entries.map((e) => _Chip('${e.key}: ${e.value}')),
+                  if (addOns.isNotEmpty)
+                    _Chip('+${addOns.map((a) => a['name']).join(', ')}'),
+                  if (extraNote != null && extraNote.isNotEmpty)
+                    _Chip('📝 $extraNote'),
+                  if (note != null && note.isNotEmpty) _Chip('📝 $note'),
                 ],
               ),
-            ],
-          ),
+            ),
+
+            // ✅ Qty controls (+ / - buttons) + subtotal
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Qty control
+                Container(
+                  decoration: BoxDecoration(
+                    color: kBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: kWhite.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _SmBtn(
+                        icon: Icons.remove,
+                        onTap: () {
+                          if (qty <= 1) {
+                            itemsRef.doc(doc.id).delete();
+                          } else {
+                            itemsRef.doc(doc.id).update({'qty': qty - 1});
+                          }
+                        },
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          '$qty',
+                          style: const TextStyle(
+                            color: kWhite,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      _SmBtn(
+                        icon: Icons.add,
+                        onTap: () =>
+                            itemsRef.doc(doc.id).update({'qty': qty + 1}),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'CHF ${(price * qty).toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: kMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _DetailChip extends StatelessWidget {
+class _Chip extends StatelessWidget {
   final String text;
-  const _DetailChip(this.text);
+  const _Chip(this.text);
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 4),
-    child: Text(text, style: const TextStyle(color: kMuted, fontSize: 11)),
+    padding: const EdgeInsets.only(top: 3),
+    child: Text(text, style: const TextStyle(color: kMuted, fontSize: 10)),
   );
 }
 
-class _QtyControl extends StatelessWidget {
-  final int qty;
-  final VoidCallback onDec;
-  final VoidCallback onInc;
-  const _QtyControl({
-    required this.qty,
-    required this.onDec,
-    required this.onInc,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: kBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: kWhite.withOpacity(0.1)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _Btn(icon: Icons.remove, onTap: onDec),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              '$qty',
-              style: const TextStyle(
-                color: kWhite,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          _Btn(icon: Icons.add, onTap: onInc),
-        ],
-      ),
-    );
-  }
-}
-
-class _Btn extends StatelessWidget {
+class _SmBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _Btn({required this.icon, required this.onTap});
+  const _SmBtn({required this.icon, required this.onTap});
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
@@ -414,10 +452,9 @@ class _Btn extends StatelessWidget {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Empty Cart
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Empty Cart ────────────────────────────────────────────────────────────────
 class _EmptyCart extends StatelessWidget {
+  const _EmptyCart();
   @override
   Widget build(BuildContext context) => Center(
     child: Column(
@@ -447,9 +484,7 @@ class _EmptyCart extends StatelessWidget {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Order Summary Footer
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Order Summary Footer ──────────────────────────────────────────────────────
 class _OrderSummary extends StatelessWidget {
   final double total;
   final String? tableNo;
@@ -465,8 +500,10 @@ class _OrderSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final noTable = tableNo == null || tableNo!.isEmpty;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
       decoration: BoxDecoration(
         color: kFooter,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -482,39 +519,36 @@ class _OrderSummary extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
           Container(
             width: 40,
             height: 4,
-            margin: const EdgeInsets.only(bottom: 16),
+            margin: const EdgeInsets.only(bottom: 14),
             decoration: BoxDecoration(
               color: kMuted.withOpacity(0.3),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
 
-          // Table / Take-away row
+          // Table / Take-Away row
           Row(
             children: [
               Icon(
                 tableNo == 'Take-Away'
                     ? Icons.shopping_bag_outlined
                     : Icons.table_restaurant_outlined,
-                color: kPrimary,
+                color: noTable ? Colors.orange : kPrimary,
                 size: 20,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  tableNo == null || tableNo!.isEmpty
-                      ? 'No table selected'
+                  noTable
+                      ? 'No table selected — tap to select'
                       : tableNo == 'Take-Away'
                       ? 'Take-Away order'
                       : 'Table $tableNo',
                   style: TextStyle(
-                    color: tableNo == null || tableNo!.isEmpty
-                        ? kMuted
-                        : kWhite,
+                    color: noTable ? Colors.orange : kWhite,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
@@ -523,9 +557,9 @@ class _OrderSummary extends StatelessWidget {
               TextButton(
                 onPressed: onChangeTable,
                 child: Text(
-                  tableNo == null || tableNo!.isEmpty ? 'Select' : 'Change',
-                  style: const TextStyle(
-                    color: kPrimary,
+                  noTable ? 'Select ›' : 'Change',
+                  style: TextStyle(
+                    color: noTable ? Colors.orange : kPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -533,9 +567,9 @@ class _OrderSummary extends StatelessWidget {
             ],
           ),
 
-          const Divider(color: Colors.white10, height: 20),
+          const Divider(color: Colors.white10, height: 18),
 
-          // Total + button
+          // Total + Checkout button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -560,10 +594,10 @@ class _OrderSummary extends StatelessWidget {
                 height: 52,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: noTable ? Colors.orange : kPrimary,
                     foregroundColor: kWhite,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
+                      horizontal: 24,
                       vertical: 14,
                     ),
                     shape: RoundedRectangleBorder(
@@ -572,10 +606,18 @@ class _OrderSummary extends StatelessWidget {
                     elevation: 0,
                   ),
                   onPressed: onCheckout,
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 20),
-                  label: const Text(
-                    'Checkout',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  icon: Icon(
+                    noTable
+                        ? Icons.warning_amber_rounded
+                        : Icons.arrow_forward_rounded,
+                    size: 20,
+                  ),
+                  label: Text(
+                    noTable ? 'Select Table' : 'Checkout',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ),
@@ -587,9 +629,7 @@ class _OrderSummary extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Table Picker Bottom Sheet
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Table Picker Sheet ────────────────────────────────────────────────────────
 class _TablePickerSheet extends StatefulWidget {
   final void Function(String tableNo) onConfirm;
   const _TablePickerSheet({required this.onConfirm});
@@ -602,7 +642,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
   final _typeCtrl = TextEditingController();
-  bool _scanning = false;
   String? _scannedValue;
 
   @override
@@ -638,7 +677,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Container(
               width: 40,
               height: 4,
@@ -648,7 +686,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
-
             const Text(
               'How would you like to order?',
               style: TextStyle(
@@ -658,8 +695,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
               ),
             ),
             const SizedBox(height: 20),
-
-            // Tab bar: Scan QR | Type Table | Take-Away
             TabBar(
               controller: _tab,
               indicatorColor: kPrimary,
@@ -673,21 +708,11 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
               ],
             ),
             const SizedBox(height: 16),
-
             SizedBox(
               height: 220,
               child: TabBarView(
                 controller: _tab,
-                children: [
-                  // ── Tab 1: QR Scanner ─────────────────────────────
-                  _buildQrTab(),
-
-                  // ── Tab 2: Type table number ──────────────────────
-                  _buildTypeTab(),
-
-                  // ── Tab 3: Take-Away ──────────────────────────────
-                  _buildTakeAwayTab(),
-                ],
+                children: [_buildQrTab(), _buildTypeTab(), _buildTakeAwayTab()],
               ),
             ),
           ],
@@ -696,10 +721,8 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     );
   }
 
-  // QR tab — uses mobile_scanner package
   Widget _buildQrTab() {
     if (kIsWeb) {
-      // QR scanner not supported on web — fall back to type
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -711,7 +734,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             ),
             const SizedBox(height: 12),
             const Text(
-              'QR scanning is not supported\non web. Please type your\ntable number instead.',
+              'QR scanning not supported on web.\nPlease type your table number.',
               textAlign: TextAlign.center,
               style: TextStyle(color: kMuted, fontSize: 13),
             ),
@@ -746,6 +769,10 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             onPressed: () => _confirm(_scannedValue!),
             child: const Text('Confirm Table'),
           ),
+          TextButton(
+            onPressed: () => setState(() => _scannedValue = null),
+            child: const Text('Scan again', style: TextStyle(color: kMuted)),
+          ),
         ],
       );
     }
@@ -763,7 +790,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     );
   }
 
-  // Type table number tab
   Widget _buildTypeTab() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -817,7 +843,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     );
   }
 
-  // Take-Away tab
   Widget _buildTakeAwayTab() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -857,6 +882,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
+            // ✅ 'Take-Away' passed — Firestore will save table_no as ''
             onPressed: () => _confirm('Take-Away'),
             child: const Text(
               'Continue as Take-Away',

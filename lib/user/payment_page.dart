@@ -76,19 +76,12 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isSubmitting = false;
 
   // 🟢 2 டேட்டாபேஸ்களிலும் ஆர்டரை சேமிக்கும் லாஜிக்
-  Future<void> _submitOrder(
+ Future<void> _submitOrder(
     double total,
-    Map<String, dynamic> delivery,
+    Map<String, dynamic> deliveryData,
     List<QueryDocumentSnapshot> cartDocs,
   ) async {
     setState(() => _isSubmitting = true);
-
-    // Default Firestore (உங்கள் தற்போதைய ஆப்)
-    final firestore1 = FirebaseFirestore.instance;
-
-    // Secondary Firestore (ez8testdb) - main.dart-ல் 'SecondaryDb' என பெயர் வைத்துள்ளோம்
-    final secondaryApp = Firebase.app('SecondaryDb');
-    final firestore2 = FirebaseFirestore.instanceFor(app: secondaryApp);
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -96,100 +89,115 @@ class _PaymentPageState extends State<PaymentPage> {
       return;
     }
 
+    final firestore1 = FirebaseFirestore.instance;
+    late FirebaseFirestore firestore2;
     try {
-      // --- 1. தற்போதைய ஆப்க்கான டேட்டாவைத் தயாரித்தல் ---
-      final itemsList1 = cartDocs
-          .map((d) => d.data() as Map<String, dynamic>)
-          .toList();
+      final secondaryApp = Firebase.app('SecondaryDb');
+      firestore2 = FirebaseFirestore.instanceFor(app: secondaryApp);
+    } catch (e) {
+      firestore2 = firestore1;
+    }
 
-      final orderRef1 = firestore1.collection('orders').doc();
-      final orderData1 = {
-        'order_id': orderRef1.id,
-        'uid': user.uid,
-        'delivery_method': delivery['delivery_method'] ?? 'Take_Away',
-        'table_no': delivery['table_no'] ?? 'N/A',
-        'status': 'New',
-        'total': total,
-        'items': itemsList1,
-        'timestamp': FieldValue.serverTimestamp(),
-      };
+    try {
+      // 1. Generate Custom ID
+      final counterRef = firestore1.collection('AppConfig').doc('OrderCounter');
+      int nextIdNumber = 10000;
+      await firestore1.runTransaction((transaction) async {
+        final counterSnap = await transaction.get(counterRef);
+        if (counterSnap.exists && counterSnap.data()!.containsKey('lastId')) {
+          nextIdNumber = (counterSnap.data()!['lastId'] as int) + 1;
+        }
+        transaction.set(counterRef, {'lastId': nextIdNumber}, SetOptions(merge: true));
+      });
 
-      // --- 2. ez8testdb BillOrder ஸ்ட்ரக்சருக்கான டேட்டாவைத் தயாரித்தல் ---
+      String customOrderId = 'A$nextIdNumber';
 
-      // AJ0001 போன்ற Custom ID-ஐ உருவாக்குதல் (உதாரணத்திற்கு டைம்ஸ்டாம்ப் பயன்படுத்தப்பட்டுள்ளது)
-      String customId =
-          'AJ${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-
-      final List<Map<String, dynamic>> cartItemsForDb2 = cartDocs.map((d) {
+      // 2. Prepare items list
+      final itemsList = cartDocs.map((d) {
         final m = d.data() as Map<String, dynamic>;
         return {
-          'comment': m['note'] ?? '',
-          'dishName': m['name'] ?? '',
-          'hotelId': 'AGAN_RESTAURANT', // உங்கள் கடையின் ID-ஐ மாற்றிக்கொள்ளலாம்
-          'options': [], // தேவைப்பட்டால் ஆப்ஷன்களைச் சேர்க்கலாம்
+          'name': m['name'] ?? 'Item',
           'price': (m['price'] as num?)?.toDouble() ?? 0.0,
-          'quantity': (m['qty'] as num?)?.toInt() ?? 1,
-          'userId': user.uid,
+          'qty': (m['qty'] as num?)?.toInt() ?? 1,
+          'kind': m['kind'] ?? 'food',
+          'imageUrl': m['imageUrl'] ?? '',
+          'note': m['note'] ?? '',
+          'additionalOptions': m['additionalOptions'] ?? [],
+          'menuChoices': m['menuChoices'] ?? {},
         };
       }).toList();
 
-      final orderRef2 = firestore2.collection('BillOrder').doc(customId);
+      // 3. Prepare Secondary DB structure (BillOrder)
+      // Calculating charges
+      double subTotal = total;
+      double deliveryFee = 0.0; // Change if you have a delivery fee logic
+      double serviceCharge = subTotal * 0.045; // Example: 4.5% service charge
+      double finalTotal = subTotal + deliveryFee + serviceCharge;
+
+      final List<Map<String, dynamic>> cartItemsForDb2 = itemsList.map((m) {
+        return {
+          'dishName': m['name'],
+          'price': m['price'],
+          'quantity': m['qty'],
+          'comment': m['note'],
+          'hotelId': 'jKuRDFBYEfDUzLdROtoM', // Ensure this matches your DB
+          'userId': user.uid,
+          'options': m['additionalOptions'], 
+        };
+      }).toList();
+
       final orderData2 = {
+        'orderId': customOrderId,
         'cartItems': cartItemsForDb2,
         'hotelId': 'jKuRDFBYEfDUzLdROtoM',
-        'hotelName': 'Agan Restaurant',
+        'hotelName': 'KoreanKitchen',
         'paymentMethod': 'cash',
-        'status': 'New',
-        'timestamp': FieldValue.serverTimestamp(),
-        'total': total,
+        'status': 'pending',
+        'subTotal': subTotal,
+        'deliveryFee': deliveryFee,
+        'serviceCharge': serviceCharge,
+        'total': finalTotal,
         'userId': user.uid,
+        'timestamp': FieldValue.serverTimestamp(),
+        'Accept_time': FieldValue.serverTimestamp(), // Added as requested
+        'delivery_time': DateTime.now().add(const Duration(minutes: 60)), // Default 1 hour
+        'liftOption': 'no_floors_lift_in', // Added as per your structure
+        'additionalLiftCharge': 0,
+        'shippingAddress': {
+          'address': deliveryData['address'] ?? 'N/A',
+          'name': user.displayName ?? 'Customer',
+          'mobile': deliveryData['phone'] ?? '000000',
+          'country': 'Switzerland',
+        }
       };
 
-      // Shipping Address இருந்தால் சேர்ப்பது
-      if (delivery['delivery_method'] != 'Take_Away') {
-        orderData2['shippingAddress'] = {
-          'address': delivery['address'] ?? '',
-          'name': user.displayName ?? 'Customer',
-          'mobile': delivery['phone'] ?? '',
-          'country': 'Germany',
-        };
-      }
-
-      // --- 3. இரண்டு டேட்டாபேஸிலும் ஒரே நேரத்தில் டேட்டாவை சேமித்தல் ---
+      // 4. Save to databases
       await Future.wait([
-        orderRef1.set(orderData1), // Default DB-ல் சேமிக்கிறது
-        orderRef2.set(orderData2), // ez8testdb-ல் சேமிக்கிறது
+        firestore1.collection('orders').doc(customOrderId).set({
+          'order_id': customOrderId,
+          'uid': user.uid,
+          'total': finalTotal,
+          'items': itemsList,
+          'timestamp': FieldValue.serverTimestamp(),
+        }),
+        firestore2.collection('BillOrder').doc(customOrderId).set(orderData2),
       ]);
 
-      // --- 4. கார்ட்டை (Cart) க்ளியர் செய்தல் ---
+      // 5. Cleanup
       final batch = firestore1.batch();
-      for (final doc in cartDocs) {
-        batch.delete(doc.reference);
-      }
+      for (final doc in cartDocs) batch.delete(doc.reference);
       await batch.commit();
 
-      // --- 5. வெற்றிகரமான மெசேஜ் காட்டுதல் ---
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Order Confirmed! ID: $customId'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        // ... show success dialog ...
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      debugPrint('Error: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final deliveryRef = FirebaseFirestore.instance
