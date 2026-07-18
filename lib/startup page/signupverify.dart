@@ -1,9 +1,10 @@
 // lib/startup_page/signupverify.dart
 import 'dart:ui' show ImageFilter;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:restorant/startup%20page/signin_page.dart';
+import 'package:restorant/startup%20page/signup_page.dart' show finalizeSignup;
+import 'package:restorant/startup%20page/signup_page.dart';
 
 const kPrimary = Color(0xFFA26334);
 const kBg = Color(0xFF2A2928);
@@ -13,17 +14,17 @@ const kWhite = Color(0xFFFFFFFF);
 class SignUpVerifyPage extends StatefulWidget {
   final String verificationId;
   final String phoneNumber;
-  final String uid;
   final String userName;
-  final String dummyEmail;
+  final String email;
+  final String password;
 
   const SignUpVerifyPage({
     super.key,
     required this.verificationId,
     required this.phoneNumber,
-    required this.uid,
     required this.userName,
-    required this.dummyEmail,
+    required this.email,
+    required this.password,
   });
 
   @override
@@ -48,44 +49,34 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
     });
 
     try {
-      // 1. பயனர் உள்ளிட்ட OTP குறியீட்டை செக் செய்தல்
-      PhoneAuthCredential credential = PhoneAuthProvider.credential(
+      final phoneCredential = PhoneAuthProvider.credential(
         verificationId: widget.verificationId,
         smsCode: otp,
       );
 
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null) {
-        // மொபைல் எண்ணை பயனரின் கணக்குடன் லிங்க் செய்தல்
-        await currentUser.linkWithCredential(credential);
+      // Signs in with the phone credential (creating the account, since
+      // none exists yet), links the real email/password, and writes the
+      // verified Firestore document. Shared with signup_page.dart so both
+      // the auto-retrieved and manual OTP paths behave identically.
+      await finalizeSignup(
+        phoneCredential: phoneCredential,
+        phone: widget.phoneNumber,
+        name: widget.userName,
+        email: widget.email,
+        password: widget.password,
+      );
 
-        // 2. வெரிஃபிகேஷன் முடிந்தவுடன் Firestore-ல் பயனர் ப்ரோஃபைலை உருவாக்குதல்/அப்டேட் செய்தல்
-        await FirebaseFirestore.instance.collection('user').doc(widget.uid).set(
-          {
-            'uid': widget.uid,
-            'email': widget.dummyEmail,
-            'phone': widget.phoneNumber,
-            'userName': widget.userName,
-            'role': 'customer',
-            'verified': true, // வெரிஃபை ஆகிவிட்டது
-            'createdAt': FieldValue.serverTimestamp(),
-          },
-        );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account Verified Successfully! Please Sign In.'),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-        // வெரிஃபை ஆனதும் சைன் அவுட் செய்து லாகின் பக்கத்திற்கு அனுப்புவோம்
-        await FirebaseAuth.instance.signOut();
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account Verified Successfully! Please Sign In.'),
-          ),
-        );
-
-        Future.microtask(
-          () => Navigator.pushReplacementNamed(context, SignInPage.route),
-        );
-      }
+      Future.microtask(
+        () => Navigator.pushReplacementNamed(context, SignInPage.route),
+      );
     } on FirebaseAuthException catch (e) {
       setState(() => _msg = e.message);
     } catch (e) {
@@ -118,7 +109,6 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background டிசைன்கள்...
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -166,7 +156,6 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
                           style: const TextStyle(color: kMuted),
                         ),
                         const SizedBox(height: 22),
-                        // OTP Input Field
                         TextField(
                           controller: _otpController,
                           keyboardType: TextInputType.number,
@@ -223,6 +212,7 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
                         if (_msg != null)
                           Text(
                             _msg!,
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
                               color: Colors.redAccent,
                               fontSize: 13,

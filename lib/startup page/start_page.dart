@@ -2,14 +2,13 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:restorant/startup page/signin_page.dart';
-import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது
+import 'package:restorant/startup page/signup_page.dart';
+import '../language.dart';
 
-
-const kPrimary = Color(0xFFE49024); // ஆரஞ்சு நிறம் (Mountains/Banner)
-const kBg = Color(0xFF112A18); // அடர் பச்சை நிறம் (Dark Green - Background)
-const kDarkGreen = Color(0xFF194D25); // லோகோ பச்சை நிறம் (Logo Forest Green)
-const kMuted = Color(0xFFA1B3A1); // சற்று மங்கலான பச்சை/சாம்பல்
-const kWhite = Color(0xFFF7F7F2); // கிரீம் வெள்ளை (Cream/Off-white)
+const kPrimary = Color(0xFFE49024);
+const kBg = Color(0xFF112A18);
+const kMuted = Color(0xFFA1B3A1);
+const kWhite = Color(0xFFF7F7F2);
 
 class StartPage extends StatefulWidget {
   const StartPage({super.key});
@@ -21,42 +20,43 @@ class _StartPageState extends State<StartPage> {
   final PageController _controller = PageController();
   int _currentIndex = 0;
 
-  // மொழியை மாற்றும் Function
   void _toggleLanguage() {
     setState(() {
-      if (AppLanguage.currentLanguage == 'de') {
-        AppLanguage.currentLanguage = 'en';
-      } else {
-        AppLanguage.currentLanguage = 'de';
-      }
+      AppLanguage.currentLanguage =
+          (AppLanguage.currentLanguage == 'de') ? 'en' : 'de';
     });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 720;
 
-    // ஸ்லைடு டேட்டா (Language file-ல் இருந்து Text எடுக்கப்படுகிறது)
-    final _slides = [
+    final slides = [
       {
         'image': 'assets/slide1.png',
         'title': AppLanguage.getText('title_1'),
-        'text': AppLanguage.getText('text_1'),
+        'text': AppLanguage.getText('text_1')
       },
       {
         'image': 'assets/slide2.png',
         'title': AppLanguage.getText('title_2'),
-        'text': AppLanguage.getText('text_2'),
+        'text': AppLanguage.getText('text_2')
       },
       {
         'image': 'assets/slide3.png',
         'title': AppLanguage.getText('title_3'),
-        'text': AppLanguage.getText('text_3'),
+        'text': AppLanguage.getText('text_3')
       },
       {
         'image': 'assets/slide4.png',
         'title': AppLanguage.getText('title_4'),
-        'text': AppLanguage.getText('text_4'),
+        'text': AppLanguage.getText('text_4')
       },
     ];
 
@@ -65,41 +65,31 @@ class _StartPageState extends State<StartPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background gradient
+          // ── Premium Background Gradient ──────────────────────────────────────
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF194D25),
-                  Color(0xFF0C1E11),
-                ], // லோகோ பச்சை Gradient
+                colors: [Color(0xFF194D25), Color(0xFF0C1E11)],
               ),
             ),
           ),
-          // Accent blobs
+          
+          // ── Ambient Background Glows ─────────────────────────────────────────
           Positioned(
-            top: -60,
-            right: -40,
+            top: -100,
+            right: -50,
             child: Container(
-              width: 220,
-              height: 220,
+              width: 300,
+              height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: kPrimary.withOpacity(0.15),
               ),
-            ),
-          ),
-          Positioned(
-            bottom: -80,
-            left: -60,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: kPrimary.withOpacity(0.12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                child: const SizedBox(),
               ),
             ),
           ),
@@ -107,49 +97,60 @@ class _StartPageState extends State<StartPage> {
           SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 16),
-
-                // Top Bar (Language Toggle & Skip button)
+                // ── Top Bar (Language Toggle & Skip) ───────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Language Toggle Button
-                      TextButton.icon(
-                        onPressed: _toggleLanguage,
-                        icon: const Icon(
-                          Icons.language,
-                          color: kWhite,
-                          size: 20,
+                      // Language Toggle Pill
+                      Container(
+                        decoration: BoxDecoration(
+                          color: kWhite.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: kWhite.withOpacity(0.2)),
                         ),
-                        label: Text(
-                          AppLanguage.getText('lang_toggle'),
-                          style: const TextStyle(
-                            color: kWhite,
-                            fontWeight: FontWeight.bold,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: _toggleLanguage,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.language, color: kWhite, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  AppLanguage.getText('lang_toggle'),
+                                  style: const TextStyle(
+                                    color: kWhite,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
 
-                      // Skip button
+                      // Skip Button
                       TextButton(
                         onPressed: () => Navigator.pushReplacementNamed(
-                          context,
-                          SignInPage.route,
-                        ),
+                            context, SignInPage.route),
                         child: Text(
                           AppLanguage.getText('skip'),
-                          style: const TextStyle(color: kMuted),
+                          style: const TextStyle(
+                            color: kMuted,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 8),
-
-                // Slides
+                // ── Slides Carousel (Glassmorphism Cards) ──────────────────────
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
@@ -157,64 +158,57 @@ class _StartPageState extends State<StartPage> {
                       child: PageView.builder(
                         controller: _controller,
                         onPageChanged: (i) => setState(() => _currentIndex = i),
-                        itemCount: _slides.length,
+                        itemCount: slides.length,
                         itemBuilder: (_, i) {
-                          final slide = _slides[i];
+                          final slide = slides[i];
                           return Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
+                              borderRadius: BorderRadius.circular(32),
                               child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                                 child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isWide ? 36 : 24,
-                                    vertical: isWide ? 28 : 22,
-                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                                   decoration: BoxDecoration(
-                                    color: kWhite.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(
-                                      color: kWhite.withOpacity(0.15),
-                                    ),
+                                    color: kWhite.withOpacity(0.06),
+                                    borderRadius: BorderRadius.circular(32),
+                                    border: Border.all(color: kWhite.withOpacity(0.15), width: 1.5),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.25),
-                                        blurRadius: 24,
-                                        offset: const Offset(0, 16),
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 30,
+                                        offset: const Offset(0, 10),
                                       ),
                                     ],
                                   ),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Flexible(
+                                      Expanded(
                                         child: Image.asset(
                                           slide['image']!,
-                                          height: isWide ? 260 : 200,
                                           fit: BoxFit.contain,
                                         ),
                                       ),
-                                      const SizedBox(height: 24),
+                                      const SizedBox(height: 32),
                                       Text(
                                         slide['title']!,
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(
                                           color: kWhite,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w700,
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
                                         ),
                                       ),
                                       const SizedBox(height: 12),
                                       Text(
                                         slide['text']!,
                                         textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          color: kMuted,
-                                          fontSize: 15,
+                                        style: TextStyle(
+                                          color: kMuted.withOpacity(0.9),
+                                          fontSize: 16,
+                                          height: 1.4,
                                         ),
                                       ),
                                     ],
@@ -229,87 +223,97 @@ class _StartPageState extends State<StartPage> {
                   ),
                 ),
 
-                // Dots
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _slides.length,
-                    (i) => AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 8,
-                      ),
-                      height: 10,
-                      width: _currentIndex == i ? 22 : 10,
-                      decoration: BoxDecoration(
-                        color: _currentIndex == i
-                            ? kPrimary
-                            : kWhite.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(12),
+                // ── Animated Dots Indicator ────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      slides.length,
+                      (i) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                        height: 10,
+                        width: _currentIndex == i ? 30 : 10,
+                        decoration: BoxDecoration(
+                          color: _currentIndex == i
+                              ? kPrimary
+                              : kWhite.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: _currentIndex == i
+                              ? [
+                                  BoxShadow(
+                                    color: kPrimary.withOpacity(0.5),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  )
+                                ]
+                              : null,
+                        ),
                       ),
                     ),
                   ),
                 ),
 
-                // CTA buttons
+                // ── Bottom Action Buttons ──────────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 20,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
                   child: Row(
                     children: [
+                      // Sign Up (Outline Button)
                       Expanded(
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(
-                              color: kPrimary.withOpacity(0.8),
-                              width: 1.5,
-                            ),
+                                color: kPrimary.withOpacity(0.8), width: 2),
                             foregroundColor: kWhite,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            minimumSize: const Size.fromHeight(50),
                           ),
                           onPressed: () => Navigator.pushReplacementNamed(
-                            context,
-                            SignInPage.route,
+                              context, SignUpPage.route),
+                          child: Text(
+                            AppLanguage.getText('sign_up'),
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
                           ),
-                          child: Text(AppLanguage.getText('sign_up')),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
+                      
+                      // Next / Log In (Filled Button)
                       Expanded(
                         child: FilledButton(
                           style: FilledButton.styleFrom(
                             backgroundColor: kPrimary,
-                            foregroundColor:
-                                Colors.white, // Text color on Orange button
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            minimumSize: const Size.fromHeight(50),
+                            elevation: 8,
+                            shadowColor: kPrimary.withOpacity(0.5),
                           ),
                           onPressed: () {
-                            if (_currentIndex < _slides.length - 1) {
+                            if (_currentIndex < slides.length - 1) {
                               _controller.nextPage(
-                                duration: const Duration(milliseconds: 260),
+                                duration: const Duration(milliseconds: 350),
                                 curve: Curves.easeOutCubic,
                               );
                             } else {
                               Navigator.pushReplacementNamed(
-                                context,
-                                SignInPage.route,
-                              );
+                                  context, SignInPage.route);
                             }
                           },
                           child: Text(
-                            _currentIndex == _slides.length - 1
+                            _currentIndex == slides.length - 1
                                 ? AppLanguage.getText('log_in')
                                 : AppLanguage.getText('next'),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),

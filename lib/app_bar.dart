@@ -7,18 +7,15 @@ import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/OrderDetails.dart';
 import 'package:restorant/user/AccountPage.dart';
 
-import 'userscreen/signin_page.dart';
-import 'userscreen/signup_page.dart';
-import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது (path-ஐ சரிபார்க்கவும்)
+import 'startup page/signin_page.dart';
+import 'startup page/signup_page.dart';
+import '../language.dart';
 
-// --- லோகோ நிறங்கள் ---
-const kPrimary = Color(0xFFE49024); // Orange
-const kBg = Color(0xFF112A18); // Dark Green
-const kMuted = Color(0xFFA1B3A1); // Muted Green
-const kWhite = Color(0xFFF7F7F2); // Cream White
-const kDarkBar = Color(
-  0xFF0C1E11,
-); // Navigation Bar-க்கான சற்று அடர்த்தியான கரும்பச்சை
+const kPrimary = Color(0xFFE49024);
+const kBg = Color(0xFF112A18);
+const kMuted = Color(0xFFA1B3A1);
+const kWhite = Color(0xFFF7F7F2);
+const kDarkBar = Color(0xFF0C1E11);
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -31,37 +28,36 @@ class _AppShellState extends State<AppShell> {
 
   void _onBottomTap(int i) => setState(() => _index = i);
 
-  // மொழியை மாற்றும் Function
   void _toggleLanguage() {
     setState(() {
-      if (AppLanguage.currentLanguage == 'de') {
-        AppLanguage.currentLanguage = 'en';
-      } else {
-        AppLanguage.currentLanguage = 'de';
-      }
+      AppLanguage.currentLanguage = AppLanguage.currentLanguage == 'de'
+          ? 'en'
+          : 'de';
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // build முறைக்குள் tabs-ஐ வைப்பதன் மூலம், மொழி மாறும்போது பெயர்களும் மாறும்
-    final List<_TabDef> _tabs = [
-      _TabDef(AppLanguage.getText('home'), Icons.home, const HomePage()),
+    final List<_TabDef> tabs = [
+      _TabDef(
+        AppLanguage.getText('home'),
+        Icons.home_rounded,
+        const HomePage(),
+      ),
       _TabDef(
         AppLanguage.getText('menu'),
-        Icons.restaurant_menu,
+        Icons.restaurant_menu_rounded,
         const MenuPage(),
       ),
       _TabDef(
         AppLanguage.getText('Orders'),
-        Icons.card_giftcard,
-         const MyOrdersPage(),
+        Icons.receipt_long_rounded,
+        const MyOrdersPage(),
       ),
       _TabDef(
         AppLanguage.getText('account'),
-        Icons.person,
-       // _CenterLabel(AppLanguage.getText('account')),
-          const AccountPage(),
+        Icons.person_rounded,
+        const AccountPage(),
       ),
     ];
 
@@ -71,134 +67,240 @@ class _AppShellState extends State<AppShell> {
         final user = snap.data;
         final display = (user?.displayName?.trim().isNotEmpty ?? false)
             ? user!.displayName!.trim()
-            : (user?.email ?? 'Guest');
+            : (user?.email?.split('@').first ?? 'Guest');
 
         return Scaffold(
           backgroundColor: kBg,
+          // ── Unified, Beautiful App Bar ─────────────────────────────────────
           appBar: AppBar(
             backgroundColor: kBg,
             foregroundColor: kWhite,
             elevation: 0,
-            title: Text(
-              '${AppLanguage.getText('welcome')}, $display',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+            toolbarHeight: 70,
+            title: Row(
+              children: [
+                // Displaying the logo right in the main App Bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/logo.jpeg',
+                    height: 40,
+                    width: 40,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        AppLanguage.getText('welcome'),
+                        style: TextStyle(
+                          color: kMuted.withOpacity(0.8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        display,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                          letterSpacing: 0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             actions: [
-              // Language Toggle Button (புதிதாக சேர்க்கப்பட்டது)
-              TextButton.icon(
-                onPressed: _toggleLanguage,
-                icon: const Icon(Icons.language, color: kWhite, size: 20),
-                label: Text(
-                  AppLanguage.getText('lang_toggle'),
-                  style: const TextStyle(
-                    color: kWhite,
-                    fontWeight: FontWeight.bold,
+              // Stylish Language Toggle Pill
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: kPrimary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: kPrimary.withOpacity(0.3)),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: _toggleLanguage,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.language, color: kPrimary, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          AppLanguage.getText('lang_toggle').toUpperCase(),
+                          style: const TextStyle(
+                            color: kPrimary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
 
-              // Profile Popup Menu
+              // Profile / Logout Menu
               PopupMenuButton<String>(
-                color: kDarkBar, // பாப்-அப் மெனுவின் அடர் பச்சை நிறம்
-                icon: const CircleAvatar(
-                  backgroundColor: kPrimary, // ஆரஞ்சு நிற அவதார்
-                  radius: 16,
-                  child: Icon(Icons.person, color: kWhite, size: 20),
+                color: kDarkBar, // from home_page colors
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                offset: const Offset(0, 50),
+                icon: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: kPrimary.withOpacity(0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const CircleAvatar(
+                    backgroundColor: kPrimary,
+                    radius: 18,
+                    child: Icon(Icons.person, color: kWhite, size: 22),
+                  ),
                 ),
                 onSelected: (v) async {
                   if (v == 'signin') {
                     Navigator.pushNamed(context, SignInPage.route);
-                  }
-                  if (v == 'signup') {
+                  } else if (v == 'signup') {
                     Navigator.pushNamed(context, SignUpPage.route);
-                  }
-                  if (v == 'logout') {
+                  } else if (v == 'logout') {
+                    // FULL LOGOUT: Sign out and clear the entire navigation stack
                     await FirebaseAuth.instance.signOut();
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(AppLanguage.getText('logged_out')),
-                        backgroundColor: kPrimary,
-                      ),
+
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      SignInPage.route,
+                      (route) =>
+                          false, // This guarantees the user cannot swipe back to the app
                     );
                   }
                 },
                 itemBuilder: (context) {
                   if (user == null) {
                     return [
-                      PopupMenuItem(
-                        value: 'signin',
-                        child: Text(
-                          AppLanguage.getText('sign_in'),
-                          style: const TextStyle(color: kWhite),
-                        ),
+                      _buildMenuItem(
+                        'signin',
+                        AppLanguage.getText('sign_in'),
+                        Icons.login,
                       ),
-                      PopupMenuItem(
-                        value: 'signup',
-                        child: Text(
-                          AppLanguage.getText('sign_up'),
-                          style: const TextStyle(color: kWhite),
-                        ),
+                      _buildMenuItem(
+                        'signup',
+                        AppLanguage.getText('sign_up'),
+                        Icons.person_add,
                       ),
                     ];
                   }
                   return [
-                    PopupMenuItem(
-                      value: 'logout',
-                      child: Text(
-                        AppLanguage.getText('log_out'),
-                        style: const TextStyle(color: kWhite),
-                      ),
+                    _buildMenuItem(
+                      'logout',
+                      AppLanguage.getText('log_out'),
+                      Icons.logout,
+                      isDestructive: true,
                     ),
                   ];
                 },
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
             ],
           ),
-          body: _tabs[_index].page,
+          body: tabs[_index].page,
 
-          // Bottom Navigation Bar
-          bottomNavigationBar: NavigationBarTheme(
-            data: NavigationBarThemeData(
-              backgroundColor: kDarkBar, // அடர் பச்சை
-              indicatorColor: kPrimary.withOpacity(0.3), // ஆரஞ்சு செலக்சன்
-              iconTheme: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return const IconThemeData(color: kPrimary);
-                }
-                return const IconThemeData(color: kMuted); // சாம்பல்/பச்சை
-              }),
-              labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return const TextStyle(
-                    color: kPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  );
-                }
-                return const TextStyle(
-                  color: kMuted,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
-                );
-              }),
+          // ── Modern Floating Bottom Navigation ──────────────────────────────
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: kDarkBar,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
+                ),
+              ],
             ),
-            child: NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: _onBottomTap,
-              destinations: _tabs
-                  .map(
-                    (t) => NavigationDestination(
-                      icon: Icon(t.icon),
-                      label: t.title,
-                    ),
-                  )
-                  .toList(),
+            child: SafeArea(
+              child: NavigationBarTheme(
+                data: NavigationBarThemeData(
+                  height: 65,
+                  backgroundColor: Colors.transparent,
+                  indicatorColor: kPrimary.withOpacity(0.25),
+                  iconTheme: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return const IconThemeData(color: kPrimary, size: 26);
+                    }
+                    return const IconThemeData(color: kMuted, size: 24);
+                  }),
+                  labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return const TextStyle(
+                        color: kPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      );
+                    }
+                    return const TextStyle(
+                      color: kMuted,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 11,
+                    );
+                  }),
+                ),
+                child: NavigationBar(
+                  selectedIndex: _index,
+                  onDestinationSelected: _onBottomTap,
+                  destinations: tabs
+                      .map(
+                        (t) => NavigationDestination(
+                          icon: Icon(t.icon),
+                          label: t.title,
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
             ),
           ),
         );
       },
+    );
+  }
+
+  PopupMenuItem<String> _buildMenuItem(
+    String value,
+    String text,
+    IconData icon, {
+    bool isDestructive = false,
+  }) {
+    final color = isDestructive ? Colors.redAccent : kWhite;
+    return PopupMenuItem(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: TextStyle(color: color, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -208,13 +310,4 @@ class _TabDef {
   final IconData icon;
   final Widget page;
   _TabDef(this.title, this.icon, this.page);
-}
-
-class _CenterLabel extends StatelessWidget {
-  final String text;
-  const _CenterLabel(this.text, {super.key});
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Text(text, style: const TextStyle(fontSize: 22, color: kWhite)),
-  );
 }

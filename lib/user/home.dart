@@ -1,4 +1,5 @@
 // lib/user/home_page.dart
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -14,11 +15,11 @@ const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);
 const kCardBg = Color(0xFF1A3822);
 const kItemBg = Color(0xFF1E3A24);
+const kDarkBar = Color(0xFF0C1E11);
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
-  // ── Dine In ────────────────────────────────────────────────────────────────
   Future<void> _handleDineIn(BuildContext context) async {
     final tableNo = await showModalBottomSheet<String>(
       context: context,
@@ -33,10 +34,10 @@ class HomePage extends StatelessWidget {
             .collection('food_delivery')
             .doc(user.uid)
             .set({
-          'delivery_method': 'Dine_In',
-          'table_no': tableNo,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+              'delivery_method': 'Dine_In',
+              'table_no': tableNo,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
       }
       if (context.mounted) {
         Navigator.push(
@@ -47,7 +48,6 @@ class HomePage extends StatelessWidget {
     }
   }
 
-  // ── Take Away ──────────────────────────────────────────────────────────────
   Future<void> _handleTakeAway(BuildContext context) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -55,32 +55,23 @@ class HomePage extends StatelessWidget {
           .collection('food_delivery')
           .doc(user.uid)
           .set({
-        'delivery_method': 'Take_Away',
-        'table_no': '',          // ✅ blank for take-away
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+            'delivery_method': 'Take_Away',
+            'table_no': '',
+            'timestamp': FieldValue.serverTimestamp(),
+          });
     }
     if (!context.mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(
-          builder: (_) => const MenuPage(tableNo: 'Take-Away')),
+      MaterialPageRoute(builder: (_) => const MenuPage(tableNo: 'Take-Away')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Scaffold removed the AppBar here to prevent the "Double App Bar"
     return Scaffold(
-      backgroundColor: kBg,
-      appBar: AppBar(
-        backgroundColor: kBg,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: Image.asset('assets/logo.jpeg', height: 45),
-        ),
-      ),
+      backgroundColor: Colors.transparent,
       floatingActionButton: _CartFab(
         onTap: (uid, tableNo) => Navigator.push(
           context,
@@ -96,38 +87,32 @@ class HomePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Top shortcut cards ────────────────────────────────
+              // ── Main action buttons (Dine In & Take Away) ──────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
                     Expanded(
-                      child: _TopCard(
-                        label: AppLanguage.getText('rewards'),
-                        icon: Icons.loyalty,
-                        onTap: () {},
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _TopCard(
-                        label: AppLanguage.getText('balance'),
-                        icon: Icons.account_balance_wallet,
-                        onTap: () {},
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _TopCard(
-                        label: AppLanguage.getText('qr_scanner'),
-                        icon: Icons.qr_code_scanner,
+                      child: _BigActionButton(
+                        label: AppLanguage.getText('dine_in'),
+                        icon: Icons.storefront_rounded,
+                        isPrimary: true,
                         onTap: () => _handleDineIn(context),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _BigActionButton(
+                        label: AppLanguage.getText('take_away'),
+                        icon: Icons.takeout_dining_rounded,
+                        isPrimary: false,
+                        onTap: () => _handleTakeAway(context),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 32),
 
               // ── Promo section header ──────────────────────────────
               Padding(
@@ -142,40 +127,46 @@ class HomePage extends StatelessWidget {
                           'Special Offers',
                           style: TextStyle(
                             color: kWhite,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.3,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 4),
                         Text(
                           "Today's best deals for you",
-                          style:
-                              TextStyle(color: kMuted, fontSize: 12),
+                          style: TextStyle(
+                            color: kMuted.withOpacity(0.8),
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: kPrimary.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: kPrimary.withOpacity(0.4)),
+                        border: Border.all(color: kPrimary.withOpacity(0.4)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.local_fire_department,
-                              color: kPrimary, size: 14),
+                          Icon(
+                            Icons.local_fire_department_rounded,
+                            color: kPrimary,
+                            size: 16,
+                          ),
                           const SizedBox(width: 4),
-                          Text(
-                            'Hot Deals',
+                          const Text(
+                            'HOT',
                             style: TextStyle(
                               color: kPrimary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ],
@@ -184,7 +175,7 @@ class HomePage extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
               // ── Big promo carousel ────────────────────────────────
               _PromoCarousel(
@@ -192,32 +183,9 @@ class HomePage extends StatelessWidget {
                 onTakeAway: () => _handleTakeAway(context),
               ),
 
-              const SizedBox(height: 28),
-
-              // ── Main action buttons ───────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _BigActionButton(
-                        label: AppLanguage.getText('dine_in'),
-                        icon: Icons.restaurant,
-                        onTap: () => _handleDineIn(context),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _BigActionButton(
-                        label: AppLanguage.getText('take_away'),
-                        icon: Icons.shopping_bag,
-                        onTap: () => _handleTakeAway(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 90),
+              const SizedBox(
+                height: 120,
+              ), // Extra padding for the floating cart
             ],
           ),
         ),
@@ -261,53 +229,70 @@ class _CartFab extends StatelessWidget {
         }
         if (total == 0) return const SizedBox.shrink();
 
-        return FloatingActionButton.extended(
-          backgroundColor: kPrimary,
-          foregroundColor: kWhite,
-          icon: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              const Icon(Icons.shopping_cart_outlined),
-              if (count > 0)
-                Positioned(
-                  right: -6,
-                  top: -6,
-                  child: Container(
-                    width: 16,
-                    height: 16,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$count',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 9),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: SizedBox(
+            height: 65,
+            width: double.infinity,
+            child: FloatingActionButton.extended(
+              elevation: 8,
+              backgroundColor: kPrimary,
+              foregroundColor: kWhite,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              onPressed: () async {
+                final delivDoc = await FirebaseFirestore.instance
+                    .collection('food_delivery')
+                    .doc(user.uid)
+                    .get();
+                final tableNo = delivDoc.exists
+                    ? (delivDoc.data()?['delivery_method'] == 'Take_Away'
+                          ? 'Take-Away'
+                          : delivDoc.data()?['table_no'] as String?)
+                    : null;
+                if (context.mounted) onTap(user.uid, tableNo);
+              },
+              label: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$count',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'View Cart',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'CHF ${total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
                     ),
                   ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
-          label: Text(
-            'CHF ${total.toStringAsFixed(2)}',
-            style: const TextStyle(
-                fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          onPressed: () async {
-            // fetch saved table info
-            final delivDoc = await FirebaseFirestore.instance
-                .collection('food_delivery')
-                .doc(user.uid)
-                .get();
-            final tableNo = delivDoc.exists
-                ? (delivDoc.data()?['delivery_method'] == 'Take_Away'
-                    ? 'Take-Away'
-                    : delivDoc.data()?['table_no'] as String?)
-                : null;
-            if (context.mounted) onTap(user.uid, tableNo);
-          },
         );
       },
     );
@@ -318,15 +303,14 @@ class _CartFab extends StatelessWidget {
 class _PromoCarousel extends StatefulWidget {
   final VoidCallback onDineIn;
   final VoidCallback onTakeAway;
-  const _PromoCarousel(
-      {required this.onDineIn, required this.onTakeAway});
+  const _PromoCarousel({required this.onDineIn, required this.onTakeAway});
 
   @override
   State<_PromoCarousel> createState() => _PromoCarouselState();
 }
 
 class _PromoCarouselState extends State<_PromoCarousel> {
-  final PageController _ctrl = PageController(viewportFraction: 0.92);
+  final PageController _ctrl = PageController(viewportFraction: 0.90);
   int _current = 0;
 
   @override
@@ -335,7 +319,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
     super.dispose();
   }
 
-  // ── Check if customer has selected dine-in or take-away ──────────────────
   Future<bool> _hasSelectedMethod(BuildContext context) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
@@ -346,9 +329,10 @@ class _PromoCarouselState extends State<_PromoCarousel> {
     return doc.exists;
   }
 
-  // ── Show method picker before opening item sheet ──────────────────────────
-  Future<void> _askMethod(BuildContext context,
-      Map<String, dynamic> itemData) async {
+  Future<void> _askMethod(
+    BuildContext context,
+    Map<String, dynamic> itemData,
+  ) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -356,24 +340,25 @@ class _PromoCarouselState extends State<_PromoCarousel> {
       builder: (_) => _MethodPickerSheet(
         onDineIn: () async {
           Navigator.pop(context);
-           await MenuPage();
+          widget.onDineIn();
         },
         onTakeAway: () async {
           Navigator.pop(context);
-          await MenuPage();
+          widget.onTakeAway();
         },
       ),
     );
-    // After method selected, try again
-    if (context.mounted) await _openItemSheet(context, itemData);
   }
 
   Future<void> _openItemSheet(
-      BuildContext context, Map<String, dynamic> itemData) async {
+    BuildContext context,
+    Map<String, dynamic> itemData,
+  ) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please login first')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please login first')));
       return;
     }
     final hasMethod = await _hasSelectedMethod(context);
@@ -401,113 +386,107 @@ class _PromoCarouselState extends State<_PromoCarousel> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
-            height: 240,
-            child: Center(
-                child: CircularProgressIndicator(color: kPrimary)),
+            height: 260,
+            child: Center(child: CircularProgressIndicator(color: kPrimary)),
           );
         }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
           return _EmptyPromo();
-        }
 
         final promoDocs = snapshot.data!.docs;
 
         return Column(
           children: [
             SizedBox(
-              height: 260,
+              height: 280,
               child: PageView.builder(
                 controller: _ctrl,
                 itemCount: promoDocs.length,
                 onPageChanged: (i) => setState(() => _current = i),
                 itemBuilder: (context, index) {
-                  final data =
-                      promoDocs[index].data() as Map<String, dynamic>;
+                  final data = promoDocs[index].data() as Map<String, dynamic>;
                   final name = data['name'] ?? 'Special Offer';
                   final imageUrl = (data['imageUrl'] ?? '') as String;
                   final itemType = (data['itemType'] ?? 'food') as String;
                   final num originalPrice = data['price'] ?? 0;
                   final num offerPrice = data['offerPrice'] ?? 0;
                   final bool isCombo = itemType == 'combo';
+
                   double discPct = 0;
                   if (originalPrice > 0 && originalPrice > offerPrice) {
-                    discPct = ((originalPrice - offerPrice) /
-                            originalPrice *
-                            100)
-                        .roundToDouble();
+                    discPct =
+                        ((originalPrice - offerPrice) / originalPrice * 100)
+                            .roundToDouble();
                   }
+
                   final isActive = _current == index;
 
                   return GestureDetector(
                     onTap: () => _openItemSheet(context, data),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeOutCubic,
                       margin: EdgeInsets.only(
-                        left: index == 0 ? 16 : 8,
-                        right: index == promoDocs.length - 1 ? 16 : 8,
-                        top: isActive ? 0 : 10,
-                        bottom: isActive ? 0 : 10,
+                        left: 8,
+                        right: 8,
+                        top: isActive ? 0 : 20,
+                        bottom: isActive ? 10 : 30,
                       ),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        border: isActive
-                            ? Border.all(
-                                color: kPrimary.withOpacity(0.7),
-                                width: 2)
-                            : null,
+                        borderRadius: BorderRadius.circular(28),
                         boxShadow: isActive
                             ? [
                                 BoxShadow(
-                                  color: kPrimary.withOpacity(0.35),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 6),
-                                )
+                                  color: kPrimary.withOpacity(0.3),
+                                  blurRadius: 25,
+                                  offset: const Offset(0, 10),
+                                ),
                               ]
-                            : null,
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(28),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            // BG image
                             imageUrl.isNotEmpty
-                                ? Image.network(imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
-                                        Container(
-                                          color: kCardBg,
-                                          child: const Icon(
-                                              Icons.fastfood,
-                                              color: kMuted,
-                                              size: 80),
-                                        ))
+                                ? Image.network(imageUrl, fit: BoxFit.cover)
                                 : Container(
                                     color: kCardBg,
-                                    child: const Icon(Icons.fastfood,
-                                        color: kMuted, size: 80),
+                                    child: const Icon(
+                                      Icons.fastfood,
+                                      color: kMuted,
+                                      size: 80,
+                                    ),
                                   ),
 
-                            // Gradient overlay
+                            // Sleek Gradient Overlay
                             Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  stops: const [0.0, 0.4, 1.0],
+                                  stops: const [0.0, 0.4, 0.8, 1.0],
                                   colors: [
-                                    Colors.black.withOpacity(0.05),
-                                    Colors.black.withOpacity(0.15),
-                                    Colors.black.withOpacity(0.92),
+                                    Colors.black.withOpacity(0.2),
+                                    Colors.transparent,
+                                    Colors.black.withOpacity(0.8),
+                                    Colors.black.withOpacity(0.95),
                                   ],
                                 ),
                               ),
                             ),
 
-                            // Top-left badges
+                            // Badges
                             Positioned(
-                              top: 14,
-                              left: 14,
+                              top: 16,
+                              left: 16,
                               child: Row(
                                 children: [
                                   _Badge(
@@ -515,12 +494,10 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                                     color: isCombo
                                         ? const Color(0xFFFF8C00)
                                         : const Color(0xFFE53935),
-                                    icon: isCombo
-                                        ? Icons.layers
-                                        : Icons.local_offer,
+                                    icon: Icons.local_offer_rounded,
                                   ),
                                   if (discPct > 0) ...[
-                                    const SizedBox(width: 6),
+                                    const SizedBox(width: 8),
                                     _Badge(
                                       label: '-${discPct.toInt()}%',
                                       color: const Color(0xFF2E7D32),
@@ -530,138 +507,89 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                               ),
                             ),
 
-                            // Top-right quick-add circle button
+                            // Add button
                             Positioned(
-                              top: 10,
-                              right: 10,
-                              child: GestureDetector(
-                                onTap: () =>
-                                    _openItemSheet(context, data),
-                                child: Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: kPrimary,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: kPrimary.withOpacity(0.5),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Icon(Icons.add,
-                                      color: Colors.white, size: 22),
+                              top: 16,
+                              right: 16,
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: kPrimary,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: kPrimary.withOpacity(0.5),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.add,
+                                  color: Colors.white,
+                                  size: 26,
                                 ),
                               ),
                             ),
 
-                            // Bottom info
+                            // Info Bottom
                             Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                    16, 0, 16, 16),
-                                child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.end,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            name,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w900,
-                                              shadows: [
-                                                Shadow(
-                                                    color: Colors.black,
-                                                    blurRadius: 6)
-                                              ],
-                                            ),
-                                            maxLines: 1,
-                                            overflow:
-                                                TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                'CHF ${offerPrice.toStringAsFixed(2)}',
-                                                style: const TextStyle(
-                                                  color: kPrimary,
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.w900,
-                                                  shadows: [
-                                                    Shadow(
-                                                        color: Colors.black,
-                                                        blurRadius: 8)
-                                                  ],
-                                                ),
-                                              ),
-                                              if (originalPrice >
-                                                  offerPrice) ...[
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  'CHF ${originalPrice.toStringAsFixed(2)}',
-                                                  style: TextStyle(
-                                                    color: kMuted
-                                                        .withOpacity(0.85),
-                                                    fontSize: 14,
-                                                    decoration:
-                                                        TextDecoration
-                                                            .lineThrough,
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ],
-                                      ),
+                              bottom: 20,
+                              left: 20,
+                              right: 20,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black,
+                                          blurRadius: 8,
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 12),
-                                    // Order button
-                                    GestureDetector(
-                                      onTap: () =>
-                                          _openItemSheet(context, data),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 18, vertical: 10),
-                                        decoration: BoxDecoration(
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        'CHF ${offerPrice.toStringAsFixed(2)}',
+                                        style: const TextStyle(
                                           color: kPrimary,
-                                          borderRadius:
-                                              BorderRadius.circular(30),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: kPrimary
-                                                  .withOpacity(0.5),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Text(
-                                          'Order Now',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w800,
-                                          ),
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w900,
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                      if (originalPrice > offerPrice) ...[
+                                        const SizedBox(width: 8),
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 2,
+                                          ),
+                                          child: Text(
+                                            'CHF ${originalPrice.toStringAsFixed(2)}',
+                                            style: TextStyle(
+                                              color: kWhite.withOpacity(0.7),
+                                              fontSize: 14,
+                                              decoration:
+                                                  TextDecoration.lineThrough,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -672,22 +600,21 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                 },
               ),
             ),
-            // Page dots
+
+            // Modern Dot Indicator
             if (promoDocs.length > 1) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
                   promoDocs.length,
                   (i) => AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: _current == i ? 22 : 7,
-                    height: 7,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: _current == i ? 28 : 8,
+                    height: 8,
                     decoration: BoxDecoration(
-                      color: _current == i
-                          ? kPrimary
-                          : kMuted.withOpacity(0.35),
+                      color: _current == i ? kPrimary : kMuted.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -701,7 +628,7 @@ class _PromoCarouselState extends State<_PromoCarousel> {
   }
 }
 
-// ── Badge widget ─────────────────────────────────────────────────────────────
+// ── Badges & Buttons ─────────────────────────────────────────────────────────
 class _Badge extends StatelessWidget {
   final String label;
   final Color color;
@@ -711,24 +638,30 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.4),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, color: Colors.white, size: 11),
+            Icon(icon, color: Colors.white, size: 12),
             const SizedBox(width: 4),
           ],
           Text(
             label,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
             ),
@@ -739,614 +672,134 @@ class _Badge extends StatelessWidget {
   }
 }
 
-// ── Method picker sheet (Dine-In / Take-Away) ────────────────────────────────
-class _MethodPickerSheet extends StatelessWidget {
-  final VoidCallback onDineIn;
-  final VoidCallback onTakeAway;
-  const _MethodPickerSheet(
-      {required this.onDineIn, required this.onTakeAway});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF194D25),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: kMuted.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          const Text(
-            'How would you like to order?',
-            style: TextStyle(
-              color: kWhite,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Please select before adding to cart',
-            style: TextStyle(color: kMuted, fontSize: 13),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _MethodBtn(
-                  icon: Icons.restaurant,
-                  label: 'Dine-In',
-                  sub: 'Choose a table',
-                  onTap: onDineIn,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _MethodBtn(
-                  icon: Icons.shopping_bag_outlined,
-                  label: 'Take-Away',
-                  sub: 'Pick up order',
-                  onTap: onTakeAway,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MethodBtn extends StatelessWidget {
-  final IconData icon;
+class _BigActionButton extends StatelessWidget {
   final String label;
-  final String sub;
+  final IconData icon;
+  final bool isPrimary;
   final VoidCallback onTap;
-  const _MethodBtn(
-      {required this.icon,
-      required this.label,
-      required this.sub,
-      required this.onTap});
+
+  const _BigActionButton({
+    required this.label,
+    required this.icon,
+    required this.isPrimary,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        decoration: BoxDecoration(
-          color: kPrimary,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: kWhite, size: 32),
-            const SizedBox(height: 8),
-            Text(label,
-                style: const TextStyle(
-                    color: kWhite,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16)),
-            const SizedBox(height: 2),
-            Text(sub,
-                style: TextStyle(
-                    color: kWhite.withOpacity(0.7), fontSize: 11)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Promo Item Sheet ─────────────────────────────────────────────────────────
-// Full featured: choices, add-ons, qty, add-to-cart + buy-now
-class _PromoItemSheet extends StatefulWidget {
-  final Map<String, dynamic> itemData;
-  const _PromoItemSheet({required this.itemData});
-
-  @override
-  State<_PromoItemSheet> createState() => _PromoItemSheetState();
-}
-
-class _PromoItemSheetState extends State<_PromoItemSheet> {
-  int _qty = 1;
-  final TextEditingController _noteCtrl = TextEditingController();
-  String? _selectedChoice;
-  final List<Map<String, dynamic>> _selectedAddons = [];
-
-  @override
-  void dispose() {
-    _noteCtrl.dispose();
-    super.dispose();
-  }
-
-  double get _basePrice {
-    final bool isPromo = widget.itemData['isPromoActive'] ?? false;
-    return ((isPromo
-                    ? widget.itemData['offerPrice']
-                    : widget.itemData['price']) as num?)
-                ?.toDouble() ??
-        0.0;
-  }
-
-  double get _totalPrice {
-    double addons = 0;
-    for (var a in _selectedAddons) {
-      addons += (a['price'] as num?)?.toDouble() ?? 0.0;
-    }
-    return (_basePrice + addons) * _qty;
-  }
-
-  Future<void> _addToCart({bool goToCheckout = false}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final cartItem = {
-      'name': widget.itemData['name'] ?? '',
-      'price': _basePrice,
-      'qty': _qty,
-      'imageUrl': widget.itemData['imageUrl'] ?? '',
-      'kind': widget.itemData['itemType'] ?? 'food',
-      'note': _noteCtrl.text.trim(),
-      'additionalOptions': _selectedAddons,
-      'menuChoices':
-          _selectedChoice != null ? {'Choice': _selectedChoice} : {},
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('chat')
-          .doc(user.uid)
-          .collection('items')
-          .add(cartItem);
-
-      if (!mounted) return;
-      Navigator.pop(context);
-
-      if (goToCheckout) {
-        // Fetch delivery info for tableNo
-        final delivDoc = await FirebaseFirestore.instance
-            .collection('food_delivery')
-            .doc(user.uid)
-            .get();
-        final method = delivDoc.data()?['delivery_method'] ?? '';
-        final tableNo = method == 'Take_Away'
-            ? 'Take-Away'
-            : delivDoc.data()?['table_no'] as String?;
-        if (context.mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  CheckoutPage(uid: user.uid, tableNo: tableNo),
-            ),
-          );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Added to cart!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final name = widget.itemData['name'] ?? 'Item';
-    final imageUrl = (widget.itemData['imageUrl'] ?? '') as String;
-    final noteDesc = (widget.itemData['note'] ?? '') as String;
-    final num originalPrice = widget.itemData['price'] ?? 0;
-    final num offerPrice = widget.itemData['offerPrice'] ?? 0;
-    final List<dynamic> choices =
-        widget.itemData['menuChoices'] ?? [];
-    final List<dynamic> addons =
-        widget.itemData['additionalOptions'] ?? [];
-
     return Container(
-      height: MediaQuery.of(context).size.height * 0.88,
-      decoration: const BoxDecoration(
-        color: kCardBg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: isPrimary ? kPrimary : kCardBg,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          if (isPrimary)
+            BoxShadow(
+              color: kPrimary.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            )
+          else
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+        ],
+        border: isPrimary
+            ? null
+            : Border.all(color: kPrimary.withOpacity(0.2), width: 1.5),
       ),
-      child: Column(
-        children: [
-          // Handle
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: kMuted.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-
-          Expanded(
-            child: SingleChildScrollView(
-              padding:
-                  const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Item header ─────────────────────────────────
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Image
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: imageUrl.isNotEmpty
-                            ? Image.network(imageUrl,
-                                width: 90,
-                                height: 90,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                    width: 90,
-                                    height: 90,
-                                    color: kBg,
-                                    child: const Icon(Icons.fastfood,
-                                        color: kMuted)))
-                            : Container(
-                                width: 90,
-                                height: 90,
-                                color: kBg,
-                                child: const Icon(Icons.fastfood,
-                                    color: kMuted)),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(name,
-                                style: const TextStyle(
-                                    color: kWhite,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 6),
-                            // Promo price
-                            Row(
-                              children: [
-                                Text(
-                                  'CHF ${offerPrice.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: kPrimary,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                if (originalPrice > offerPrice) ...[
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'CHF ${originalPrice.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      color: kMuted.withOpacity(0.7),
-                                      fontSize: 13,
-                                      decoration:
-                                          TextDecoration.lineThrough,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (noteDesc.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(noteDesc,
-                                  style: const TextStyle(
-                                      color: kMuted, fontSize: 12)),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            child: Column(
+              children: [
+                Icon(icon, color: isPrimary ? kWhite : kPrimary, size: 36),
+                const SizedBox(height: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: kWhite,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
                   ),
-                  const SizedBox(height: 20),
-
-                  // ── Note field ──────────────────────────────────
-                  const Text('Note (optional)',
-                      style: TextStyle(
-                          color: kWhite,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _noteCtrl,
-                    style: const TextStyle(color: kWhite),
-                    decoration: InputDecoration(
-                      hintText: 'Any special requests...',
-                      hintStyle: const TextStyle(color: kMuted),
-                      filled: true,
-                      fillColor: kBg,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // ── Choices ─────────────────────────────────────
-                  if (choices.isNotEmpty) ...[
-                    _SectionLabel('Choose Option', required: true),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: kBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: kMuted.withOpacity(0.2)),
-                      ),
-                      child: Column(
-                        children: choices.map((c) {
-                          final cs = c.toString();
-                          return RadioListTile<String>(
-                            title: Text(cs,
-                                style: const TextStyle(color: kWhite)),
-                            activeColor: kPrimary,
-                            value: cs,
-                            groupValue: _selectedChoice,
-                            onChanged: (v) =>
-                                setState(() => _selectedChoice = v),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // ── Add-ons ─────────────────────────────────────
-                  if (addons.isNotEmpty) ...[
-                    _SectionLabel('Add-ons', required: false),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: kBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: kMuted.withOpacity(0.2)),
-                      ),
-                      child: Column(
-                        children: addons.map((addon) {
-                          final aMap = addon as Map<String, dynamic>;
-                          final aName = aMap['name'] ?? '';
-                          final aPrice =
-                              (aMap['price'] as num?)?.toDouble() ??
-                                  0.0;
-                          final isSel = _selectedAddons.contains(aMap);
-                          return CheckboxListTile(
-                            title: Text(aName,
-                                style: const TextStyle(color: kWhite)),
-                            subtitle: Text(
-                                '+CHF ${aPrice.toStringAsFixed(2)}',
-                                style: const TextStyle(color: kMuted)),
-                            activeColor: kPrimary,
-                            checkColor: kWhite,
-                            value: isSel,
-                            onChanged: (val) => setState(() {
-                              if (val == true)
-                                _selectedAddons.add(aMap);
-                              else
-                                _selectedAddons.remove(aMap);
-                            }),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          // ── Bottom bar ───────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-            decoration: BoxDecoration(
-              color: kBg,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.5),
-                  blurRadius: 12,
-                  offset: const Offset(0, -4),
                 ),
               ],
             ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Qty row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Quantity',
-                          style: TextStyle(
-                              color: kMuted, fontSize: 14)),
-                      Row(
-                        children: [
-                          _QtyBtn(
-                              icon: Icons.remove,
-                              onTap: () => setState(
-                                  () => _qty = _qty > 1 ? _qty - 1 : 1)),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 18),
-                            child: Text('$_qty',
-                                style: const TextStyle(
-                                    color: kWhite,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold)),
-                          ),
-                          _QtyBtn(
-                              icon: Icons.add,
-                              onTap: () =>
-                                  setState(() => _qty++)),
-                        ],
-                      ),
-                      Text(
-                        'CHF ${_totalPrice.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                            color: kWhite,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: kPrimary),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 15),
-                            shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(12)),
-                          ),
-                          onPressed: () => _addToCart(),
-                          child: const Text('Add to Cart',
-                              style: TextStyle(color: kWhite)),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: kPrimary,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 15),
-                            shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(12)),
-                          ),
-                          onPressed: () =>
-                              _addToCart(goToCheckout: true),
-                          child: const Text('Buy Now',
-                              style: TextStyle(
-                                  color: kWhite,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Modals & Sheets (Method & Table Picker) ──────────────────────────────────
+class _MethodPickerSheet extends StatelessWidget {
+  final VoidCallback onDineIn;
+  final VoidCallback onTakeAway;
+  const _MethodPickerSheet({required this.onDineIn, required this.onTakeAway});
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: kMuted.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(4),
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  final bool required;
-  const _SectionLabel(this.text, {required this.required});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(text,
-            style: const TextStyle(
+            const Text(
+              'How would you like to order?',
+              style: TextStyle(
                 color: kWhite,
-                fontWeight: FontWeight.bold,
-                fontSize: 15)),
-        const SizedBox(width: 8),
-        Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: required
-                ? kPrimary.withOpacity(0.2)
-                : kMuted.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            required ? 'Required' : 'Optional',
-            style: TextStyle(
-                color: required ? kPrimary : kMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _QtyBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _QtyBtn({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          border: Border.all(color: kMuted),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: kWhite, size: 20),
-      ),
-    );
-  }
-}
-
-// ── Empty promo ──────────────────────────────────────────────────────────────
-class _EmptyPromo extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        height: 170,
-        decoration: BoxDecoration(
-          color: kWhite.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: kPrimary.withOpacity(0.3)),
-        ),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.restaurant_menu, color: kPrimary, size: 44),
-            SizedBox(height: 12),
-            Text('Welcome to our Restaurant!',
-                style: TextStyle(
-                    color: kWhite,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            SizedBox(height: 4),
-            Text('Check out our menu for delicious meals.',
-                style: TextStyle(color: kMuted, fontSize: 13)),
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please select before adding to cart',
+              style: TextStyle(color: kMuted.withOpacity(0.8), fontSize: 14),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: _BigActionButton(
+                    label: 'Dine-In',
+                    icon: Icons.storefront_rounded,
+                    isPrimary: true,
+                    onTap: onDineIn,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _BigActionButton(
+                    label: 'Take-Away',
+                    icon: Icons.takeout_dining_rounded,
+                    isPrimary: false,
+                    onTap: onTakeAway,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -1354,10 +807,8 @@ class _EmptyPromo extends StatelessWidget {
   }
 }
 
-// ── Table Picker Sheet (for Home Page DineIn) ────────────────────────────────
 class _TablePickerSheet extends StatefulWidget {
   const _TablePickerSheet();
-
   @override
   State<_TablePickerSheet> createState() => _TablePickerSheetState();
 }
@@ -1385,61 +836,78 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF194D25),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 12,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 28,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: kMuted.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(4),
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 32,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: kMuted.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-          ),
-          const Text('Dine-In: Enter Table',
+            const Text(
+              'Enter Table Number',
               style: TextStyle(
-                  color: kWhite,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18)),
-          const SizedBox(height: 4),
-          const Text(
-              'Scan the QR code on your table or type the number',
-              style: TextStyle(color: kMuted, fontSize: 12),
-              textAlign: TextAlign.center),
-          const SizedBox(height: 20),
-          TabBar(
-            controller: _tab,
-            indicatorColor: kPrimary,
-            labelColor: kPrimary,
-            unselectedLabelColor: kMuted,
-            dividerColor: Colors.transparent,
-            tabs: const [
-              Tab(
-                  icon: Icon(Icons.qr_code_scanner), text: 'Scan QR'),
-              Tab(icon: Icon(Icons.edit_outlined), text: 'Type No.'),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 230,
-            child: TabBarView(
-              controller: _tab,
-              children: [_buildQrTab(), _buildTypeTab()],
+                color: kWhite,
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            const Text(
+              'Scan the QR code or type it manually',
+              style: TextStyle(color: kMuted, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Container(
+              decoration: BoxDecoration(
+                color: kBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TabBar(
+                controller: _tab,
+                indicator: BoxDecoration(
+                  color: kPrimary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: kWhite,
+                unselectedLabelColor: kMuted,
+                dividerColor: Colors.transparent,
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                tabs: const [
+                  Tab(text: 'Scan QR'),
+                  Tab(text: 'Type No.'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 230,
+              child: TabBarView(
+                controller: _tab,
+                children: [_buildQrTab(), _buildTypeTab()],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1449,43 +917,55 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.check_circle,
-              color: Colors.greenAccent, size: 52),
-          const SizedBox(height: 12),
-          Text('Table: $_scannedValue',
-              style: const TextStyle(
-                  color: kWhite,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary,
-              foregroundColor: kWhite,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 32, vertical: 14),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: Colors.greenAccent,
+            size: 64,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Table: $_scannedValue',
+            style: const TextStyle(
+              color: kWhite,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
             ),
-            onPressed: () => _confirm(_scannedValue!),
-            child: const Text('Go to Menu',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: () => _confirm(_scannedValue!),
+              child: const Text(
+                'Go to Menu',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: kWhite,
+                ),
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => setState(() => _scannedValue = null),
-            child: const Text('Scan again',
-                style: TextStyle(color: kMuted)),
+            child: const Text('Scan again', style: TextStyle(color: kMuted)),
           ),
         ],
       );
     }
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: MobileScanner(
         onDetect: (capture) {
           final val = capture.barcodes.firstOrNull?.rawValue;
-          if (val != null && mounted)
-            setState(() => _scannedValue = val);
+          if (val != null && mounted) setState(() => _scannedValue = val);
         },
       ),
     );
@@ -1498,49 +978,54 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
         TextField(
           controller: _typeCtrl,
           keyboardType: TextInputType.text,
-          style: const TextStyle(color: kWhite, fontSize: 18),
+          style: const TextStyle(
+            color: kWhite,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
           textAlign: TextAlign.center,
           decoration: InputDecoration(
-            hintText: 'e.g.  T5  or  12',
-            hintStyle: const TextStyle(color: kMuted),
+            hintText: 'e.g. T5 or 12',
+            hintStyle: TextStyle(
+              color: kMuted.withOpacity(0.5),
+              fontWeight: FontWeight.normal,
+            ),
             filled: true,
             fillColor: kBg,
-            prefixIcon:
-                const Icon(Icons.table_restaurant, color: kPrimary),
+            prefixIcon: const Icon(Icons.table_restaurant, color: kPrimary),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  BorderSide(color: kMuted.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  const BorderSide(color: kPrimary, width: 2),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  BorderSide(color: kMuted.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: kPrimary, width: 2),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
+          height: 54,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: kPrimary,
-              foregroundColor: kWhite,
-              padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
             onPressed: () {
               final val = _typeCtrl.text.trim();
               if (val.isNotEmpty) _confirm(val);
             },
-            child: const Text('Go to Menu',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text(
+              'Go to Menu',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: kWhite,
+              ),
+            ),
           ),
         ),
       ],
@@ -1548,71 +1033,496 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   }
 }
 
-// ── Helper widgets ───────────────────────────────────────────────────────────
-class _TopCard extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _TopCard(
-      {required this.label, required this.icon, required this.onTap});
-
+class _EmptyPromo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: kWhite.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            children: [
-              Icon(icon, size: 28, color: kPrimary),
-              const SizedBox(height: 8),
-              Text(label,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, color: kWhite),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ],
-          ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        height: 180,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: kPrimary.withOpacity(0.2)),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.restaurant_menu_rounded, color: kPrimary, size: 48),
+            SizedBox(height: 16),
+            Text(
+              'Welcome to our Restaurant!',
+              style: TextStyle(
+                color: kWhite,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Check out our menu for delicious meals.',
+              style: TextStyle(color: kMuted, fontSize: 14),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _BigActionButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _BigActionButton(
-      {required this.label, required this.icon, required this.onTap});
+// ── Promo Item Sheet (Functionality preserved from original) ─────────────────
+class _PromoItemSheet extends StatefulWidget {
+  final Map<String, dynamic> itemData;
+  const _PromoItemSheet({required this.itemData});
+  @override
+  State<_PromoItemSheet> createState() => _PromoItemSheetState();
+}
+
+class _PromoItemSheetState extends State<_PromoItemSheet> {
+  int _qty = 1;
+  final TextEditingController _noteCtrl = TextEditingController();
+  String? _selectedChoice;
+  final List<Map<String, dynamic>> _selectedAddons = [];
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _basePrice {
+    final bool isPromo = widget.itemData['isPromoActive'] ?? false;
+    return ((isPromo ? widget.itemData['offerPrice'] : widget.itemData['price'])
+                as num?)
+            ?.toDouble() ??
+        0.0;
+  }
+
+  double get _totalPrice {
+    double addons = 0;
+    for (var a in _selectedAddons) {
+      addons += (a['price'] as num?)?.toDouble() ?? 0.0;
+    }
+    return (_basePrice + addons) * _qty;
+  }
+
+  Future<void> _addToCart({bool goToCheckout = false}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final cartItem = {
+      'name': widget.itemData['name'] ?? '',
+      'price': _basePrice,
+      'qty': _qty,
+      'imageUrl': widget.itemData['imageUrl'] ?? '',
+      'kind': widget.itemData['itemType'] ?? 'food',
+      'note': _noteCtrl.text.trim(),
+      'additionalOptions': _selectedAddons,
+      'menuChoices': _selectedChoice != null ? {'Choice': _selectedChoice} : {},
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    try {
+      await FirebaseFirestore.instance
+          .collection('chat')
+          .doc(user.uid)
+          .collection('items')
+          .add(cartItem);
+      if (!mounted) return;
+      Navigator.pop(context);
+      if (goToCheckout) {
+        final delivDoc = await FirebaseFirestore.instance
+            .collection('food_delivery')
+            .doc(user.uid)
+            .get();
+        final method = delivDoc.data()?['delivery_method'] ?? '';
+        final tableNo = method == 'Take_Away'
+            ? 'Take-Away'
+            : delivDoc.data()?['table_no'] as String?;
+        if (context.mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CheckoutPage(uid: user.uid, tableNo: tableNo),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Added to cart!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: kPrimary,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          child: Column(
-            children: [
-              Icon(icon, color: kWhite, size: 28),
-              const SizedBox(height: 8),
-              Text(label,
-                  style: const TextStyle(
+    final name = widget.itemData['name'] ?? 'Item';
+    final imageUrl = (widget.itemData['imageUrl'] ?? '') as String;
+    final num offerPrice = widget.itemData['offerPrice'] ?? 0;
+    final List<dynamic> choices = widget.itemData['menuChoices'] ?? [];
+    final List<dynamic> addons = widget.itemData['additionalOptions'] ?? [];
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.88,
+      decoration: const BoxDecoration(
+        color: kCardBg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 16),
+            width: 48,
+            height: 5,
+            decoration: BoxDecoration(
+              color: kMuted.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              )
+                            : Container(
+                                width: 100,
+                                height: 100,
+                                color: kBg,
+                                child: const Icon(
+                                  Icons.fastfood,
+                                  color: kMuted,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'CHF ${offerPrice.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: kPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Note (optional)',
+                    style: TextStyle(
                       color: kWhite,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16)),
-            ],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _noteCtrl,
+                    style: const TextStyle(color: kWhite),
+                    decoration: InputDecoration(
+                      hintText: 'Any special requests...',
+                      hintStyle: const TextStyle(color: kMuted),
+                      filled: true,
+                      fillColor: kBg,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (choices.isNotEmpty) ...[
+                    _SectionLabel('Choose Option', required: true),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: kBg,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: choices.map((c) {
+                          final cs = c.toString();
+                          return RadioListTile<String>(
+                            title: Text(
+                              cs,
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            activeColor: kPrimary,
+                            value: cs,
+                            groupValue: _selectedChoice,
+                            onChanged: (v) =>
+                                setState(() => _selectedChoice = v),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  if (addons.isNotEmpty) ...[
+                    _SectionLabel('Add-ons', required: false),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: kBg,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: addons.map((addon) {
+                          final aMap = addon as Map<String, dynamic>;
+                          final aName = aMap['name'] ?? '';
+                          final aPrice =
+                              (aMap['price'] as num?)?.toDouble() ?? 0.0;
+                          final isSel = _selectedAddons.contains(aMap);
+                          return CheckboxListTile(
+                            title: Text(
+                              aName,
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '+CHF ${aPrice.toStringAsFixed(2)}',
+                              style: const TextStyle(color: kMuted),
+                            ),
+                            activeColor: kPrimary,
+                            checkColor: kWhite,
+                            value: isSel,
+                            onChanged: (val) => setState(() {
+                              if (val == true)
+                                _selectedAddons.add(aMap);
+                              else
+                                _selectedAddons.remove(aMap);
+                            }),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            decoration: BoxDecoration(
+              color: kDarkBar,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Quantity',
+                        style: TextStyle(
+                          color: kMuted,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          _QtyBtn(
+                            icon: Icons.remove,
+                            onTap: () =>
+                                setState(() => _qty = _qty > 1 ? _qty - 1 : 1),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Text(
+                              '$_qty',
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          _QtyBtn(
+                            icon: Icons.add,
+                            onTap: () => setState(() => _qty++),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'CHF ${_totalPrice.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: kWhite,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 54,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: kPrimary, width: 2),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            onPressed: () => _addToCart(),
+                            child: const Text(
+                              'Add to Cart',
+                              style: TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: SizedBox(
+                          height: 54,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kPrimary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            onPressed: () => _addToCart(goToCheckout: true),
+                            child: const Text(
+                              'Buy Now',
+                              style: TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  final bool required;
+  const _SectionLabel(this.text, {required this.required});
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          text,
+          style: const TextStyle(
+            color: kWhite,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
           ),
         ),
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: required
+                ? kPrimary.withOpacity(0.2)
+                : kMuted.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            required ? 'Required' : 'Optional',
+            style: TextStyle(
+              color: required ? kPrimary : kMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QtyBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _QtyBtn({required this.icon, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: kItemBg,
+          border: Border.all(color: kMuted.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: kWhite, size: 22),
       ),
     );
   }
