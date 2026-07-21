@@ -14,8 +14,43 @@ const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);
 const kDarkCard = Color(0xFF194D25);
+const kDiscount = Color(0xFFE0483E); // 🟢 badge/discount accent color
 
 enum _MenuKind { drinks, foods }
+
+// 🟢 Computes the final (discounted) price for a menu item, based on the
+// `hasDiscount` / `discountType` / `discountValue` fields saved from the
+// Add/Edit Menu Item pages. Falls back to the plain price when there's no
+// active discount, or if the discount value is invalid.
+double _effectivePrice(Map<String, dynamic> m) {
+  final price = (m['price'] as num?)?.toDouble() ?? 0;
+  final hasDiscount = m['hasDiscount'] == true;
+  final discountValue = (m['discountValue'] as num?)?.toDouble() ?? 0;
+  if (!hasDiscount || discountValue <= 0) return price;
+
+  final discountType = (m['discountType'] as String?) ?? 'percent';
+  double discounted = discountType == 'percent'
+      ? price - (price * discountValue / 100)
+      : price - discountValue;
+
+  if (discounted < 0) discounted = 0;
+  return discounted;
+}
+
+// 🟢 Short badge text like "-20%" or "-CHF 5.00" shown on discounted items.
+String _discountBadgeText(Map<String, dynamic> m) {
+  final discountType = (m['discountType'] as String?) ?? 'percent';
+  final discountValue = (m['discountValue'] as num?)?.toDouble() ?? 0;
+  if (discountType == 'percent') {
+    return '-${discountValue.toStringAsFixed(discountValue % 1 == 0 ? 0 : 1)}%';
+  }
+  return '-CHF ${discountValue.toStringAsFixed(2)}';
+}
+
+bool _isDiscounted(Map<String, dynamic> m) {
+  final discountValue = (m['discountValue'] as num?)?.toDouble() ?? 0;
+  return m['hasDiscount'] == true && discountValue > 0;
+}
 
 class _WebSafeImage extends StatelessWidget {
   final String imageUrl;
@@ -486,33 +521,77 @@ class _MenuGrid extends StatelessWidget {
             final name = (m['name'] as String?) ?? '';
             final price = (m['price'] as num?)?.toDouble() ?? 0;
             final imageUrl = (m['imageUrl'] as String?) ?? '';
+            final discounted = _isDiscounted(m);
+            final finalPrice = _effectivePrice(m);
+
             return InkWell(
               onTap: () => onTapItem(m),
               child: Container(
                 decoration: BoxDecoration(
                   color: kWhite.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: kWhite.withOpacity(0.1)),
+                  border: Border.all(
+                    color: discounted
+                        ? kDiscount.withOpacity(0.6)
+                        : kWhite.withOpacity(0.1),
+                  ),
                 ),
                 child: Column(
                   children: [
                     Expanded(
                       flex: 5,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(16),
-                        ),
-                        child: _WebSafeImage(
-                          imageUrl: imageUrl,
-                          fallback: Container(
-                            color: kDarkCard,
-                            child: const Icon(
-                              Icons.image,
-                              color: kMuted,
-                              size: 40,
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(16),
+                            ),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: _WebSafeImage(
+                                imageUrl: imageUrl,
+                                fallback: Container(
+                                  color: kDarkCard,
+                                  child: const Icon(
+                                    Icons.image,
+                                    color: kMuted,
+                                    size: 40,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                          // 🟢 Discount badge, top-left of the image
+                          if (discounted)
+                            Positioned(
+                              top: 6,
+                              left: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kDiscount,
+                                  borderRadius: BorderRadius.circular(6),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.25),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  _discountBadgeText(m),
+                                  style: const TextStyle(
+                                    color: kWhite,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -533,15 +612,42 @@ class _MenuGrid extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              'CHF ${price.toStringAsFixed(2)}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: kPrimary,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 13,
-                              ),
-                            ),
+                            // 🟢 Show strikethrough original price + discounted
+                            // price when a promotion is active.
+                            discounted
+                                ? Column(
+                                    children: [
+                                      Text(
+                                        'CHF ${price.toStringAsFixed(2)}',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: kMuted,
+                                          fontSize: 11,
+                                          decoration:
+                                              TextDecoration.lineThrough,
+                                          decorationColor: kMuted,
+                                        ),
+                                      ),
+                                      Text(
+                                        'CHF ${finalPrice.toStringAsFixed(2)}',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: kDiscount,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Text(
+                                    'CHF ${price.toStringAsFixed(2)}',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: kPrimary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                           ],
                         ),
                       ),
@@ -576,7 +682,10 @@ void _showItemSheet(
 ) {
   final name = (item['name'] as String?) ?? '';
   final imageUrl = (item['imageUrl'] as String?) ?? '';
-  final basePrice = ((item['price'] as num?) ?? 0).toDouble();
+  final originalPrice = ((item['price'] as num?) ?? 0).toDouble();
+  // 🟢 basePrice used for all cart/quantity math is the discounted price.
+  final basePrice = _effectivePrice(item);
+  final discounted = _isDiscounted(item);
   final dbNote = (item['note'] as String?) ?? '';
   final category = (item['category'] as String?) ?? '';
   final List<String> menuChoiceIds = List<String>.from(
@@ -669,21 +778,49 @@ void _showItemSheet(
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: _WebSafeImage(
-                        imageUrl: imageUrl,
-                        width: 100,
-                        height: 100,
-                        fallback: Container(
-                          color: kDarkCard,
-                          child: const Icon(
-                            Icons.image,
-                            color: kMuted,
-                            size: 40,
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: _WebSafeImage(
+                            imageUrl: imageUrl,
+                            width: 100,
+                            height: 100,
+                            fallback: Container(
+                              color: kDarkCard,
+                              child: const Icon(
+                                Icons.image,
+                                color: kMuted,
+                                size: 40,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        // 🟢 Discount badge on the sheet image too
+                        if (discounted)
+                          Positioned(
+                            top: 4,
+                            left: 4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: kDiscount,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                _discountBadgeText(item),
+                                style: const TextStyle(
+                                  color: kWhite,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -698,14 +835,39 @@ void _showItemSheet(
                               fontSize: 20,
                             ),
                           ),
-                          Text(
-                            'CHF ${basePrice.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: kPrimary,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
+                          // 🟢 Strikethrough original price + discounted price
+                          if (discounted)
+                            Row(
+                              children: [
+                                Text(
+                                  'CHF ${originalPrice.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    color: kMuted,
+                                    fontSize: 13,
+                                    decoration: TextDecoration.lineThrough,
+                                    decorationColor: kMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'CHF ${basePrice.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: kDiscount,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            Text(
+                              'CHF ${basePrice.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: kPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
                             ),
-                          ),
                           if (kind == _MenuKind.foods && dbNote.isNotEmpty)
                             Text(
                               dbNote,

@@ -105,6 +105,11 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
   String? _selectedCategoryIconUrl;
   String _itemType = 'food';
 
+  // 🟢 Discount state
+  bool _hasDiscount = false;
+  String _discountType = 'percent'; // 'percent' or 'amount'
+  final _discountValue = TextEditingController();
+
   List<Map<String, dynamic>> _allAvailableChoices = [];
   List<Map<String, dynamic>> _selectedMenuChoices = [];
   String? _dropdownChoiceValue;
@@ -123,6 +128,14 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     _selectedCategoryIconUrl = widget.itemData['categoryIconUrl'];
     _existingImageUrl = widget.itemData['imageUrl'];
     _existingImageFileName = widget.itemData['imageFileName'];
+
+    // 🟢 Load existing discount info
+    _hasDiscount = widget.itemData['hasDiscount'] ?? false;
+    _discountType = widget.itemData['discountType'] ?? 'percent';
+    final existingDiscountValue = widget.itemData['discountValue'];
+    _discountValue.text = existingDiscountValue == null
+        ? ''
+        : existingDiscountValue.toString();
 
     // Load existing additional options
     final List<dynamic> existingOptions =
@@ -143,6 +156,7 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     _name.dispose();
     _note.dispose();
     _price.dispose();
+    _discountValue.dispose();
     for (var opt in _additionalOptions) {
       opt.dispose();
     }
@@ -211,6 +225,18 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
       if (name.isEmpty || price == null)
         throw Exception('Check Name and Price');
 
+      // 🟢 Validate discount value if discount is enabled
+      double discountValue = 0;
+      if (_hasDiscount) {
+        discountValue = double.tryParse(_discountValue.text.trim()) ?? 0;
+        if (discountValue <= 0) {
+          throw Exception('Enter a valid discount value');
+        }
+        if (_discountType == 'percent' && discountValue > 100) {
+          throw Exception('Discount percent cannot exceed 100');
+        }
+      }
+
       // Serialize additional options
       List<Map<String, dynamic>> optionsData = _additionalOptions.map((opt) {
         return {
@@ -245,6 +271,10 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             'menuChoices': _selectedMenuChoices.map((c) => c['id']).toList(),
             'additionalOptions': optionsData,
             'itemType': _itemType,
+            // 🟢 Discount fields
+            'hasDiscount': _hasDiscount,
+            'discountType': _hasDiscount ? _discountType : null,
+            'discountValue': _hasDiscount ? discountValue : 0,
           });
 
       if (mounted) Navigator.pop(context);
@@ -373,6 +403,85 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                   controller: _note,
                   maxLines: 3,
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Discount ────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kFieldBg.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _hasDiscount
+                    ? kPrimary.withOpacity(0.5)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: kPrimary,
+                  title: const Text(
+                    'Apply Discount',
+                    style: TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Offer a discount on this item',
+                    style: TextStyle(color: kMuted, fontSize: 12),
+                  ),
+                  value: _hasDiscount,
+                  onChanged: (val) => setState(() => _hasDiscount = val),
+                ),
+                if (_hasDiscount) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Percent %',
+                            style: TextStyle(color: kWhite, fontSize: 13),
+                          ),
+                          value: 'percent',
+                          groupValue: _discountType,
+                          activeColor: kPrimary,
+                          onChanged: (v) => setState(() => _discountType = v!),
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Fixed Amount',
+                            style: TextStyle(color: kWhite, fontSize: 13),
+                          ),
+                          value: 'amount',
+                          groupValue: _discountType,
+                          activeColor: kPrimary,
+                          onChanged: (v) => setState(() => _discountType = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _input(
+                    label: _discountType == 'percent'
+                        ? 'Discount %'
+                        : 'Discount Amount',
+                    controller: _discountValue,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -599,9 +708,21 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
               builder: (context, snap) {
                 if (!snap.hasData) return const LinearProgressIndicator();
                 final names = snap.data!.docs.map((d) => d.id).toList();
+
+                // 🟢 FIX: only use _selectedCategory as the dropdown value if
+                // it actually exists in the current list of category names.
+                // Previously, if the saved category (e.g. "drinks1") had been
+                // renamed or deleted from `menu_category`, DropdownButton
+                // would crash with:
+                // "There should be exactly one item with [DropdownButton]'s
+                // value ... Either zero or 2 or more ... were detected"
+                final String? safeValue = names.contains(_selectedCategory)
+                    ? _selectedCategory
+                    : null;
+
                 return DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedCategory,
+                    value: safeValue,
                     isExpanded: true,
                     dropdownColor: kFieldBg,
                     hint: const Text(

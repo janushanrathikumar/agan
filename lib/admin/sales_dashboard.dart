@@ -375,8 +375,10 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 🟢 Currency changed from RM (Malaysian Ringgit) to CHF (Swiss Franc)
+    // to match the rest of the app (see menu.dart / checkout.dart).
     final currencyFormatter = NumberFormat.currency(
-      symbol: 'RM ',
+      symbol: 'CHF ',
       decimalDigits: 2,
     );
 
@@ -451,8 +453,9 @@ class _SalesTrendReport extends StatelessWidget {
       return revenue > max ? revenue : max;
     });
 
+    // 🟢 Currency changed from RM to CHF
     final currencyFormatter = NumberFormat.currency(
-      symbol: 'RM ',
+      symbol: 'CHF ',
       decimalDigits: 0,
     );
 

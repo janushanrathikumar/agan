@@ -22,8 +22,9 @@ class _StartPageState extends State<StartPage> {
 
   void _toggleLanguage() {
     setState(() {
-      AppLanguage.currentLanguage =
-          (AppLanguage.currentLanguage == 'de') ? 'en' : 'de';
+      AppLanguage.currentLanguage = (AppLanguage.currentLanguage == 'de')
+          ? 'en'
+          : 'de';
     });
   }
 
@@ -41,22 +42,17 @@ class _StartPageState extends State<StartPage> {
       {
         'image': 'assets/slide1.png',
         'title': AppLanguage.getText('title_1'),
-        'text': AppLanguage.getText('text_1')
+        'text': AppLanguage.getText('text_1'),
       },
       {
         'image': 'assets/slide2.png',
         'title': AppLanguage.getText('title_2'),
-        'text': AppLanguage.getText('text_2')
-      },
-      {
-        'image': 'assets/slide3.png',
-        'title': AppLanguage.getText('title_3'),
-        'text': AppLanguage.getText('text_3')
+        'text': AppLanguage.getText('text_2'),
       },
       {
         'image': 'assets/slide4.png',
         'title': AppLanguage.getText('title_4'),
-        'text': AppLanguage.getText('text_4')
+        'text': AppLanguage.getText('text_4'),
       },
     ];
 
@@ -75,7 +71,7 @@ class _StartPageState extends State<StartPage> {
               ),
             ),
           ),
-          
+
           // ── Ambient Background Glows ─────────────────────────────────────────
           Positioned(
             top: -100,
@@ -99,7 +95,10 @@ class _StartPageState extends State<StartPage> {
               children: [
                 // ── Top Bar (Language Toggle & Skip) ───────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 8.0,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -114,10 +113,17 @@ class _StartPageState extends State<StartPage> {
                           borderRadius: BorderRadius.circular(20),
                           onTap: _toggleLanguage,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
                             child: Row(
                               children: [
-                                const Icon(Icons.language, color: kWhite, size: 18),
+                                const Icon(
+                                  Icons.language,
+                                  color: kWhite,
+                                  size: 18,
+                                ),
                                 const SizedBox(width: 8),
                                 Text(
                                   AppLanguage.getText('lang_toggle'),
@@ -136,7 +142,9 @@ class _StartPageState extends State<StartPage> {
                       // Skip Button
                       TextButton(
                         onPressed: () => Navigator.pushReplacementNamed(
-                            context, SignInPage.route),
+                          context,
+                          SignInPage.route,
+                        ),
                         child: Text(
                           AppLanguage.getText('skip'),
                           style: const TextStyle(
@@ -162,17 +170,29 @@ class _StartPageState extends State<StartPage> {
                         itemBuilder: (_, i) {
                           final slide = slides[i];
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 16,
+                            ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(32),
                               child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                filter: ImageFilter.blur(
+                                  sigmaX: 12,
+                                  sigmaY: 12,
+                                ),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 32,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: kWhite.withOpacity(0.06),
                                     borderRadius: BorderRadius.circular(32),
-                                    border: Border.all(color: kWhite.withOpacity(0.15), width: 1.5),
+                                    border: Border.all(
+                                      color: kWhite.withOpacity(0.15),
+                                      width: 1.5,
+                                    ),
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.black.withOpacity(0.2),
@@ -247,7 +267,7 @@ class _StartPageState extends State<StartPage> {
                                     color: kPrimary.withOpacity(0.5),
                                     blurRadius: 8,
                                     offset: const Offset(0, 2),
-                                  )
+                                  ),
                                 ]
                               : null,
                         ),
@@ -266,7 +286,9 @@ class _StartPageState extends State<StartPage> {
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(
-                                color: kPrimary.withOpacity(0.8), width: 2),
+                              color: kPrimary.withOpacity(0.8),
+                              width: 2,
+                            ),
                             foregroundColor: kWhite,
                             padding: const EdgeInsets.symmetric(vertical: 18),
                             shape: RoundedRectangleBorder(
@@ -274,16 +296,20 @@ class _StartPageState extends State<StartPage> {
                             ),
                           ),
                           onPressed: () => Navigator.pushReplacementNamed(
-                              context, SignUpPage.route),
+                            context,
+                            SignUpPage.route,
+                          ),
                           child: Text(
                             AppLanguage.getText('sign_up'),
                             style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 16),
-                      
+
                       // Next / Log In (Filled Button)
                       Expanded(
                         child: FilledButton(
@@ -305,7 +331,9 @@ class _StartPageState extends State<StartPage> {
                               );
                             } else {
                               Navigator.pushReplacementNamed(
-                                  context, SignInPage.route);
+                                context,
+                                SignInPage.route,
+                              );
                             }
                           },
                           child: Text(
@@ -313,7 +341,9 @@ class _StartPageState extends State<StartPage> {
                                 ? AppLanguage.getText('log_in')
                                 : AppLanguage.getText('next'),
                             style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),

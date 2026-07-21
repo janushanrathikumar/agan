@@ -119,7 +119,8 @@ class AdminOrdersListPage extends StatelessWidget {
                     ),
                   ),
                   trailing: Text(
-                    'RM ${total.toStringAsFixed(2)}',
+                    // 🟢 RM -> CHF
+                    'CHF ${total.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -187,8 +188,10 @@ class AdminOrderDetailsPage extends StatelessWidget {
 
         final String orderId = orderData['order_id'] ?? documentId;
         final String status = orderData['status'] ?? 'Unknown';
+        // 🟢 Read delivery_method / table_no directly off the order doc
+        // (this is now saved at order time, see payment_page.dart).
         final String deliveryMethod = orderData['delivery_method'] ?? 'N/A';
-        final String tableNo = orderData['table_no'] ?? 'N/A';
+        final String tableNo = (orderData['table_no'] ?? 'N/A').toString();
         final num total = orderData['total'] ?? 0;
         final List<dynamic> items = orderData['items'] ?? [];
 
@@ -288,7 +291,8 @@ class AdminOrderDetailsPage extends StatelessWidget {
               pw.SizedBox(height: 10),
               pw.Text('Order ID: ${orderData['order_id']}'),
               pw.Text('Type: ${orderData['delivery_method']}'),
-              if (orderData['table_no'] != 'N/A')
+              if ((orderData['table_no'] ?? 'N/A') != 'N/A' &&
+                  (orderData['table_no'] ?? '').toString().isNotEmpty)
                 pw.Text('Table No: ${orderData['table_no']}'),
               pw.Text('Date: ${DateTime.now().toString().substring(0, 16)}'),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
@@ -347,7 +351,8 @@ class AdminOrderDetailsPage extends StatelessWidget {
                       pw.Expanded(
                         flex: 2,
                         child: pw.Text(
-                          'RM ${lineTotal.toStringAsFixed(2)}',
+                          // 🟢 RM -> CHF
+                          'CHF ${lineTotal.toStringAsFixed(2)}',
                           textAlign: pw.TextAlign.right,
                         ),
                       ),
@@ -371,7 +376,8 @@ class AdminOrderDetailsPage extends StatelessWidget {
                     ),
                   ),
                   pw.Text(
-                    'RM ${total.toStringAsFixed(2)}',
+                    // 🟢 RM -> CHF
+                    'CHF ${total.toStringAsFixed(2)}',
                     style: pw.TextStyle(
                       fontSize: 16,
                       fontWeight: pw.FontWeight.bold,
@@ -467,7 +473,8 @@ class AdminOrderDetailsPage extends StatelessWidget {
                 style: TextStyle(fontSize: 16, color: kMuted),
               ),
               Text(
-                'RM ${total.toStringAsFixed(2)}',
+                // 🟢 RM -> CHF
+                'CHF ${total.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -508,6 +515,9 @@ class AdminOrderDetailsPage extends StatelessWidget {
     final num price = item['price'] ?? 0;
     final num qty = item['qty'] ?? 1;
     final String imageUrl = item['imageUrl'] ?? '';
+    // 🟢 category is now saved on every item kind (drinks included), so
+    // show it as a small chip under the item name.
+    final String category = (item['category'] ?? '').toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -551,7 +561,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'RM ${(price * qty).toStringAsFixed(2)}',
+                      'CHF ${(price * qty).toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
@@ -560,12 +570,132 @@ class AdminOrderDetailsPage extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (category.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kPrimary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      category,
+                      style: const TextStyle(
+                        color: kPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
+                // Kind-specific details
                 if (kind == 'drink') _buildDrinkDetails(item),
-                if (kind == 'food') _buildFoodDetails(item),
+                // 🟢 'food' AND 'combo' items both use the food-style
+                // note/extraNote layout, so combo orders (like the
+                // "Buger combo" items in your sample data) now render their
+                // details instead of showing nothing.
+                if (kind == 'food' || kind == 'combo') _buildFoodDetails(item),
+
+                // 🟢 Menu choices (e.g. size/spice level) and add-ons now
+                // apply to EVERY kind — your sample shows a drink item
+                // ("Cappuccino") carrying both menuChoices and
+                // additionalOptions, which the old code never rendered.
+                _buildMenuChoices(item),
+                _buildAdditionalOptions(item),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // 🟢 Resolves each menuChoices entry (groupId -> selected value) against
+  // the `menu_choices` collection to show a readable heading, e.g.
+  // "Size: Large" instead of a raw document ID with no label.
+  Widget _buildMenuChoices(Map<String, dynamic> item) {
+    final Map<String, dynamic> choices = Map<String, dynamic>.from(
+      item['menuChoices'] ?? {},
+    );
+    if (choices.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: FutureBuilder<List<DocumentSnapshot>>(
+        future: Future.wait(
+          choices.keys.map(
+            (id) => FirebaseFirestore.instance
+                .collection('menu_choices')
+                .doc(id)
+                .get(),
+          ),
+        ),
+        builder: (context, snap) {
+          final headings = <String, String>{};
+          if (snap.hasData) {
+            for (final doc in snap.data!) {
+              if (doc.exists) {
+                final data = doc.data() as Map<String, dynamic>? ?? {};
+                headings[doc.id] = (data['heading'] as String?) ?? '';
+              }
+            }
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: choices.entries.map((e) {
+              final label = headings[e.key];
+              final display = (label != null && label.isNotEmpty)
+                  ? '$label: ${e.value}'
+                  : '${e.value}';
+              return Text(
+                '• $display',
+                style: const TextStyle(color: kMuted, fontSize: 12),
+              );
+            }).toList(),
+          );
+        },
+      ),
+    );
+  }
+
+  // 🟢 Additional options / add-ons, now shown for every item kind
+  // (previously only rendered inside the food-only details block, so
+  // drink add-ons like "extra" on a Cappuccino never appeared).
+  Widget _buildAdditionalOptions(Map<String, dynamic> item) {
+    final List<dynamic> additionalOptions = item['additionalOptions'] ?? [];
+    if (additionalOptions.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Add-ons:',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: kPrimary,
+            ),
+          ),
+          ...additionalOptions.map((addon) {
+            final addonMap = addon as Map<String, dynamic>? ?? {};
+            final String addonName = (addonMap['name'] ?? '').toString();
+            final num addonPrice = addonMap['price'] ?? 0;
+            final String catalog = (addonMap['catalog'] ?? '').toString();
+            final label = catalog.isNotEmpty
+                ? '$addonName ($catalog)'
+                : addonName;
+            return Text(
+              '- $label (+CHF ${addonPrice.toStringAsFixed(2)})',
+              style: const TextStyle(color: kMuted, fontSize: 12),
+            );
+          }),
         ],
       ),
     );
@@ -595,7 +725,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
   Widget _buildFoodDetails(Map<String, dynamic> item) {
     final String note = item['note'] ?? '';
     final String extraNote = item['extraNote'] ?? '';
-    final List<dynamic> additionalOptions = item['additionalOptions'] ?? [];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -610,26 +739,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
             'Extra: $extraNote',
             style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
           ),
-
-        if (additionalOptions.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          const Text(
-            'Add-ons:',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-              color: kPrimary,
-            ),
-          ),
-          ...additionalOptions.map((addon) {
-            final String addonName = addon['name'] ?? '';
-            final num addonPrice = addon['price'] ?? 0;
-            return Text(
-              '- $addonName (+RM $addonPrice)',
-              style: const TextStyle(color: kMuted, fontSize: 12),
-            );
-          }).toList(),
-        ],
       ],
     );
   }

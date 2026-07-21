@@ -57,6 +57,11 @@ class _AddMenuPageState extends State<AddMenuPage> {
 
   String _itemType = 'food'; // 'food' or 'drink'
 
+  // 🟢 Discount state
+  bool _hasDiscount = false;
+  String _discountType = 'percent'; // 'percent' or 'amount'
+  final _discountValue = TextEditingController();
+
   List<Map<String, dynamic>> _allAvailableChoices = [];
   List<Map<String, dynamic>> _selectedMenuChoices = [];
   String? _dropdownChoiceValue;
@@ -75,6 +80,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
     _name.dispose();
     _note.dispose();
     _price.dispose();
+    _discountValue.dispose();
     for (var opt in _additionalOptions) {
       opt.dispose();
     }
@@ -159,6 +165,18 @@ class _AddMenuPageState extends State<AddMenuPage> {
       if (_selectedCategory == null) throw Exception('Select a category.');
       if (_imgBytes == null) throw Exception('Pick an image.');
 
+      // 🟢 Validate discount value if discount is enabled
+      double discountValue = 0;
+      if (_hasDiscount) {
+        discountValue = double.tryParse(_discountValue.text.trim()) ?? 0;
+        if (discountValue <= 0) {
+          throw Exception('Enter a valid discount value');
+        }
+        if (_discountType == 'percent' && discountValue > 100) {
+          throw Exception('Discount percent cannot exceed 100');
+        }
+      }
+
       // 🟢 Serialize Additional Options
       List<Map<String, dynamic>> optionsData = _additionalOptions.map((opt) {
         return {
@@ -196,6 +214,10 @@ class _AddMenuPageState extends State<AddMenuPage> {
         'additionalOptions': optionsData, // 🟢 Saved with isOptional
         'status': 'on',
         'itemType': _itemType,
+        // 🟢 Discount fields
+        'hasDiscount': _hasDiscount,
+        'discountType': _hasDiscount ? _discountType : null,
+        'discountValue': _hasDiscount ? discountValue : 0,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -217,6 +239,9 @@ class _AddMenuPageState extends State<AddMenuPage> {
         _selectedCategoryIconUrl = null;
         _selectedMenuChoices.clear();
         _dropdownChoiceValue = null;
+        _hasDiscount = false;
+        _discountType = 'percent';
+        _discountValue.clear();
         for (var opt in _additionalOptions) {
           opt.dispose();
         }
@@ -305,6 +330,85 @@ class _AddMenuPageState extends State<AddMenuPage> {
                     decimal: true,
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Discount ────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kFieldBg.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _hasDiscount
+                    ? kPrimary.withOpacity(0.5)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: kPrimary,
+                  title: const Text(
+                    'Apply Discount',
+                    style: TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Offer a discount on this item',
+                    style: TextStyle(color: kMuted, fontSize: 12),
+                  ),
+                  value: _hasDiscount,
+                  onChanged: (val) => setState(() => _hasDiscount = val),
+                ),
+                if (_hasDiscount) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Percent %',
+                            style: TextStyle(color: kWhite, fontSize: 13),
+                          ),
+                          value: 'percent',
+                          groupValue: _discountType,
+                          activeColor: kPrimary,
+                          onChanged: (v) => setState(() => _discountType = v!),
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Fixed Amount',
+                            style: TextStyle(color: kWhite, fontSize: 13),
+                          ),
+                          value: 'amount',
+                          groupValue: _discountType,
+                          activeColor: kPrimary,
+                          onChanged: (v) => setState(() => _discountType = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _input(
+                    label: _discountType == 'percent'
+                        ? 'Discount %'
+                        : 'Discount Amount',
+                    controller: _discountValue,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -550,9 +654,17 @@ class _AddMenuPageState extends State<AddMenuPage> {
                     builder: (context, snap) {
                       if (!snap.hasData) return const LinearProgressIndicator();
                       final names = snap.data!.docs.map((d) => d.id).toList();
+
+                      // 🟢 Same safety check as the Edit page, in case a
+                      // previously-selected category no longer exists.
+                      final String? safeValue =
+                          names.contains(_selectedCategory)
+                          ? _selectedCategory
+                          : null;
+
                       return DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: _selectedCategory,
+                          value: safeValue,
                           isExpanded: true,
                           dropdownColor: kFieldBg,
                           hint: const Text(

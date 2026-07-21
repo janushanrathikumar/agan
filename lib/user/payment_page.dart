@@ -76,7 +76,7 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isSubmitting = false;
 
   // 🟢 2 டேட்டாபேஸ்களிலும் ஆர்டரை சேமிக்கும் லாஜிக்
- Future<void> _submitOrder(
+  Future<void> _submitOrder(
     double total,
     Map<String, dynamic> deliveryData,
     List<QueryDocumentSnapshot> cartDocs,
@@ -107,24 +107,49 @@ class _PaymentPageState extends State<PaymentPage> {
         if (counterSnap.exists && counterSnap.data()!.containsKey('lastId')) {
           nextIdNumber = (counterSnap.data()!['lastId'] as int) + 1;
         }
-        transaction.set(counterRef, {'lastId': nextIdNumber}, SetOptions(merge: true));
+        transaction.set(counterRef, {
+          'lastId': nextIdNumber,
+        }, SetOptions(merge: true));
       });
 
       String customOrderId = 'A$nextIdNumber';
 
-      // 2. Prepare items list
+      // 🟢 2. Prepare items list — now matches the full order item format:
+      // name, price, qty, kind, imageUrl, category, note, extraNote,
+      // additionalOptions, menuChoices, timestamp, and (for drinks) type/sugar.
+      // Previously `category`, `extraNote`, per-item `timestamp`, and the
+      // drink `type`/`sugar` fields were silently dropped when the cart item
+      // was copied into the order, so the Admin Order page and My Orders
+      // page couldn't display them even though the UI code expects them.
       final itemsList = cartDocs.map((d) {
         final m = d.data() as Map<String, dynamic>;
-        return {
+        final kind = (m['kind'] as String?) ?? 'food';
+
+        final itemMap = <String, dynamic>{
           'name': m['name'] ?? 'Item',
           'price': (m['price'] as num?)?.toDouble() ?? 0.0,
           'qty': (m['qty'] as num?)?.toInt() ?? 1,
-          'kind': m['kind'] ?? 'food',
+          'kind': kind,
           'imageUrl': m['imageUrl'] ?? '',
+          'category': m['category'] ?? '',
           'note': m['note'] ?? '',
+          'extraNote': m['extraNote'],
           'additionalOptions': m['additionalOptions'] ?? [],
           'menuChoices': m['menuChoices'] ?? {},
+          // Firestore doesn't allow FieldValue.serverTimestamp() inside an
+          // array, so fall back to the cart item's own createdAt, or the
+          // current client time if that's missing.
+          'timestamp': (m['createdAt'] is Timestamp)
+              ? m['createdAt']
+              : Timestamp.now(),
         };
+
+        if (kind == 'drink') {
+          itemMap['type'] = m['type'] ?? '';
+          itemMap['sugar'] = m['sugar'] ?? '';
+        }
+
+        return itemMap;
       }).toList();
 
       // 3. Prepare Secondary DB structure (BillOrder)
@@ -142,7 +167,7 @@ class _PaymentPageState extends State<PaymentPage> {
           'comment': m['note'],
           'hotelId': 'jKuRDFBYEfDUzLdROtoM', // Ensure this matches your DB
           'userId': user.uid,
-          'options': m['additionalOptions'], 
+          'options': m['additionalOptions'],
         };
       }).toList();
 
@@ -160,7 +185,9 @@ class _PaymentPageState extends State<PaymentPage> {
         'userId': user.uid,
         'timestamp': FieldValue.serverTimestamp(),
         'Accept_time': FieldValue.serverTimestamp(), // Added as requested
-        'delivery_time': DateTime.now().add(const Duration(minutes: 60)), // Default 1 hour
+        'delivery_time': DateTime.now().add(
+          const Duration(minutes: 60),
+        ), // Default 1 hour
         'liftOption': 'no_floors_lift_in', // Added as per your structure
         'additionalLiftCharge': 0,
         'shippingAddress': {
@@ -168,16 +195,21 @@ class _PaymentPageState extends State<PaymentPage> {
           'name': user.displayName ?? 'Customer',
           'mobile': deliveryData['phone'] ?? '000000',
           'country': 'Switzerland',
-        }
+        },
       };
 
-      // 4. Save to databases
+      // 🟢 4. Save to databases — order doc now also stores delivery_method
+      // and table_no directly on the order (matching your sample data),
+      // instead of only living in the separate `food_delivery` collection.
       await Future.wait([
         firestore1.collection('orders').doc(customOrderId).set({
           'order_id': customOrderId,
           'uid': user.uid,
           'total': finalTotal,
           'items': itemsList,
+          'status': 'New',
+          'delivery_method': deliveryData['delivery_method'] ?? 'Take_Away',
+          'table_no': (deliveryData['table_no'] ?? '').toString(),
           'timestamp': FieldValue.serverTimestamp(),
         }),
         firestore2.collection('BillOrder').doc(customOrderId).set(orderData2),
@@ -194,10 +226,19 @@ class _PaymentPageState extends State<PaymentPage> {
       }
     } catch (e) {
       debugPrint('Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Order failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final deliveryRef = FirebaseFirestore.instance
@@ -386,7 +427,8 @@ class _PaymentPageState extends State<PaymentPage> {
                                           ],
                                           const SizedBox(height: 8),
                                           Text(
-                                            '${qty}x RM ${price.toStringAsFixed(2)}',
+                                            // 🟢 RM -> CHF
+                                            '${qty}x CHF ${price.toStringAsFixed(2)}',
                                             style: const TextStyle(
                                               color: kMuted,
                                               fontSize: 13,
@@ -400,7 +442,8 @@ class _PaymentPageState extends State<PaymentPage> {
                                           CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          'RM ${(price * qty).toStringAsFixed(2)}',
+                                          // 🟢 RM -> CHF
+                                          'CHF ${(price * qty).toStringAsFixed(2)}',
                                           style: const TextStyle(
                                             color: kWhite,
                                             fontWeight: FontWeight.bold,
@@ -452,7 +495,8 @@ class _PaymentPageState extends State<PaymentPage> {
                               style: TextStyle(color: kMuted, fontSize: 13),
                             ),
                             Text(
-                              "RM ${total.toStringAsFixed(2)}",
+                              // 🟢 RM -> CHF
+                              "CHF ${total.toStringAsFixed(2)}",
                               style: const TextStyle(
                                 color: kWhite,
                                 fontSize: 20,
