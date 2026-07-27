@@ -1,18 +1,28 @@
 // lib/home/choice_dialog.dart
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+const kPrimary = Color(0xFFB59410);
+const kWhite = Color(0xFFFFFFFF);
+const kMuted = Color(0xFFB7B7B6);
+const kFieldBg = Color(0xFF383735);
+const kDialogBg = Color(0xFF333230);
 
 class ChoiceDialog extends StatefulWidget {
   final String? docId;
   final String? existingHeading;
   final List<String>? existingOptions;
+  // 🟢 New — Food/Drink tag for this choice group (e.g. "Spice Level" only
+  // makes sense for Food, "Sugar Level" only for Drink). Null means "new
+  // group, not set yet" and defaults to 'food' below.
+  final String? existingType;
 
   const ChoiceDialog({
     super.key,
     this.docId,
     this.existingHeading,
     this.existingOptions,
+    this.existingType,
   });
 
   @override
@@ -20,258 +30,303 @@ class ChoiceDialog extends StatefulWidget {
 }
 
 class _ChoiceDialogState extends State<ChoiceDialog> {
-  final _headingController = TextEditingController();
-  List<TextEditingController> _optionControllers = [];
-  bool _isLoading = false;
+  late final TextEditingController _headingCtrl;
+  late List<TextEditingController> _optionCtrls;
+  // 🟢 Food/Drink state, seeded from existingType when editing.
+  late String _selectedType;
+
+  bool _saving = false;
+  String? _err;
 
   @override
   void initState() {
     super.initState();
-    // If Editing, preload old data strings into active states
-    if (widget.existingHeading != null) {
-      _headingController.text = widget.existingHeading!;
-    }
-    if (widget.existingOptions != null && widget.existingOptions!.isNotEmpty) {
-      for (var opt in widget.existingOptions!) {
-        _optionControllers.add(TextEditingController(text: opt));
-      }
-    } else {
-      // Default to 1 empty option box on initial display
-      _optionControllers.add(TextEditingController());
-    }
+    _headingCtrl = TextEditingController(text: widget.existingHeading ?? '');
+
+    final opts = widget.existingOptions ?? [];
+    _optionCtrls = opts.isEmpty
+        ? [TextEditingController()]
+        : opts.map((o) => TextEditingController(text: o)).toList();
+
+    _selectedType = widget.existingType ?? 'food';
   }
 
   @override
   void dispose() {
-    _headingController.dispose();
-    for (var controller in _optionControllers) {
-      controller.dispose();
+    _headingCtrl.dispose();
+    for (final c in _optionCtrls) {
+      c.dispose();
     }
     super.dispose();
   }
 
-  void _addNewOptionField() {
-    setState(() {
-      _optionControllers.add(TextEditingController());
-    });
+  void _addOptionField() {
+    setState(() => _optionCtrls.add(TextEditingController()));
   }
 
   void _removeOptionField(int index) {
-    if (_optionControllers.length > 1) {
-      setState(() {
-        _optionControllers[index].dispose();
-        _optionControllers.removeAt(index);
-      });
-    }
+    if (_optionCtrls.length <= 1) return; // always keep at least one row
+    setState(() {
+      _optionCtrls[index].dispose();
+      _optionCtrls.removeAt(index);
+    });
   }
 
-  // Save changes to cloud server collection infrastructure
-  Future<void> _saveChoiceGroup() async {
-    if (_headingController.text.trim().isEmpty) return;
-
-    setState(() => _isLoading = true);
-
-    // Extract strings out from separate controllers, discarding empty entries safely
-    List<String> optionsList = _optionControllers
+  Future<void> _save() async {
+    final heading = _headingCtrl.text.trim();
+    final options = _optionCtrls
         .map((c) => c.text.trim())
-        .where((text) => text.isNotEmpty)
+        .where((t) => t.isNotEmpty)
         .toList();
 
-    final payload = {
-      'heading': _headingController.text.trim(),
-      'options': optionsList,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-
-    if (widget.docId != null) {
-      // Update target entry
-      await FirebaseFirestore.instance
-          .collection('menu_choices')
-          .doc(widget.docId)
-          .update(payload);
-    } else {
-      // Create new fresh entry
-      await FirebaseFirestore.instance.collection('menu_choices').add(payload);
+    if (heading.isEmpty) {
+      setState(() => _err = 'Heading is required');
+      return;
+    }
+    if (options.isEmpty) {
+      setState(() => _err = 'Add at least one option');
+      return;
     }
 
-    if (mounted) Navigator.pop(context);
+    setState(() {
+      _saving = true;
+      _err = null;
+    });
+
+    try {
+      final data = <String, dynamic>{
+        'heading': heading,
+        'options': options,
+        // 🟢 Saved so add_menu_item.dart's Menu Choices dropdown can
+        // filter to only Food or only Drink choice groups.
+        'type': _selectedType,
+      };
+
+      if (widget.docId == null) {
+        // New group
+        data['createdAt'] = FieldValue.serverTimestamp();
+        await FirebaseFirestore.instance.collection('menu_choices').add(data);
+      } else {
+        // Editing an existing group — merge so createdAt isn't lost.
+        await FirebaseFirestore.instance
+            .collection('menu_choices')
+            .doc(widget.docId)
+            .set(data, SetOptions(merge: true));
+      }
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) setState(() => _err = 'Save failed: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 🟢 STANDARD THEME EXTRACTION: Read colors globally from main.dart
-    final colorScheme = Theme.of(context).colorScheme;
+    final isEditing = widget.docId != null;
 
     return Dialog(
-      backgroundColor: colorScheme.surface,
-      surfaceTintColor: Colors.transparent, // Prevents unwanted Material 3 color shifting
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        width: 400, // Balanced form modal sizing constraint
-        child: _isLoading
-            ? SizedBox(
-                height: 200,
-                child: Center(
-                  child: CircularProgressIndicator(color: colorScheme.primary),
+      backgroundColor: kDialogBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isEditing ? 'Edit Menu Choice' : 'Add Menu Choice',
+                style: const TextStyle(
+                  color: kWhite,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
-              )
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              const SizedBox(height: 16),
+
+              // 🟢 Food / Drink / Combo selector
+              Container(
+                decoration: BoxDecoration(
+                  color: kFieldBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kPrimary.withOpacity(0.4)),
+                ),
+                child: Row(
                   children: [
-                    Text(
-                      widget.docId != null
-                          ? "Edit Menu Choice"
-                          : "Add Menu Choice",
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Choice Heading Text Area input field
-                    TextField(
-                      controller: _headingController,
-                      style: TextStyle(color: colorScheme.onSurface),
-                      decoration: InputDecoration(
-                        labelText: "Choice Heading (e.g. Select a Drink)",
-                        labelStyle: TextStyle(color: colorScheme.outline),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: colorScheme.outline.withOpacity(0.5)),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Dynamic list containing sub-option entries
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxHeight: 250,
-                      ), // Prevent overflowing boundaries
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _optionControllers.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12.0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _optionControllers[index],
-                                    style: TextStyle(
-                                      color: colorScheme.onSurface,
-                                      fontSize: 15,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: "Option ${index + 1}",
-                                      hintStyle: TextStyle(
-                                        color: colorScheme.outline.withOpacity(0.6),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete_outline,
-                                    color: colorScheme.error.withOpacity(0.8),
-                                  ),
-                                  tooltip: "Remove Option",
-                                  onPressed: () => _removeOptionField(index),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    // Add Option Action Link trigger
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: _addNewOptionField,
-                        icon: Icon(
-                          Icons.add_circle_outline,
-                          color: colorScheme.primary,
-                          size: 20,
-                        ),
-                        label: Text(
-                          "Add Option",
+                    Expanded(
+                      child: RadioListTile<String>(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        title: const Text(
+                          'Food',
                           style: TextStyle(
-                            color: colorScheme.primary,
+                            color: kWhite,
                             fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                         ),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                        ),
+                        value: 'food',
+                        groupValue: _selectedType,
+                        activeColor: kPrimary,
+                        onChanged: (v) => setState(() => _selectedType = v!),
                       ),
                     ),
-                    const SizedBox(height: 24),
-
-                    // Lower Confirmation / Cancellation Row panel
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: Text(
-                            "Cancel",
-                            style: TextStyle(
-                              color: colorScheme.outline,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    Container(
+                      width: 1,
+                      height: 36,
+                      color: kMuted.withOpacity(0.3),
+                    ),
+                    Expanded(
+                      child: RadioListTile<String>(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        title: const Text(
+                          'Drink',
+                          style: TextStyle(
+                            color: kWhite,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        FilledButton(
-                          onPressed: _saveChoiceGroup,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: colorScheme.primary,
-                            foregroundColor: colorScheme.onPrimary,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 14,
-                            ),
-                          ),
-                          child: const Text(
-                            "Save Choice",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
+                        value: 'drink',
+                        groupValue: _selectedType,
+                        activeColor: kPrimary,
+                        onChanged: (v) => setState(() => _selectedType = v!),
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 36,
+                      color: kMuted.withOpacity(0.3),
+                    ),
+                    Expanded(
+                      child: RadioListTile<String>(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        title: const Text(
+                          'Combo',
+                          style: TextStyle(
+                            color: kWhite,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                         ),
-                      ],
+                        value: 'combo',
+                        groupValue: _selectedType,
+                        activeColor: kPrimary,
+                        onChanged: (v) => setState(() => _selectedType = v!),
+                      ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Heading field
+              TextField(
+                controller: _headingCtrl,
+                style: const TextStyle(color: kWhite),
+                decoration: InputDecoration(
+                  labelText: 'Heading (e.g. Size, Spice Level, Sugar Level)',
+                  labelStyle: const TextStyle(color: kMuted),
+                  filled: true,
+                  fillColor: kFieldBg,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Options',
+                    style: TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle, color: kPrimary),
+                    onPressed: _addOptionField,
+                  ),
+                ],
+              ),
+              ..._optionCtrls.asMap().entries.map((entry) {
+                final index = entry.key;
+                final ctrl = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: ctrl,
+                          style: const TextStyle(color: kWhite),
+                          decoration: InputDecoration(
+                            hintText: 'Option ${index + 1}',
+                            hintStyle: const TextStyle(color: kMuted),
+                            filled: true,
+                            fillColor: kFieldBg,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          color: Colors.redAccent,
+                        ),
+                        onPressed: _optionCtrls.length > 1
+                            ? () => _removeOptionField(index)
+                            : null,
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              if (_err != null) ...[
+                const SizedBox(height: 8),
+                Text(_err!, style: const TextStyle(color: Colors.redAccent)),
+              ],
+
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _saving ? null : () => Navigator.pop(context),
+                    child: const Text('Cancel', style: TextStyle(color: kMuted)),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: kPrimary),
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: kWhite,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(isEditing ? 'Save Changes' : 'Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

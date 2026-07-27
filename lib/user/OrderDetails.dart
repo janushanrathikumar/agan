@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // --- Palette ---
-const kPrimary = Color(0xFFA26334);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
 const kWhite = Color(0xFFFFFFFF);
@@ -136,6 +136,16 @@ class MyOrdersPage extends StatelessWidget {
               final method = data['delivery_method'] ?? 'Take_Away';
               final tableNo = data['table_no'] ?? 'N/A';
 
+              // 🟢 Charges breakdown — subtotal / service_charge /
+              // service_charge_rate are now saved on the order doc by
+              // payment_page.dart. Older orders placed before this change
+              // won't have them, so fall back to treating the whole total
+              // as the subtotal with a 0% service charge.
+              final num subtotal = (data['subtotal'] as num?) ?? total;
+              final num serviceCharge = (data['service_charge'] as num?) ?? 0;
+              final num serviceChargeRate =
+                  (data['service_charge_rate'] as num?) ?? 0;
+
               final timestamp = data['timestamp'] as Timestamp?;
               final dateStr = timestamp != null
                   ? _formatDateTime(timestamp.toDate())
@@ -214,7 +224,7 @@ class MyOrdersPage extends StatelessWidget {
                       const Divider(color: kMuted, thickness: 0.2),
                       const SizedBox(height: 10),
 
-                      // Delivery Details Rows
+                      // Delivery Details Row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -222,6 +232,24 @@ class MyOrdersPage extends StatelessWidget {
                           if (method.toLowerCase() != 'take_away' &&
                               tableNo != 'no')
                             _detailColumn('Table No', tableNo),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 🟢 Charges breakdown row — Subtotal, Service Charge
+                      // (labeled with the actual rate applied, e.g. 8.1%
+                      // for dine-in / 2.6% for take-away), then the Total.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _detailColumn(
+                            'Subtotal',
+                            'CHF ${subtotal.toStringAsFixed(2)}',
+                          ),
+                          _detailColumn(
+                            'Service Charge (${_methodLabel(method)} • ${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
+                            'CHF ${serviceCharge.toStringAsFixed(2)}',
+                          ),
                           _detailColumn(
                             'Total',
                             'CHF ${total.toStringAsFixed(2)}',
@@ -391,6 +419,13 @@ class MyOrdersPage extends StatelessWidget {
         },
       ),
     );
+  }
+
+  // 🟢 Human-readable label for the delivery method, used to make the
+  // service-charge line self-explanatory (e.g. "Service Charge (Dine-In •
+  // 8.1%)") instead of just showing a bare percentage.
+  String _methodLabel(String method) {
+    return method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
   }
 
   Widget _detailColumn(String label, String value, {bool isHighlight = false}) {

@@ -14,7 +14,8 @@ import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
 // --- Your Exact Color Constants ---
-const kPrimary = Color(0xFFA26334);
+//const kPrimary = Color(0xFFA26334);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kWhite = Color(0xFFFFFFFF);
 const kMuted = Color(0xFFB7B7B6);
@@ -121,6 +122,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
         docId: choiceData['id'],
         existingHeading: choiceData['heading'] ?? '',
         existingOptions: List<String>.from(choiceData['options'] ?? []),
+        existingType: (choiceData['type'] as String?) ?? 'food',
       ),
     ).then((_) => _fetchAvailableMenuChoices());
   }
@@ -278,33 +280,80 @@ class _AddMenuPageState extends State<AddMenuPage> {
               children: [
                 Expanded(
                   child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: const Text(
                       'Food',
                       style: TextStyle(
                         color: kWhite,
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
                     value: 'food',
                     groupValue: _itemType,
                     activeColor: kPrimary,
-                    onChanged: (val) => setState(() => _itemType = val!),
+                    // 🟢 Categories and menu choices are now type-specific
+                    // (Food/Drink/Combo), so a selection picked under one
+                    // type is no longer valid after switching — clear it
+                    // instead of silently keeping a mismatched selection.
+                    onChanged: (val) => setState(() {
+                      _itemType = val!;
+                      _selectedCategory = null;
+                      _selectedCategoryIconUrl = null;
+                      _selectedMenuChoices.clear();
+                      _dropdownChoiceValue = null;
+                    }),
                   ),
                 ),
                 Container(width: 1, height: 40, color: kMuted.withOpacity(0.3)),
                 Expanded(
                   child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: const Text(
                       'Drink',
                       style: TextStyle(
                         color: kWhite,
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
                     value: 'drink',
                     groupValue: _itemType,
                     activeColor: kPrimary,
-                    onChanged: (val) => setState(() => _itemType = val!),
+                    onChanged: (val) => setState(() {
+                      _itemType = val!;
+                      _selectedCategory = null;
+                      _selectedCategoryIconUrl = null;
+                      _selectedMenuChoices.clear();
+                      _dropdownChoiceValue = null;
+                    }),
+                  ),
+                ),
+                Container(width: 1, height: 40, color: kMuted.withOpacity(0.3)),
+                Expanded(
+                  child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: const Text(
+                      'Combo',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    value: 'combo',
+                    groupValue: _itemType,
+                    activeColor: kPrimary,
+                    onChanged: (val) => setState(() {
+                      _itemType = val!;
+                      _selectedCategory = null;
+                      _selectedCategoryIconUrl = null;
+                      _selectedMenuChoices.clear();
+                      _dropdownChoiceValue = null;
+                    }),
                   ),
                 ),
               ],
@@ -431,41 +480,57 @@ class _AddMenuPageState extends State<AddMenuPage> {
               border: Border.all(color: kMuted.withOpacity(0.3)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _dropdownChoiceValue,
-                isExpanded: true,
-                dropdownColor: kFieldBg,
-                icon: const Icon(Icons.arrow_drop_down, color: kWhite),
-                hint: const Text(
-                  'Select Menu Choice',
-                  style: TextStyle(color: kMuted),
-                ),
-                items: _allAvailableChoices
-                    .map(
-                      (choice) => DropdownMenuItem<String>(
-                        value: choice['id'],
-                        child: Text(
-                          choice['heading'] ?? 'Unnamed',
-                          style: const TextStyle(color: kWhite),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (newId) {
-                  if (newId != null &&
-                      !_selectedMenuChoices.any((c) => c['id'] == newId)) {
-                    setState(() {
-                      _selectedMenuChoices.add(
-                        _allAvailableChoices.firstWhere(
-                          (c) => c['id'] == newId,
-                        ),
-                      );
-                      _dropdownChoiceValue = null;
-                    });
-                  }
-                },
-              ),
+            // 🟢 Choice groups (e.g. "Spice Level", "Sugar Level") now
+            // carry a Food/Drink `type` too, saved by choice_dialog.dart.
+            // This filters the dropdown to only the groups matching the
+            // currently selected _itemType, same as the category filter
+            // below. Groups without a `type` field yet default to 'food'.
+            child: Builder(
+              builder: (context) {
+                final matchingChoices = _allAvailableChoices.where((choice) {
+                  final choiceType = (choice['type'] as String?) ?? 'food';
+                  return choiceType == _itemType;
+                }).toList();
+
+                return DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _dropdownChoiceValue,
+                    isExpanded: true,
+                    dropdownColor: kFieldBg,
+                    icon: const Icon(Icons.arrow_drop_down, color: kWhite),
+                    hint: Text(
+                      matchingChoices.isEmpty
+                          ? 'No ${_typeLabel(_itemType)} menu choices yet'
+                          : 'Select Menu Choice',
+                      style: const TextStyle(color: kMuted),
+                    ),
+                    items: matchingChoices
+                        .map(
+                          (choice) => DropdownMenuItem<String>(
+                            value: choice['id'],
+                            child: Text(
+                              choice['heading'] ?? 'Unnamed',
+                              style: const TextStyle(color: kWhite),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (newId) {
+                      if (newId != null &&
+                          !_selectedMenuChoices.any((c) => c['id'] == newId)) {
+                        setState(() {
+                          _selectedMenuChoices.add(
+                            _allAvailableChoices.firstWhere(
+                              (c) => c['id'] == newId,
+                            ),
+                          );
+                          _dropdownChoiceValue = null;
+                        });
+                      }
+                    },
+                  ),
+                );
+              },
             ),
           ),
           const SizedBox(height: 12),
@@ -647,29 +712,55 @@ class _AddMenuPageState extends State<AddMenuPage> {
                     horizontal: 16,
                     vertical: 4,
                   ),
+                  // 🟢 Categories now come tagged with a Food/Drink `type`
+                  // (see add_category.dart). This dropdown filters to only
+                  // the categories matching the currently selected
+                  // _itemType, so a "Drinks" category can't accidentally
+                  // get attached to a food item or vice versa. Categories
+                  // saved before this change (no `type` field) default to
+                  // 'food' so they don't just disappear.
                   child: StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('menu_category')
                         .snapshots(),
                     builder: (context, snap) {
                       if (!snap.hasData) return const LinearProgressIndicator();
-                      final names = snap.data!.docs.map((d) => d.id).toList();
 
-                      // 🟢 Same safety check as the Edit page, in case a
-                      // previously-selected category no longer exists.
+                      final allDocs = snap.data!.docs;
+                      final matchingDocs = allDocs.where((d) {
+                        final data = d.data() as Map<String, dynamic>? ?? {};
+                        final catType = (data['type'] as String?) ?? 'food';
+                        return catType == _itemType;
+                      }).toList();
+
+                      final names = matchingDocs.map((d) => d.id).toList();
+
+                      // Same safety check as before, in case a
+                      // previously-selected category no longer exists or
+                      // no longer matches the selected item type.
                       final String? safeValue =
                           names.contains(_selectedCategory)
                           ? _selectedCategory
                           : null;
+
+                      if (names.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            'No ${_typeLabel(_itemType)} categories yet — add one first.',
+                            style: const TextStyle(color: kMuted),
+                          ),
+                        );
+                      }
 
                       return DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: safeValue,
                           isExpanded: true,
                           dropdownColor: kFieldBg,
-                          hint: const Text(
-                            'Menu Category',
-                            style: TextStyle(color: kMuted),
+                          hint: Text(
+                            '${_typeLabel(_itemType)} Category',
+                            style: const TextStyle(color: kMuted),
                           ),
                           items: names
                               .map(
@@ -682,8 +773,24 @@ class _AddMenuPageState extends State<AddMenuPage> {
                                 ),
                               )
                               .toList(),
-                          onChanged: (v) =>
-                              setState(() => _selectedCategory = v),
+                          // 🟢 Fix: previously this only set
+                          // `_selectedCategory` and NEVER set
+                          // `_selectedCategoryIconUrl`, so every menu item
+                          // saved `categoryIconUrl: null` regardless of
+                          // which category was picked. Now it's looked up
+                          // from the matching category doc.
+                          onChanged: (v) {
+                            final match = matchingDocs.firstWhere(
+                              (d) => d.id == v,
+                            );
+                            final matchData =
+                                match.data() as Map<String, dynamic>? ?? {};
+                            setState(() {
+                              _selectedCategory = v;
+                              _selectedCategoryIconUrl =
+                                  matchData['iconUrl'] as String?;
+                            });
+                          },
                         ),
                       );
                     },
@@ -780,6 +887,14 @@ class _AddMenuPageState extends State<AddMenuPage> {
   }
 
   // ── Input Widgets ─────────────────────────────────────────────────────
+
+  // 🟢 Human-readable label for the item type, used in dropdown hints and
+  // empty states across Food / Drink / Combo.
+  String _typeLabel(String type) {
+    if (type == 'drink') return 'Drink';
+    if (type == 'combo') return 'Combo';
+    return 'Food';
+  }
 
   Widget _input({
     required String label,

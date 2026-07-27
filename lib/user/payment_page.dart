@@ -9,7 +9,7 @@ import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
 // --- Palette ---
-const kPrimary = Color(0xFFA26334);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
 const kWhite = Color(0xFFFFFFFF);
@@ -154,9 +154,17 @@ class _PaymentPageState extends State<PaymentPage> {
 
       // 3. Prepare Secondary DB structure (BillOrder)
       // Calculating charges
+      // 🟢 Service charge now depends on order type instead of a flat rate:
+      // Take-away = 2.6%, Dine-in = 8.1%.
+      final String orderDeliveryMethod =
+          (deliveryData['delivery_method'] as String?) ?? 'Take_Away';
+      final double serviceChargeRate = orderDeliveryMethod == 'Take_Away'
+          ? 0.026
+          : 0.081;
+
       double subTotal = total;
       double deliveryFee = 0.0; // Change if you have a delivery fee logic
-      double serviceCharge = subTotal * 0.045; // Example: 4.5% service charge
+      double serviceCharge = subTotal * serviceChargeRate;
       double finalTotal = subTotal + deliveryFee + serviceCharge;
 
       final List<Map<String, dynamic>> cartItemsForDb2 = itemsList.map((m) {
@@ -181,6 +189,7 @@ class _PaymentPageState extends State<PaymentPage> {
         'subTotal': subTotal,
         'deliveryFee': deliveryFee,
         'serviceCharge': serviceCharge,
+        'serviceChargeRate': serviceChargeRate,
         'total': finalTotal,
         'userId': user.uid,
         'timestamp': FieldValue.serverTimestamp(),
@@ -201,10 +210,16 @@ class _PaymentPageState extends State<PaymentPage> {
       // 🟢 4. Save to databases — order doc now also stores delivery_method
       // and table_no directly on the order (matching your sample data),
       // instead of only living in the separate `food_delivery` collection.
+      // 🟢 subtotal / service_charge / service_charge_rate are now saved
+      // here too, so the Admin Order page and the PDF bill can both read
+      // and display the breakdown instead of only the final total.
       await Future.wait([
         firestore1.collection('orders').doc(customOrderId).set({
           'order_id': customOrderId,
           'uid': user.uid,
+          'subtotal': subTotal,
+          'service_charge': serviceCharge,
+          'service_charge_rate': serviceChargeRate,
           'total': finalTotal,
           'items': itemsList,
           'status': 'New',
@@ -215,14 +230,95 @@ class _PaymentPageState extends State<PaymentPage> {
         firestore2.collection('BillOrder').doc(customOrderId).set(orderData2),
       ]);
 
-      // 5. Cleanup
+      // 5. Cleanup — clear the cart AND the previously selected delivery
+      // method/table. Without this, `food_delivery/{uid}` stays saved
+      // forever, so the next order would silently reuse the old
+      // dine-in table (or take-away choice) instead of asking again.
       final batch = firestore1.batch();
       for (final doc in cartDocs) batch.delete(doc.reference);
+      batch.delete(firestore1.collection('food_delivery').doc(user.uid));
       await batch.commit();
 
+      // 🟢 Actual success dialog — previously this was just a comment
+      // ("... show success dialog ...") with nothing implemented, so
+      // the order saved fine but the user never saw any confirmation.
       if (mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        // ... show success dialog ...
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: const Color(0xFF383735),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: Colors.greenAccent,
+                    size: 48,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Order Placed Successfully!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: kWhite,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Order #$customOrderId',
+                  style: const TextStyle(
+                    color: kPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Total: CHF ${finalTotal.toStringAsFixed(2)}',
+                  style: const TextStyle(color: kMuted, fontSize: 14),
+                ),
+              ],
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: kWhite,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
       }
     } catch (e) {
       debugPrint('Error: $e');
@@ -305,6 +401,16 @@ class _PaymentPageState extends State<PaymentPage> {
                 final q = (m['qty'] as num?)?.toInt() ?? 1;
                 total += p * q;
               }
+
+              // 🟢 Service charge preview (Take-away 2.6% / Dine-in 8.1%),
+              // shown to the user before they confirm, matching what
+              // _submitOrder will actually calculate and save.
+              final double serviceChargeRatePreview = method == 'Take_Away'
+                  ? 0.026
+                  : 0.081;
+              final double serviceChargePreview =
+                  total * serviceChargeRatePreview;
+              final double grandTotalPreview = total + serviceChargePreview;
 
               return Column(
                 children: [
@@ -469,6 +575,41 @@ class _PaymentPageState extends State<PaymentPage> {
                               );
                             },
                           ),
+
+                          const SizedBox(height: 20),
+
+                          // 🟢 Charges breakdown — shows subtotal, the
+                          // method-based service charge, and the grand
+                          // total, matching exactly what gets saved to
+                          // Firestore in _submitOrder.
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF383735),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _chargeRow('Subtotal', total),
+                                const SizedBox(height: 6),
+                                _chargeRow(
+                                  'Service Charge (${_methodLabel(method)} • ${(serviceChargeRatePreview * 100).toStringAsFixed(1)}%)',
+                                  serviceChargePreview,
+                                ),
+                                const Divider(
+                                  color: kMuted,
+                                  height: 20,
+                                  thickness: 0.2,
+                                ),
+                                _chargeRow(
+                                  'Grand Total',
+                                  grandTotalPreview,
+                                  isBold: true,
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -495,8 +636,8 @@ class _PaymentPageState extends State<PaymentPage> {
                               style: TextStyle(color: kMuted, fontSize: 13),
                             ),
                             Text(
-                              // 🟢 RM -> CHF
-                              "CHF ${total.toStringAsFixed(2)}",
+                              // 🟢 RM -> CHF — now includes service charge
+                              "CHF ${grandTotalPreview.toStringAsFixed(2)}",
                               style: const TextStyle(
                                 color: kWhite,
                                 fontSize: 20,
@@ -563,6 +704,38 @@ class _PaymentPageState extends State<PaymentPage> {
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🟢 Human-readable label for the delivery method, used to make the
+  // service-charge line self-explanatory (e.g. "Service Charge (Dine-In •
+  // 8.1%)") instead of just showing a bare percentage.
+  String _methodLabel(String method) {
+    return method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
+  }
+
+  // 🟢 Small helper row for the charges breakdown card.
+  Widget _chargeRow(String label, num value, {bool isBold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isBold ? kWhite : kMuted,
+            fontSize: isBold ? 16 : 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Text(
+          'CHF ${value.toStringAsFixed(2)}',
+          style: TextStyle(
+            color: isBold ? kPrimary : kWhite,
+            fontSize: isBold ? 18 : 14,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ],

@@ -9,9 +9,10 @@ import 'package:restorant/startup page/signupverify.dart'; // Fixed folder space
 import 'package:restorant/startup page/start_page.dart'; // Imported StartPage for back navigation
 import '../language.dart';
 
-const kPrimary = Color(0xFFE49024);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
+//const kPrimary = Color(0xFFFFD700);
 const kWhite = Color(0xFFF7F7F2);
 
 class SignInPage extends StatefulWidget {
@@ -299,8 +300,9 @@ class _SignInPageState extends State<SignInPage> {
                                       icon: Icons.lock_outline_rounded,
                                     ).copyWith(
                                       suffixIcon: IconButton(
-                                        onPressed: () =>
-                                            setState(() => _obscure = !_obscure),
+                                        onPressed: () => setState(
+                                          () => _obscure = !_obscure,
+                                        ),
                                         icon: Icon(
                                           _obscure
                                               ? Icons.visibility
@@ -343,8 +345,8 @@ class _SignInPageState extends State<SignInPage> {
                                             strokeWidth: 2,
                                             valueColor:
                                                 AlwaysStoppedAnimation<Color>(
-                                              kWhite,
-                                            ),
+                                                  kWhite,
+                                                ),
                                           ),
                                         )
                                       : Text(

@@ -7,7 +7,7 @@ import 'package:restorant/startup%20page/signupverify.dart';
 import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது
 
 // லோகோ நிறங்கள்
-const kPrimary = Color(0xFFE49024); // Orange
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18); // Dark Green
 const kMuted = Color(0xFFA1B3A1); // Muted Green
 const kWhite = Color(0xFFF7F7F2); // Cream White
@@ -111,7 +111,9 @@ class _SignUpPageState extends State<SignUpPage> {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Account verified automatically! Please sign in.'),
+                content: Text(
+                  'Account verified automatically! Please sign in.',
+                ),
                 backgroundColor: Colors.green,
               ),
             );

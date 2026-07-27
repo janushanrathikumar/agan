@@ -9,19 +9,26 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
-const kPrimary = Color(0xFFE49024);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);
 const kDarkCard = Color(0xFF194D25);
-const kDiscount = Color(0xFFE0483E); // 🟢 badge/discount accent color
+const kDiscount = Color(0xFFE0483E);
 
-enum _MenuKind { drinks, foods }
+enum _MenuKind { drinks, foods, combos }
 
-// 🟢 Computes the final (discounted) price for a menu item, based on the
-// `hasDiscount` / `discountType` / `discountValue` fields saved from the
-// Add/Edit Menu Item pages. Falls back to the plain price when there's no
-// active discount, or if the discount value is invalid.
+String _itemTypeFor(_MenuKind kind) {
+  switch (kind) {
+    case _MenuKind.drinks:
+      return 'drink';
+    case _MenuKind.combos:
+      return 'combo';
+    case _MenuKind.foods:
+      return 'food';
+  }
+}
+
 double _effectivePrice(Map<String, dynamic> m) {
   final price = (m['price'] as num?)?.toDouble() ?? 0;
   final hasDiscount = m['hasDiscount'] == true;
@@ -37,7 +44,6 @@ double _effectivePrice(Map<String, dynamic> m) {
   return discounted;
 }
 
-// 🟢 Short badge text like "-20%" or "-CHF 5.00" shown on discounted items.
 String _discountBadgeText(Map<String, dynamic> m) {
   final discountType = (m['discountType'] as String?) ?? 'percent';
   final discountValue = (m['discountValue'] as num?)?.toDouble() ?? 0;
@@ -98,7 +104,6 @@ class _WebSafeImage extends StatelessWidget {
 }
 
 class MenuPage extends StatefulWidget {
-  // 🟢 tableNo passed from HomePage ('Take-Away', 'T5', etc.)
   final String? tableNo;
   const MenuPage({super.key, this.tableNo});
 
@@ -109,6 +114,10 @@ class MenuPage extends StatefulWidget {
 class _MenuPageState extends State<MenuPage> {
   _MenuKind _kind = _MenuKind.drinks;
   String? _selectedCategory;
+
+  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+
   late final Stream<QuerySnapshot> _categoryStream;
 
   @override
@@ -117,6 +126,12 @@ class _MenuPageState extends State<MenuPage> {
     _categoryStream = FirebaseFirestore.instance
         .collection('menu_category')
         .snapshots();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -153,7 +168,6 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                 ),
                 elevation: 0,
-                // 🟢 Show table badge in app bar
                 actions: [
                   if (widget.tableNo != null)
                     Padding(
@@ -194,6 +208,8 @@ class _MenuPageState extends State<MenuPage> {
                       onChanged: (k) => setState(() {
                         _kind = k;
                         _selectedCategory = null;
+                        _searchQuery = '';
+                        _searchCtrl.clear();
                       }),
                     ),
                   ),
@@ -211,26 +227,86 @@ class _MenuPageState extends State<MenuPage> {
                         if (_selectedCategory != first)
                           setState(() => _selectedCategory = first);
                       },
-                      onSelect: (c) => setState(() => _selectedCategory = c),
+                      onSelect: (c) => setState(() {
+                        _selectedCategory = c;
+                        _searchQuery = '';
+                        _searchCtrl.clear();
+                      }),
                     ),
                   ),
                   const VerticalDivider(width: 1, color: kMuted),
                   Expanded(
-                    child: _MenuGrid(
-                      kind: _kind,
-                      category: _selectedCategory,
-                      onTapItem: (m) => _showItemSheet(
-                        context,
-                        _kind,
-                        m,
-                        uid,
-                        widget.tableNo,
-                      ),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                          child: TextField(
+                            controller: _searchCtrl,
+                            style: const TextStyle(color: kWhite, fontSize: 14),
+                            onChanged: (val) {
+                              setState(() {
+                                _searchQuery = val.trim().toLowerCase();
+                              });
+                            },
+                            decoration: InputDecoration(
+                              hintText:
+                                  AppLanguage.getText('search') == 'search'
+                                  ? 'Search all items...'
+                                  : AppLanguage.getText('search'),
+                              hintStyle: const TextStyle(color: kMuted),
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                color: kMuted,
+                                size: 20,
+                              ),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(
+                                        Icons.clear,
+                                        color: kMuted,
+                                        size: 20,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _searchQuery = '';
+                                          _searchCtrl.clear();
+                                        });
+                                      },
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: kWhite.withOpacity(0.05),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 0,
+                                horizontal: 16,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: _MenuGrid(
+                            kind: _kind,
+                            category: _selectedCategory,
+                            searchQuery: _searchQuery,
+                            // 🟢 Receives the specific actualKind for the tapped item
+                            onTapItem: (m, actualKind) => _showItemSheet(
+                              context,
+                              actualKind,
+                              m,
+                              uid,
+                              widget.tableNo,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              // 🟢 FAB passes tableNo to CheckoutPage
               floatingActionButton: uid == null
                   ? null
                   : _CartFAB(uid: uid, tableNo: widget.tableNo),
@@ -274,7 +350,6 @@ class _CartFAB extends StatelessWidget {
             'CHF ${total.toStringAsFixed(2)}',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          // 🟢 Pass tableNo
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => CheckoutPage(uid: uid, tableNo: tableNo),
@@ -294,14 +369,23 @@ class _TopSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sel = [kind == _MenuKind.drinks, kind == _MenuKind.foods];
+    final sel = [
+      kind == _MenuKind.drinks,
+      kind == _MenuKind.foods,
+      kind == _MenuKind.combos,
+    ];
     return Center(
       child: ToggleButtons(
         isSelected: sel,
-        onPressed: (i) =>
-            onChanged(i == 0 ? _MenuKind.drinks : _MenuKind.foods),
+        onPressed: (i) => onChanged(
+          i == 0
+              ? _MenuKind.drinks
+              : i == 1
+              ? _MenuKind.foods
+              : _MenuKind.combos,
+        ),
         borderRadius: BorderRadius.circular(10),
-        constraints: const BoxConstraints(minWidth: 120, minHeight: 40),
+        constraints: const BoxConstraints(minWidth: 96, minHeight: 40),
         color: kWhite,
         selectedColor: kWhite,
         fillColor: kPrimary,
@@ -309,16 +393,23 @@ class _TopSwitch extends StatelessWidget {
         selectedBorderColor: kPrimary,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Text(
               AppLanguage.getText('drinks'),
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Text(
               AppLanguage.getText('foods'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Text(
+              AppLanguage.getText('combos'),
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
@@ -345,7 +436,7 @@ class _CategoryRail extends StatelessWidget {
   });
 
   Query _getMenuQuery() {
-    final type = kind == _MenuKind.drinks ? 'drink' : 'food';
+    final type = _itemTypeFor(kind);
     return FirebaseFirestore.instance
         .collection('menu_items')
         .where('itemType', isEqualTo: type)
@@ -465,22 +556,30 @@ class _CategoryRail extends StatelessWidget {
 class _MenuGrid extends StatelessWidget {
   final _MenuKind kind;
   final String? category;
-  final void Function(Map<String, dynamic>) onTapItem;
+  final String searchQuery;
+  // 🟢 Callback now takes the item Map AND its actual _MenuKind
+  final void Function(Map<String, dynamic>, _MenuKind) onTapItem;
 
   const _MenuGrid({
     required this.kind,
     required this.category,
+    required this.searchQuery,
     required this.onTapItem,
   });
 
   @override
   Widget build(BuildContext context) {
-    final type = kind == _MenuKind.drinks ? 'drink' : 'food';
     Query q = FirebaseFirestore.instance
         .collection('menu_items')
-        .where('itemType', isEqualTo: type)
         .where('status', isEqualTo: 'on');
-    if (category != null) q = q.where('category', isEqualTo: category);
+
+    // 🟢 Apply itemType and category filters ONLY if we are NOT searching globally
+    if (searchQuery.isEmpty) {
+      q = q.where('itemType', isEqualTo: _itemTypeFor(kind));
+      if (category != null) {
+        q = q.where('category', isEqualTo: category);
+      }
+    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: q.snapshots(),
@@ -489,14 +588,28 @@ class _MenuGrid extends StatelessWidget {
           return const Center(
             child: CircularProgressIndicator(color: kPrimary),
           );
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty)
+
+        var docs = snap.data?.docs ?? [];
+
+        // 🟢 Client-side filtering by name
+        if (searchQuery.isNotEmpty) {
+          docs = docs.where((d) {
+            final m = (d.data() as Map<String, dynamic>?) ?? {};
+            final name = (m['name'] as String?)?.toLowerCase() ?? '';
+            return name.contains(searchQuery);
+          }).toList();
+        }
+
+        if (docs.isEmpty) {
           return Center(
             child: Text(
-              AppLanguage.getText('no_items'),
+              searchQuery.isNotEmpty
+                  ? 'No matching items found.'
+                  : AppLanguage.getText('no_items'),
               style: const TextStyle(color: kWhite),
             ),
           );
+        }
 
         int crossCount = 2;
         final w = MediaQuery.of(context).size.width;
@@ -524,8 +637,19 @@ class _MenuGrid extends StatelessWidget {
             final discounted = _isDiscounted(m);
             final finalPrice = _effectivePrice(m);
 
+            // 🟢 Determine the actual type of this item to pass back on tap
+            // This guarantees items from a global search open the sheet correctly
+            final typeStr = (m['itemType'] as String?) ?? _itemTypeFor(kind);
+            _MenuKind actualKind = kind;
+            if (typeStr == 'drink')
+              actualKind = _MenuKind.drinks;
+            else if (typeStr == 'food')
+              actualKind = _MenuKind.foods;
+            else if (typeStr == 'combo')
+              actualKind = _MenuKind.combos;
+
             return InkWell(
-              onTap: () => onTapItem(m),
+              onTap: () => onTapItem(m, actualKind),
               child: Container(
                 decoration: BoxDecoration(
                   color: kWhite.withOpacity(0.06),
@@ -561,7 +685,6 @@ class _MenuGrid extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // 🟢 Discount badge, top-left of the image
                           if (discounted)
                             Positioned(
                               top: 6,
@@ -612,8 +735,6 @@ class _MenuGrid extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            // 🟢 Show strikethrough original price + discounted
-                            // price when a promotion is active.
                             discounted
                                 ? Column(
                                     children: [
@@ -678,12 +799,11 @@ void _showItemSheet(
   _MenuKind kind,
   Map<String, dynamic> item,
   String? uidHint,
-  String? tableNo, // 🟢 passed through
+  String? tableNo,
 ) {
   final name = (item['name'] as String?) ?? '';
   final imageUrl = (item['imageUrl'] as String?) ?? '';
   final originalPrice = ((item['price'] as num?) ?? 0).toDouble();
-  // 🟢 basePrice used for all cart/quantity math is the discounted price.
   final basePrice = _effectivePrice(item);
   final discounted = _isDiscounted(item);
   final dbNote = (item['note'] as String?) ?? '';
@@ -727,7 +847,7 @@ void _showItemSheet(
             .map((i) => additionalOptions[i])
             .toList();
         final payload = <String, dynamic>{
-          'kind': kind == _MenuKind.drinks ? 'drink' : 'food',
+          'kind': _itemTypeFor(kind),
           'name': name,
           'imageUrl': imageUrl,
           'price': computeTotal() / qty,
@@ -796,7 +916,6 @@ void _showItemSheet(
                             ),
                           ),
                         ),
-                        // 🟢 Discount badge on the sheet image too
                         if (discounted)
                           Positioned(
                             top: 4,
@@ -835,7 +954,6 @@ void _showItemSheet(
                               fontSize: 20,
                             ),
                           ),
-                          // 🟢 Strikethrough original price + discounted price
                           if (discounted)
                             Row(
                               children: [
@@ -868,7 +986,7 @@ void _showItemSheet(
                                 fontSize: 16,
                               ),
                             ),
-                          if (kind == _MenuKind.foods && dbNote.isNotEmpty)
+                          if (kind != _MenuKind.drinks && dbNote.isNotEmpty)
                             Text(
                               dbNote,
                               style: const TextStyle(
@@ -1018,7 +1136,6 @@ void _showItemSheet(
                             if (uid != null)
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  // 🟢 tableNo passed here too
                                   builder: (_) =>
                                       CheckoutPage(uid: uid, tableNo: tableNo),
                                 ),

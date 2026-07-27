@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 // --- Theme Palette ---
-const kPrimary = Color(0xFFA26334);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kCardBg = Color(0xFF383735); // Slightly lighter for cards
 const kItemBg = Color(0xFF2F2E2D);

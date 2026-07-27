@@ -5,7 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 // --- Palette ---
-const kPrimary = Color(0xFFA26334);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
 const kWhite = Color(0xFFFFFFFF);
@@ -195,6 +195,15 @@ class AdminOrderDetailsPage extends StatelessWidget {
         final num total = orderData['total'] ?? 0;
         final List<dynamic> items = orderData['items'] ?? [];
 
+        // 🟢 Charges breakdown — subtotal / service charge / rate are now
+        // saved on the order doc by payment_page.dart. Older orders placed
+        // before this change won't have these fields, so we fall back to
+        // treating the whole total as the subtotal with a 0% service charge
+        // rather than crashing or showing null.
+        final num subtotal = orderData['subtotal'] ?? total;
+        final num serviceCharge = orderData['service_charge'] ?? 0;
+        final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
+
         return Scaffold(
           backgroundColor: kBg,
           appBar: AppBar(
@@ -229,6 +238,9 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   status,
                   deliveryMethod,
                   tableNo,
+                  subtotal,
+                  serviceCharge,
+                  serviceChargeRate,
                   total,
                 ),
                 const SizedBox(height: 24),
@@ -268,6 +280,13 @@ class AdminOrderDetailsPage extends StatelessWidget {
     final pdf = pw.Document();
     final items = orderData['items'] ?? [];
     final total = orderData['total'] ?? 0;
+
+    // 🟢 Same fallback logic as the details page: older orders without
+    // these fields just show the total as the subtotal with no service
+    // charge line, instead of throwing.
+    final num subtotal = orderData['subtotal'] ?? total;
+    final num serviceCharge = orderData['service_charge'] ?? 0;
+    final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
 
     // Receipt Format (80mm Thermal Printer standard width)
     pdf.addPage(
@@ -364,6 +383,32 @@ class AdminOrderDetailsPage extends StatelessWidget {
               pw.SizedBox(height: 5),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
 
+              // 🟢 Subtotal row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Subtotal'),
+                  pw.Text('CHF ${subtotal.toStringAsFixed(2)}'),
+                ],
+              ),
+              pw.SizedBox(height: 3),
+
+              // 🟢 Service charge row — label includes the rate that was
+              // actually applied (2.6% take-away / 8.1% dine-in), so the
+              // printed bill is self-explanatory rather than just showing
+              // a number with no context.
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Service Charge (${_methodLabel((orderData['delivery_method'] ?? '').toString())} • ${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
+                  ),
+                  pw.Text('CHF ${serviceCharge.toStringAsFixed(2)}'),
+                ],
+              ),
+              pw.SizedBox(height: 5),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+
               // Total
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -413,6 +458,9 @@ class AdminOrderDetailsPage extends StatelessWidget {
     String status,
     String deliveryMethod,
     String tableNo,
+    num subtotal,
+    num serviceCharge,
+    num serviceChargeRate,
     num total,
   ) {
     return Container(
@@ -465,6 +513,16 @@ class AdminOrderDetailsPage extends StatelessWidget {
           const SizedBox(height: 8),
           _buildSummaryRow(Icons.table_restaurant, 'Table No', tableNo),
           const Divider(color: kItemBg, thickness: 1, height: 24),
+
+          // 🟢 Charges breakdown: subtotal, service charge (with the rate
+          // that was actually applied), then the grand total.
+          _buildChargeRow('Subtotal', subtotal),
+          const SizedBox(height: 8),
+          _buildChargeRow(
+            'Service Charge (${_methodLabel(deliveryMethod)} • ${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
+            serviceCharge,
+          ),
+          const Divider(color: kItemBg, thickness: 1, height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -503,6 +561,31 @@ class AdminOrderDetailsPage extends StatelessWidget {
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🟢 Human-readable label for the delivery method, used to make the
+  // service-charge line self-explanatory (e.g. "Service Charge (Dine-In •
+  // 8.1%)") instead of just showing a bare percentage.
+  String _methodLabel(String method) {
+    return method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
+  }
+
+  // 🟢 Small helper row for the subtotal / service-charge breakdown.
+  Widget _buildChargeRow(String label, num value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: kMuted, fontSize: 14)),
+        Text(
+          'CHF ${value.toStringAsFixed(2)}',
+          style: const TextStyle(
+            color: kWhite,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
           ),
         ),
       ],

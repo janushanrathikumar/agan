@@ -7,7 +7,7 @@ import 'admin_app_bar.dart';
 // Import the new SalesDashboard
 import 'sales_dashboard.dart';
 
-const kPrimary = Color(0xFFA26334);
+const kPrimary = Color(0xFFEFBF04);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
 // NOTE: I reverted kWhite to pure white for better contrast as standard practice

@@ -5,7 +5,7 @@ import 'package:restorant/startup page/signin_page.dart';
 import 'package:restorant/startup page/signup_page.dart';
 import '../language.dart';
 
-const kPrimary = Color(0xFFE49024);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);

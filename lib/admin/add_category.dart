@@ -9,8 +9,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
-
-const kPrimary = Color(0xFFA63334);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
 const kWhite = Color(0xFFFFFFFF);
@@ -27,6 +26,11 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
   Uint8List? _iconBytes;
   String? _iconFileName;
   bool _saving = false;
+
+  // 🟢 New: every category is now tagged as Food or Drink, so
+  // add_menu_item.dart can show only the categories that match the
+  // item type someone is currently adding.
+  String _categoryType = 'food';
 
   @override
   void dispose() {
@@ -106,6 +110,9 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
             'name': name,
             'iconUrl': url,
             'iconFileName': fileName,
+            // 🟢 Saved so add_menu_item.dart can filter categories by
+            // whether "Food" or "Drink" is currently selected there.
+            'type': _categoryType,
             'createdAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
@@ -117,6 +124,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
       setState(() {
         _iconBytes = null;
         _iconFileName = null;
+        _categoryType = 'food';
       });
     } catch (e) {
       if (mounted) {
@@ -226,6 +234,39 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     }
   }
 
+  // 🟢 Small colored chip showing Food / Drink / Combo in the categories table.
+  Widget _buildTypeChip(String type) {
+    Color color;
+    String label;
+    if (type == 'drink') {
+      color = Colors.blueAccent;
+      label = 'Drink';
+    } else if (type == 'combo') {
+      color = Colors.purpleAccent;
+      label = 'Combo';
+    } else {
+      color = kPrimary;
+      label = 'Food';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasImg = _iconBytes != null;
@@ -255,6 +296,71 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // 🟢 Food / Drink / Combo selector — determines which
+                    // item type this category will show up under when
+                    // someone is adding a menu item. Combo was added
+                    // because orders can already contain combo items
+                    // (see admin_orders_page.dart), but until now there
+                    // was no way to create a combo category or item.
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFAE6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: kMuted),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<String>(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                              title: const Text(
+                                'Food',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              value: 'food',
+                              groupValue: _categoryType,
+                              activeColor: kPrimary,
+                              onChanged: (v) =>
+                                  setState(() => _categoryType = v!),
+                            ),
+                          ),
+                          Container(width: 1, height: 40, color: kMuted),
+                          Expanded(
+                            child: RadioListTile<String>(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                              title: const Text(
+                                'Drink',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              value: 'drink',
+                              groupValue: _categoryType,
+                              activeColor: kPrimary,
+                              onChanged: (v) =>
+                                  setState(() => _categoryType = v!),
+                            ),
+                          ),
+                          Container(width: 1, height: 40, color: kMuted),
+                          Expanded(
+                            child: RadioListTile<String>(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                              title: const Text(
+                                'Combo',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              value: 'combo',
+                              groupValue: _categoryType,
+                              activeColor: kPrimary,
+                              onChanged: (v) =>
+                                  setState(() => _categoryType = v!),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     InkWell(
                       onTap: _pickImage,
                       borderRadius: BorderRadius.circular(12),
@@ -381,7 +487,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                       return SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 680),
+                          constraints: const BoxConstraints(minWidth: 760),
                           child: DataTable(
                             headingRowHeight: 44,
                             dataRowMinHeight: 56,
@@ -389,6 +495,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                             columns: const [
                               DataColumn(label: Text('Icon')),
                               DataColumn(label: Text('Name')),
+                              DataColumn(label: Text('Type')),
                               DataColumn(label: Text('Created')),
                               DataColumn(label: Text('Actions')),
                             ],
@@ -397,6 +504,11 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                                   (d.data() as Map<String, dynamic>?) ?? {};
                               final name = (m['name'] as String?) ?? d.id;
                               final iconUrl = (m['iconUrl'] as String?) ?? '';
+                              // 🟢 Categories saved before this change won't
+                              // have a `type` field yet — default those to
+                              // 'food' instead of showing blank/crashing.
+                              final categoryType =
+                                  (m['type'] as String?) ?? 'food';
                               final ts = m['createdAt'];
                               DateTime? dt;
                               if (ts is Timestamp) dt = ts.toDate();
@@ -410,6 +522,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                                   // திருத்தப்பட்ட பகுதி: இங்கு புதிய _buildTableImage பயன்படுத்தப்பட்டுள்ளது
                                   DataCell(_buildTableImage(iconUrl)),
                                   DataCell(Text(name)),
+                                  DataCell(_buildTypeChip(categoryType)),
                                   DataCell(Text(createdStr)),
                                   DataCell(
                                     IconButton(

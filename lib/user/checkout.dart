@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
-const kPrimary = Color(0xFFA26334);
+const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
 const kWhite = Color(0xFFFFFFFF);
