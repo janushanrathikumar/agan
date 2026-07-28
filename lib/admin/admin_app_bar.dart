@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// Assuming these files exist relative to this one, based on your project structure
+// Assuming these files exist relative to this one
 import 'add_category.dart';
 import 'add_food_menu.dart';
 import 'admin_order.dart';
 import 'add_menu_chocie.dart';
 import 'promotion.dart';
+import 'manage_additional_options.dart';
 import 'package:restorant/startup%20page/signin_page.dart';
 
 const kPrimary = Color(0xFFB59410);
-const kBg = Color(0xFF2A2928);
+const kBg = Color(0xFF1E1E1E);
 const kWhite = Color(0xFFFFFFFF);
-const kMuted = Color(0xFFB7B7B6);
-// ---
+const kMuted = Color(0xFF9E9E9E);
 
 class AdminAppBar extends StatefulWidget implements PreferredSizeWidget {
   const AdminAppBar({super.key});
 
   @override
-  Size get preferredSize => const Size.fromHeight(70);
+  Size get preferredSize => const Size.fromHeight(75);
 
   @override
   State<AdminAppBar> createState() => _AdminAppBarState();
@@ -28,43 +28,24 @@ class AdminAppBar extends StatefulWidget implements PreferredSizeWidget {
 class _AdminAppBarState extends State<AdminAppBar> {
   bool _loggingOut = false;
 
-  // Helper widget to build visually appealing menu items
   Widget _buildMenuItemChild(IconData icon, String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: kPrimary, size: 20),
-          const SizedBox(width: 10),
-          Text(
-            title,
-            style: const TextStyle(
-              color: kWhite,
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: kPrimary, size: 22),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: const TextStyle(
+            color: kWhite,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  // 🟢 FIX: logout was silently failing.
-  // Your app uses NAMED routes (SignInPage.route is registered in
-  // MaterialApp.routes), and there's no root-level auth listener that
-  // automatically swaps to the sign-in screen when the user becomes null.
-  // The old code called Navigator.popUntil(context, (route) => route.isFirst)
-  // after signOut() — but "the first route" is just whatever was pushed
-  // first (usually the Admin Home), NOT the sign-in page. So signOut()
-  // was actually succeeding, but the UI never left the admin screen,
-  // making it look like logout "wasn't working."
-  //
-  // Fix: after signOut(), explicitly navigate to SignInPage.route with
-  // pushNamedAndRemoveUntil, which also clears the whole navigation
-  // stack so the back button can't return into the admin area. Wrapped
-  // in try/catch with a `mounted` guard so any real error is surfaced
-  // instead of failing silently, and a loading state prevents double-taps.
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -81,13 +62,13 @@ class _AdminAppBarState extends State<AdminAppBar> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text("Cancel", style: TextStyle(color: kMuted)),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
               backgroundColor: kPrimary,
               foregroundColor: kWhite,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
@@ -107,12 +88,8 @@ class _AdminAppBarState extends State<AdminAppBar> {
 
     try {
       await FirebaseAuth.instance.signOut();
-
       if (!mounted) return;
 
-      // Use the ROOT navigator so this works no matter how deep the
-      // current screen is nested, and clear the entire stack so the
-      // user can't navigate back into the admin area after logging out.
       Navigator.of(
         context,
         rootNavigator: true,
@@ -133,10 +110,9 @@ class _AdminAppBarState extends State<AdminAppBar> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Custom styling for the AppBar background
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF2C2B2A), Color(0xFF1F1E1D)],
+          colors: [Color(0xFF2C2B2A), Color(0xFF121212)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -150,26 +126,21 @@ class _AdminAppBarState extends State<AdminAppBar> {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              // Menu Icon - Now opens the nicely styled pop-up
               PopupMenuButton<String>(
                 tooltip: "Menu Navigation",
-                icon: const Icon(Icons.menu_rounded, color: kPrimary, size: 28),
-
-                // Styling the pop-up container
+                icon: const Icon(Icons.menu_rounded, color: kPrimary, size: 30),
                 color: kBg,
-                elevation: 10,
+                elevation: 12,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   side: const BorderSide(color: kMuted, width: 0.5),
                 ),
-
                 onSelected: (value) {
                   switch (value) {
                     case 'home':
-                      // Navigates back to the first route in the stack (AdminHome)
                       Navigator.popUntil(context, (route) => route.isFirst);
                       break;
                     case 'Order':
@@ -210,16 +181,22 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
+                    case 'add_additional_option':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageAdditionalOptionsPage(),
+                        ),
+                      );
+                      break;
                   }
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                  // Enhanced Menu Item: Home
                   PopupMenuItem<String>(
                     value: 'home',
                     child: _buildMenuItemChild(Icons.home_rounded, 'Home'),
                   ),
-                  const PopupMenuDivider(height: 1),
-                  // Enhanced Menu Item: Add Food Menu
+                  const PopupMenuDivider(),
                   PopupMenuItem<String>(
                     value: 'add_food',
                     child: _buildMenuItemChild(
@@ -227,27 +204,25 @@ class _AdminAppBarState extends State<AdminAppBar> {
                       'Add Menu',
                     ),
                   ),
-                  // Enhanced Menu Item: Add Drinks Menu
                   PopupMenuItem<String>(
                     value: 'Order',
                     child: _buildMenuItemChild(
-                      Icons.local_bar_rounded,
+                      Icons.receipt_long_rounded,
                       'View Orders',
                     ),
                   ),
-                  // Enhanced Menu Item: Add Menu Category
                   PopupMenuItem<String>(
                     value: 'add_category',
                     child: _buildMenuItemChild(
                       Icons.category_rounded,
-                      'Add Menu Category',
+                      'Add Category',
                     ),
                   ),
                   PopupMenuItem<String>(
                     value: 'add_menu_choice',
                     child: _buildMenuItemChild(
                       Icons.select_all_rounded,
-                      'Add Menu Choice',
+                      'Add Choice',
                     ),
                   ),
                   PopupMenuItem<String>(
@@ -257,10 +232,16 @@ class _AdminAppBarState extends State<AdminAppBar> {
                       'Add Promotion',
                     ),
                   ),
+                  PopupMenuItem<String>(
+                    value: 'add_additional_option',
+                    child: _buildMenuItemChild(
+                      Icons.add_circle_outline_rounded,
+                      'Manage Options',
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(width: 12),
-              // Page Title
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,31 +251,26 @@ class _AdminAppBarState extends State<AdminAppBar> {
                       "Admin Dashboard",
                       style: TextStyle(
                         color: kWhite,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    SizedBox(height: 3),
                     Text(
-                      "Manage menus and categories",
-                      style: TextStyle(color: kMuted, fontSize: 12),
+                      "Manage menus, categories & promotions",
+                      style: TextStyle(color: kMuted, fontSize: 13),
                     ),
                   ],
                 ),
               ),
-
-              // Logout Button
               _loggingOut
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 14),
-                      child: SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: kPrimary,
-                        ),
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: kPrimary,
                       ),
                     )
                   : IconButton(
@@ -302,7 +278,7 @@ class _AdminAppBarState extends State<AdminAppBar> {
                       icon: const Icon(
                         Icons.logout_rounded,
                         color: kPrimary,
-                        size: 26,
+                        size: 28,
                       ),
                       onPressed: _handleLogout,
                     ),

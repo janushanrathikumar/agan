@@ -1,3 +1,4 @@
+// lib/edit_menu_item.dart
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,8 +26,9 @@ class _WebSafeImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl.isEmpty)
+    if (imageUrl.isEmpty) {
       return const Icon(Icons.broken_image, color: kMuted, size: 40);
+    }
 
     if (kIsWeb) {
       final String viewId =
@@ -55,22 +57,14 @@ class _WebSafeImage extends StatelessWidget {
   }
 }
 
-// --- Additional Option Field Helper ---
-class AdditionalOptionField {
+// 🟢 Helper class for dynamic Size Option rows
+class SizeOptionField {
   final TextEditingController name = TextEditingController();
   final TextEditingController price = TextEditingController();
-  final TextEditingController catalog = TextEditingController();
-
-  AdditionalOptionField({String? n, String? p, String? c}) {
-    name.text = n ?? '';
-    price.text = p ?? '';
-    catalog.text = c ?? '';
-  }
 
   void dispose() {
     name.dispose();
     price.dispose();
-    catalog.dispose();
   }
 }
 
@@ -93,8 +87,14 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
   final _note = TextEditingController();
   final _price = TextEditingController();
 
-  // Additional Options
-  List<AdditionalOptionField> _additionalOptions = [];
+  // 🟢 Size Options state
+  bool _hasMultipleSizes = false;
+  final List<SizeOptionField> _sizeOptions = [];
+
+  // 🟢 Additional Options State
+  List<Map<String, dynamic>> _allAvailableOptions = [];
+  List<Map<String, dynamic>> _selectedOptions = [];
+  String? _dropdownOptionValue;
 
   Uint8List? _imgBytes;
   String? _imgFileName;
@@ -129,6 +129,16 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     _existingImageUrl = widget.itemData['imageUrl'];
     _existingImageFileName = widget.itemData['imageFileName'];
 
+    // 🟢 Load existing sizes
+    _hasMultipleSizes = widget.itemData['hasMultipleSizes'] ?? false;
+    final sizesData = widget.itemData['sizes'] as List<dynamic>? ?? [];
+    for (var s in sizesData) {
+      final opt = SizeOptionField();
+      opt.name.text = s['name'] ?? '';
+      opt.price.text = (s['price'] ?? '').toString();
+      _sizeOptions.add(opt);
+    }
+
     // 🟢 Load existing discount info
     _hasDiscount = widget.itemData['hasDiscount'] ?? false;
     _discountType = widget.itemData['discountType'] ?? 'percent';
@@ -137,18 +147,15 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
         ? ''
         : existingDiscountValue.toString();
 
-    // Load existing additional options
+    // 🟢 Load existing additional options
     final List<dynamic> existingOptions =
         widget.itemData['additionalOptions'] ?? [];
-    _additionalOptions = existingOptions.map((opt) {
-      return AdditionalOptionField(
-        n: opt['name']?.toString() ?? '',
-        p: opt['price']?.toString() ?? '',
-        c: opt['catalog']?.toString() ?? '',
-      );
+    _selectedOptions = existingOptions.map((opt) {
+      return Map<String, dynamic>.from(opt);
     }).toList();
 
     _fetchAvailableMenuChoices();
+    _fetchAvailableOptions();
   }
 
   @override
@@ -157,18 +164,18 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     _note.dispose();
     _price.dispose();
     _discountValue.dispose();
-    for (var opt in _additionalOptions) {
+    for (var opt in _sizeOptions) {
       opt.dispose();
     }
     super.dispose();
   }
 
-  void _addOptionField() =>
-      setState(() => _additionalOptions.add(AdditionalOptionField()));
+  // 🟢 Add / Remove Size option fields
+  void _addSizeField() => setState(() => _sizeOptions.add(SizeOptionField()));
 
-  void _removeOptionField(int index) {
-    _additionalOptions[index].dispose();
-    setState(() => _additionalOptions.removeAt(index));
+  void _removeSizeField(int index) {
+    _sizeOptions[index].dispose();
+    setState(() => _sizeOptions.removeAt(index));
   }
 
   Future<void> _fetchAvailableMenuChoices() async {
@@ -188,6 +195,23 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     }
   }
 
+  Future<void> _fetchAvailableOptions() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('additional_options')
+          .get();
+      if (mounted) {
+        setState(() {
+          _allAvailableOptions = snap.docs
+              .map((doc) => {'id': doc.id, ...doc.data()})
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching options: $e");
+    }
+  }
+
   void _openEditChoiceDialog(Map<String, dynamic> choiceData) {
     showDialog(
       context: context,
@@ -195,6 +219,7 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
         docId: choiceData['id'],
         existingHeading: choiceData['heading'] ?? '',
         existingOptions: List<String>.from(choiceData['options'] ?? []),
+        existingType: (choiceData['type'] as String?) ?? 'food',
       ),
     ).then((_) => _fetchAvailableMenuChoices());
   }
@@ -214,6 +239,25 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     });
   }
 
+  void _onTypeChanged(String? val) {
+    if (val == null) return;
+    setState(() {
+      _itemType = val;
+      _selectedCategory = null;
+      _selectedCategoryIconUrl = null;
+      _selectedMenuChoices.clear();
+      _dropdownChoiceValue = null;
+      _selectedOptions.clear();
+      _dropdownOptionValue = null;
+    });
+  }
+
+  String _typeLabel(String type) {
+    if (type == 'drink') return 'Drink';
+    if (type == 'combo') return 'Combo';
+    return 'Food';
+  }
+
   Future<void> _save() async {
     setState(() {
       _saving = true;
@@ -221,9 +265,33 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     });
     try {
       final name = _name.text.trim();
-      final price = double.tryParse(_price.text.trim());
-      if (name.isEmpty || price == null)
-        throw Exception('Check Name and Price');
+      if (name.isEmpty) throw Exception('Name is required');
+
+      // 🟢 Validate Prices based on Size Strategy
+      double? basePrice;
+      List<Map<String, dynamic>> sizesData = [];
+
+      if (_hasMultipleSizes) {
+        if (_sizeOptions.isEmpty) {
+          throw Exception('Please add at least one size variant.');
+        }
+        for (var size in _sizeOptions) {
+          final sName = size.name.text.trim();
+          final sPrice = double.tryParse(size.price.text.trim());
+          if (sName.isEmpty || sPrice == null) {
+            throw Exception('All sizes must have a valid name and price.');
+          }
+          sizesData.add({'name': sName, 'price': sPrice});
+        }
+        basePrice = sizesData
+            .map((e) => e['price'] as double)
+            .reduce((a, b) => a < b ? a : b);
+      } else {
+        basePrice = double.tryParse(_price.text.trim());
+        if (basePrice == null) {
+          throw Exception('A valid standard price is required.');
+        }
+      }
 
       // 🟢 Validate discount value if discount is enabled
       double discountValue = 0;
@@ -237,12 +305,13 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
         }
       }
 
-      // Serialize additional options
-      List<Map<String, dynamic>> optionsData = _additionalOptions.map((opt) {
+      // Serialize Selected Additional Options
+      List<Map<String, dynamic>> optionsData = _selectedOptions.map((opt) {
         return {
-          'name': opt.name.text.trim(),
-          'price': double.tryParse(opt.price.text.trim()) ?? 0,
-          'catalog': opt.catalog.text.trim(),
+          'name': opt['name'],
+          'price': opt['price'],
+          'catalog': opt['catalog'],
+          'type': opt['type'],
         };
       }).toList();
 
@@ -250,6 +319,18 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
       String imageFileName = _existingImageFileName ?? '';
 
       if (_imgBytes != null) {
+        // 🟢 Delete the old image from Storage if it exists
+        if (_existingImageFileName != null &&
+            _existingImageFileName!.isNotEmpty) {
+          try {
+            await FirebaseStorage.instance
+                .ref('menu_images/$_existingImageFileName')
+                .delete();
+          } catch (e) {
+            debugPrint("Failed to delete old image: $e");
+          }
+        }
+
         imageFileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
         final imgRef = FirebaseStorage.instance.ref(
           'menu_images/$imageFileName',
@@ -264,8 +345,11 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
           .update({
             'name': name,
             'note': _note.text.trim(),
-            'price': price,
+            'price': basePrice,
+            'hasMultipleSizes': _hasMultipleSizes,
+            'sizes': sizesData,
             'category': _selectedCategory,
+            'categoryIconUrl': _selectedCategoryIconUrl,
             'imageUrl': imageUrl,
             'imageFileName': imageFileName,
             'menuChoices': _selectedMenuChoices.map((c) => c['id']).toList(),
@@ -309,33 +393,58 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
               children: [
                 Expanded(
                   child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: const Text(
                       'Food',
                       style: TextStyle(
                         color: kWhite,
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
                     value: 'food',
                     groupValue: _itemType,
                     activeColor: kPrimary,
-                    onChanged: (val) => setState(() => _itemType = val!),
+                    onChanged: _onTypeChanged,
                   ),
                 ),
                 Container(width: 1, height: 40, color: kMuted.withOpacity(0.3)),
                 Expanded(
                   child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: const Text(
                       'Drink',
                       style: TextStyle(
                         color: kWhite,
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
                     value: 'drink',
                     groupValue: _itemType,
                     activeColor: kPrimary,
-                    onChanged: (val) => setState(() => _itemType = val!),
+                    onChanged: _onTypeChanged,
+                  ),
+                ),
+                Container(width: 1, height: 40, color: kMuted.withOpacity(0.3)),
+                Expanded(
+                  child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: const Text(
+                      'Combo',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    value: 'combo',
+                    groupValue: _itemType,
+                    activeColor: kPrimary,
+                    onChanged: _onTypeChanged,
                   ),
                 ),
               ],
@@ -387,17 +496,124 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _input(label: 'Item Name', controller: _name),
-                const SizedBox(height: 12),
-                _input(
-                  label: 'Price',
-                  controller: _price,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                const SizedBox(height: 16),
+
+                // Multiple Sizes Toggle
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: kPrimary,
+                  title: const Text(
+                    'Has Multiple Sizes?',
+                    style: TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
+                  subtitle: const Text(
+                    'Enable if item has sizes (e.g. Kleine Portion vs Portion)',
+                    style: TextStyle(color: kMuted, fontSize: 12),
+                  ),
+                  value: _hasMultipleSizes,
+                  onChanged: (val) {
+                    setState(() {
+                      _hasMultipleSizes = val;
+                      // 🟢 Pre-fill default options when toggled on and list is empty
+                      if (val && _sizeOptions.isEmpty) {
+                        final opt1 = SizeOptionField();
+                        opt1.name.text = 'Kleine Portion';
+                        _sizeOptions.add(opt1);
+
+                        final opt2 = SizeOptionField();
+                        opt2.name.text = 'Portion';
+                        _sizeOptions.add(opt2);
+                      }
+                    });
+                  },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+
+                // Pricing Inputs Based on Toggle
+                if (!_hasMultipleSizes)
+                  _input(
+                    label: 'Standard Price',
+                    controller: _price,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Size Variants',
+                            style: TextStyle(
+                              color: kPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _addSizeField,
+                            icon: const Icon(
+                              Icons.add,
+                              size: 16,
+                              color: kPrimary,
+                            ),
+                            label: const Text(
+                              'Add Size',
+                              style: TextStyle(color: kPrimary),
+                            ),
+                          ),
+                        ],
+                      ),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _sizeOptions.length,
+                        itemBuilder: (context, index) {
+                          final sizeOpt = _sizeOptions[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: _miniInput(
+                                    'Size (e.g. Kleine Portion)',
+                                    sizeOpt.name,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: _miniInput(
+                                    'Price',
+                                    sizeOpt.price,
+                                    isNumber: true,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.remove_circle_outline,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () => _removeSizeField(index),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 16),
                 _input(
                   label: 'Description (optional)',
                   controller: _note,
@@ -504,41 +720,52 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
               border: Border.all(color: kMuted.withOpacity(0.3)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _dropdownChoiceValue,
-                isExpanded: true,
-                dropdownColor: kFieldBg,
-                icon: const Icon(Icons.arrow_drop_down, color: kWhite),
-                hint: const Text(
-                  'Select Menu Choice',
-                  style: TextStyle(color: kMuted),
-                ),
-                items: _allAvailableChoices
-                    .map(
-                      (choice) => DropdownMenuItem<String>(
-                        value: choice['id'],
-                        child: Text(
-                          choice['heading'] ?? 'Unnamed',
-                          style: const TextStyle(color: kWhite),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (newId) {
-                  if (newId != null &&
-                      !_selectedMenuChoices.any((c) => c['id'] == newId)) {
-                    setState(() {
-                      _selectedMenuChoices.add(
-                        _allAvailableChoices.firstWhere(
-                          (c) => c['id'] == newId,
-                        ),
-                      );
-                      _dropdownChoiceValue = null;
-                    });
-                  }
-                },
-              ),
+            child: Builder(
+              builder: (context) {
+                final matchingChoices = _allAvailableChoices.where((choice) {
+                  final choiceType = (choice['type'] as String?) ?? 'food';
+                  return choiceType == _itemType;
+                }).toList();
+
+                return DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _dropdownChoiceValue,
+                    isExpanded: true,
+                    dropdownColor: kFieldBg,
+                    icon: const Icon(Icons.arrow_drop_down, color: kWhite),
+                    hint: Text(
+                      matchingChoices.isEmpty
+                          ? 'No ${_typeLabel(_itemType)} menu choices yet'
+                          : 'Select Menu Choice',
+                      style: const TextStyle(color: kMuted),
+                    ),
+                    items: matchingChoices
+                        .map(
+                          (choice) => DropdownMenuItem<String>(
+                            value: choice['id'],
+                            child: Text(
+                              choice['heading'] ?? 'Unnamed',
+                              style: const TextStyle(color: kWhite),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (newId) {
+                      if (newId != null &&
+                          !_selectedMenuChoices.any((c) => c['id'] == newId)) {
+                        setState(() {
+                          _selectedMenuChoices.add(
+                            _allAvailableChoices.firstWhere(
+                              (c) => c['id'] == newId,
+                            ),
+                          );
+                          _dropdownChoiceValue = null;
+                        });
+                      }
+                    },
+                  ),
+                );
+              },
             ),
           ),
           const SizedBox(height: 12),
@@ -597,7 +824,7 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             ),
           const SizedBox(height: 24),
 
-          // ── Additional Options ──────────────────────────────────────
+          // ── Additional Options (Dropdown) ───────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -610,78 +837,111 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.add_circle, color: kPrimary, size: 30),
-                onPressed: _addOptionField,
+                icon: const Icon(Icons.refresh, color: kPrimary, size: 24),
+                onPressed: _fetchAvailableOptions,
+                tooltip: 'Refresh Options',
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _additionalOptions.length,
-            itemBuilder: (context, index) {
-              final opt = _additionalOptions[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: kFieldBg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: kPrimary.withOpacity(0.25)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.add_box_outlined,
-                            color: kPrimary,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Option ${index + 1}',
-                            style: const TextStyle(
-                              color: kPrimary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+          Container(
+            decoration: BoxDecoration(
+              color: kFieldBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kMuted.withOpacity(0.3)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Builder(
+              builder: (context) {
+                // 🟢 FILTER additional options based on selected _itemType
+                final matchingOptions = _allAvailableOptions.where((opt) {
+                  final optType = (opt['type'] as String?) ?? 'food';
+                  return optType == _itemType;
+                }).toList();
+
+                return DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _dropdownOptionValue,
+                    isExpanded: true,
+                    dropdownColor: kFieldBg,
+                    icon: const Icon(Icons.arrow_drop_down, color: kWhite),
+                    hint: Text(
+                      matchingOptions.isEmpty
+                          ? 'No ${_typeLabel(_itemType)} additional options yet'
+                          : 'Select Additional Option',
+                      style: const TextStyle(color: kMuted),
+                    ),
+                    items: matchingOptions
+                        .map(
+                          (opt) => DropdownMenuItem<String>(
+                            value:
+                                opt['id'], // If missing 'id' from older records, it falls back gracefully
+                            child: Text(
+                              "${opt['name']} (Price: ${opt['price']})",
+                              style: const TextStyle(color: kWhite),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    // Row 1: Name + Price
-                    Row(
-                      children: [
-                        Expanded(child: _miniInput('Option Name', opt.name)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _miniInput('Price', opt.price, isNumber: true),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Row 2: Catalog Code
-                    _miniInput('Catalog Code', opt.catalog),
-                    // Delete
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.redAccent),
-                        onPressed: () => _removeOptionField(index),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                        )
+                        .toList(),
+                    onChanged: (newId) {
+                      if (newId != null &&
+                          !_selectedOptions.any((o) => o['id'] == newId)) {
+                        setState(() {
+                          _selectedOptions.add(
+                            _allAvailableOptions.firstWhere(
+                              (o) => o['id'] == newId,
+                            ),
+                          );
+                          _dropdownOptionValue = null;
+                        });
+                      }
+                    },
+                  ),
+                );
+              },
+            ),
           ),
+          const SizedBox(height: 12),
+
+          if (_selectedOptions.isNotEmpty)
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _selectedOptions.length,
+              itemBuilder: (context, index) {
+                final opt = _selectedOptions[index];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: kFieldBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    title: Text(
+                      opt['name'] ?? '',
+                      style: const TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Price: ${opt['price']} | Code: ${opt['catalog'] ?? ''}',
+                      style: const TextStyle(color: kMuted),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.redAccent,
+                        size: 20,
+                      ),
+                      onPressed: () =>
+                          setState(() => _selectedOptions.removeAt(index)),
+                    ),
+                  ),
+                );
+              },
+            ),
           const SizedBox(height: 24),
 
           // ── Category ────────────────────────────────────────────────
@@ -707,27 +967,38 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                   .snapshots(),
               builder: (context, snap) {
                 if (!snap.hasData) return const LinearProgressIndicator();
-                final names = snap.data!.docs.map((d) => d.id).toList();
 
-                // 🟢 FIX: only use _selectedCategory as the dropdown value if
-                // it actually exists in the current list of category names.
-                // Previously, if the saved category (e.g. "drinks1") had been
-                // renamed or deleted from `menu_category`, DropdownButton
-                // would crash with:
-                // "There should be exactly one item with [DropdownButton]'s
-                // value ... Either zero or 2 or more ... were detected"
+                final allDocs = snap.data!.docs;
+                final matchingDocs = allDocs.where((d) {
+                  final data = d.data() as Map<String, dynamic>? ?? {};
+                  final catType = (data['type'] as String?) ?? 'food';
+                  return catType == _itemType;
+                }).toList();
+
+                final names = matchingDocs.map((d) => d.id).toList();
+
                 final String? safeValue = names.contains(_selectedCategory)
                     ? _selectedCategory
                     : null;
+
+                if (names.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'No ${_typeLabel(_itemType)} categories yet — add one first.',
+                      style: const TextStyle(color: kMuted),
+                    ),
+                  );
+                }
 
                 return DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: safeValue,
                     isExpanded: true,
                     dropdownColor: kFieldBg,
-                    hint: const Text(
-                      'Menu Category',
-                      style: TextStyle(color: kMuted),
+                    hint: Text(
+                      '${_typeLabel(_itemType)} Category',
+                      style: const TextStyle(color: kMuted),
                     ),
                     items: names
                         .map(
@@ -740,7 +1011,16 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                           ),
                         )
                         .toList(),
-                    onChanged: (v) => setState(() => _selectedCategory = v),
+                    onChanged: (v) {
+                      final match = matchingDocs.firstWhere((d) => d.id == v);
+                      final matchData =
+                          match.data() as Map<String, dynamic>? ?? {};
+                      setState(() {
+                        _selectedCategory = v;
+                        _selectedCategoryIconUrl =
+                            matchData['iconUrl'] as String?;
+                      });
+                    },
                   ),
                 );
               },

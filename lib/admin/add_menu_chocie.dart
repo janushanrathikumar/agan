@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'choice_dialog.dart'; // We will create this next
 
-
 const kBg = Color(0xFF2A2928);
 const kWhite = Color(0xFFFFFFFF);
 const kMuted = Color(0xFFB7B7B6);

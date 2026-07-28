@@ -90,7 +90,8 @@ class _WebSafeImage extends StatelessWidget {
       return SizedBox(
         width: width,
         height: height,
-        child: HtmlElementView(viewType: viewId),
+        // IgnorePointer prevents the HTML element from stealing tap events on Web
+        child: IgnorePointer(child: HtmlElementView(viewType: viewId)),
       );
     }
     return Image.network(
@@ -114,6 +115,7 @@ class MenuPage extends StatefulWidget {
 class _MenuPageState extends State<MenuPage> {
   _MenuKind _kind = _MenuKind.drinks;
   String? _selectedCategory;
+  String? _currentTableNo;
 
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
@@ -123,9 +125,143 @@ class _MenuPageState extends State<MenuPage> {
   @override
   void initState() {
     super.initState();
+    _currentTableNo = widget.tableNo;
     _categoryStream = FirebaseFirestore.instance
         .collection('menu_category')
         .snapshots();
+
+    // Check if tableNo is provided, if not, ask for it.
+    if (_currentTableNo == null) {
+      _checkOrAskMethod();
+    }
+  }
+
+  Future<void> _checkOrAskMethod() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance
+          .collection('food_delivery')
+          .doc(user.uid)
+          .get();
+      if (doc.exists && mounted) {
+        final method = doc.data()?['delivery_method'];
+        setState(() {
+          _currentTableNo = method == 'Take_Away'
+              ? 'Take-Away'
+              : doc.data()?['table_no'];
+        });
+      }
+    }
+    if (_currentTableNo == null && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showMethodPicker();
+      });
+    }
+  }
+
+  void _showMethodPicker() {
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: kBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'How would you like to order?',
+              style: TextStyle(
+                color: kWhite,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.storefront, color: kWhite),
+                    label: const Text(
+                      'Dine-In',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () async {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null) {
+                        await FirebaseFirestore.instance
+                            .collection('food_delivery')
+                            .doc(user.uid)
+                            .set({
+                              'delivery_method': 'Dine_In',
+                              'table_no': 'Dine-In',
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
+                      }
+                      if (mounted) setState(() => _currentTableNo = 'Dine-In');
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: kPrimary),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.takeout_dining, color: kPrimary),
+                    label: const Text(
+                      'Take-Away',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () async {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null) {
+                        await FirebaseFirestore.instance
+                            .collection('food_delivery')
+                            .doc(user.uid)
+                            .set({
+                              'delivery_method': 'Take_Away',
+                              'table_no': '',
+                              'timestamp': FieldValue.serverTimestamp(),
+                            });
+                      }
+                      if (mounted) {
+                        setState(() => _currentTableNo = 'Take-Away');
+                      }
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -169,7 +305,7 @@ class _MenuPageState extends State<MenuPage> {
                 ),
                 elevation: 0,
                 actions: [
-                  if (widget.tableNo != null)
+                  if (_currentTableNo != null)
                     Padding(
                       padding: const EdgeInsets.only(right: 12),
                       child: Center(
@@ -186,9 +322,9 @@ class _MenuPageState extends State<MenuPage> {
                             ),
                           ),
                           child: Text(
-                            widget.tableNo == 'Take-Away'
+                            _currentTableNo == 'Take-Away'
                                 ? '🛍 Take-Away'
-                                : '🪑 ${widget.tableNo}',
+                                : '🪑 $_currentTableNo',
                             style: const TextStyle(
                               color: kPrimary,
                               fontSize: 12,
@@ -297,7 +433,7 @@ class _MenuPageState extends State<MenuPage> {
                               actualKind,
                               m,
                               uid,
-                              widget.tableNo,
+                              _currentTableNo,
                             ),
                           ),
                         ),
@@ -308,7 +444,7 @@ class _MenuPageState extends State<MenuPage> {
               ),
               floatingActionButton: uid == null
                   ? null
-                  : _CartFAB(uid: uid, tableNo: widget.tableNo),
+                  : _CartFAB(uid: uid, tableNo: _currentTableNo),
             );
           },
         );
@@ -493,8 +629,10 @@ class _CategoryRail extends StatelessWidget {
               final name = d.id;
               final iconUrl = (data['iconUrl'] as String?) ?? '';
               final isSel = selected == name;
-              return InkWell(
+
+              return GestureDetector(
                 onTap: () => onSelect(name),
+                behavior: HitTestBehavior.opaque,
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 8),
                   padding: const EdgeInsets.symmetric(
@@ -642,8 +780,9 @@ class _MenuGrid extends StatelessWidget {
             else if (typeStr == 'combo')
               actualKind = _MenuKind.combos;
 
-            return InkWell(
+            return GestureDetector(
               onTap: () => onTapItem(m, actualKind),
+              behavior: HitTestBehavior.opaque,
               child: Container(
                 decoration: BoxDecoration(
                   color: kWhite.withOpacity(0.06),
@@ -660,11 +799,6 @@ class _MenuGrid extends StatelessWidget {
                       flex: 5,
                       child: Stack(
                         children: [
-                          ClipRRect(
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(16),
-                            ),
-                          ),
                           ClipRRect(
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(16),
@@ -805,11 +939,31 @@ void _showItemSheet(
   final dbNote = (item['note'] as String?) ?? '';
   final category = (item['category'] as String?) ?? '';
 
-  final bool hasMultipleSizes = item['hasMultipleSizes'] == true;
-  final List<Map<String, dynamic>> sizes = List<Map<String, dynamic>>.from(
+  final List<Map<String, dynamic>> allSizes = List<Map<String, dynamic>>.from(
     item['sizes'] ?? [],
   );
 
+  // STRICTLY FILTER FOR EXACT MATCH
+  List<Map<String, dynamic>> displaySizes = [];
+  if (tableNo == 'Take-Away') {
+    // If Take-Away, strictly ONLY display sizes exactly named "Portion"
+    displaySizes = allSizes.where((s) {
+      final sizeName = (s['name'] as String?)?.toLowerCase().trim() ?? '';
+      return sizeName ==
+          'portion'; // Exact match prevents "Kleine Portion" from appearing
+    }).toList();
+
+    // Fallback if no exact "Portion" is found, show all so it doesn't break the UI
+    if (displaySizes.isEmpty) {
+      displaySizes = List.from(allSizes);
+    }
+  } else {
+    // If Dine-In (or any specific table), show all sizes
+    displaySizes = List.from(allSizes);
+  }
+
+  final bool hasMultipleSizes =
+      item['hasMultipleSizes'] == true && displaySizes.isNotEmpty;
   final List<String> menuChoiceIds = List<String>.from(
     item['menuChoices'] ?? [],
   );
@@ -819,8 +973,8 @@ void _showItemSheet(
           .toList();
 
   String? initialSelectedSize;
-  if (hasMultipleSizes && sizes.isNotEmpty) {
-    initialSelectedSize = sizes.first['name'] as String?;
+  if (hasMultipleSizes && displaySizes.isNotEmpty) {
+    initialSelectedSize = displaySizes.first['name'] as String?;
   }
 
   showModalBottomSheet(
@@ -841,9 +995,9 @@ void _showItemSheet(
       double computeTotal() {
         double currentOriginalPrice = ((item['price'] as num?) ?? 0).toDouble();
         if (hasMultipleSizes && selectedSizeName != null) {
-          final matchedSize = sizes.firstWhere(
+          final matchedSize = displaySizes.firstWhere(
             (s) => s['name'] == selectedSizeName,
-            orElse: () => sizes.first,
+            orElse: () => displaySizes.first,
           );
           currentOriginalPrice = ((matchedSize['price'] as num?) ?? 0)
               .toDouble();
@@ -875,20 +1029,19 @@ void _showItemSheet(
 
       double getCurrentDisplayOriginalPrice() {
         if (hasMultipleSizes && selectedSizeName != null) {
-          final matchedSize = sizes.firstWhere(
+          final matchedSize = displaySizes.firstWhere(
             (s) => s['name'] == selectedSizeName,
-            orElse: () => sizes.first,
+            orElse: () => displaySizes.first,
           );
           return ((matchedSize['price'] as num?) ?? 0).toDouble();
         }
         return ((item['price'] as num?) ?? 0).toDouble();
       }
 
-      // 🟢 Changed to return a Future<bool> to confirm validation
       Future<bool> addToChat(StateSetter setS) async {
         // --- VALIDATION LOGIC ---
         if (hasMultipleSizes &&
-            sizes.isNotEmpty &&
+            displaySizes.isNotEmpty &&
             (selectedSizeName == null || selectedSizeName!.isEmpty)) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1004,16 +1157,18 @@ void _showItemSheet(
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(16),
-                            child: _WebSafeImage(
-                              imageUrl: imageUrl,
-                              width: 100,
-                              height: 100,
-                              fallback: Container(
-                                color: kDarkCard,
-                                child: const Icon(
-                                  Icons.image,
-                                  color: kMuted,
-                                  size: 40,
+                            child: IgnorePointer(
+                              child: _WebSafeImage(
+                                imageUrl: imageUrl,
+                                width: 100,
+                                height: 100,
+                                fallback: Container(
+                                  color: kDarkCard,
+                                  child: const Icon(
+                                    Icons.image,
+                                    color: kMuted,
+                                    size: 40,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1103,10 +1258,12 @@ void _showItemSheet(
                   ),
                   const SizedBox(height: 24),
 
-                  if (hasMultipleSizes && sizes.isNotEmpty) ...[
+                  if (hasMultipleSizes && displaySizes.isNotEmpty) ...[
                     _InlineOptionRow(
                       title: 'Portion / Size',
-                      values: sizes.map((s) => s['name'] as String).toList(),
+                      values: displaySizes
+                          .map((s) => s['name'] as String)
+                          .toList(),
                       selected: selectedSizeName ?? '',
                       onChanged: (val) => setS(() => selectedSizeName = val),
                       showRequired: true,
@@ -1377,9 +1534,9 @@ class _AdditionalOptionsSection extends StatelessWidget {
             final optName = (opt['name'] as String?) ?? '';
             final optPrice = ((opt['price'] as num?) ?? 0).toDouble();
             final isSelected = selected.contains(i);
-            return InkWell(
+            return GestureDetector(
               onTap: () => onToggle(i),
-              borderRadius: BorderRadius.circular(8),
+              behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
                 child: Row(
@@ -1520,9 +1677,9 @@ class _InlineOptionRow extends StatelessWidget {
             runSpacing: 8,
             children: values.map((v) {
               final on = v == selected;
-              return InkWell(
+              return GestureDetector(
                 onTap: () => onChanged(v),
-                borderRadius: BorderRadius.circular(8),
+                behavior: HitTestBehavior.opaque,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -1554,21 +1711,20 @@ class _QtyBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   const _QtyBtn({required this.icon, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => Ink(
-    decoration: BoxDecoration(
-      color: kWhite.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: kMuted.withOpacity(0.4)),
-    ),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
-        width: 40,
-        height: 40,
-        child: Icon(icon, color: kWhite, size: 20),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    behavior: HitTestBehavior.opaque,
+    child: Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: kWhite.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: kMuted.withOpacity(0.4)),
       ),
+      child: Icon(icon, color: kWhite, size: 20),
     ),
   );
 }
