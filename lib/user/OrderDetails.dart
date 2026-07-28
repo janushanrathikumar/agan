@@ -53,7 +53,6 @@ class MyOrdersPage extends StatelessWidget {
       );
     }
 
-    // 🟢 INDEX ERROR-ஐ தவிர்க்க orderBy-ஐ நீக்கிவிட்டோம்
     final ordersQuery = FirebaseFirestore.instance
         .collection('orders')
         .where('uid', isEqualTo: user.uid);
@@ -88,7 +87,6 @@ class MyOrdersPage extends StatelessWidget {
             );
           }
 
-          // 🟢 Flutter-க்குள்ளேயே தேதியின்படி வரிசைப்படுத்துகிறோம் (Local Sorting)
           var docs = snap.data?.docs.toList() ?? [];
 
           docs.sort((a, b) {
@@ -102,7 +100,6 @@ class MyOrdersPage extends StatelessWidget {
             if (aTime == null) return 1;
             if (bTime == null) return -1;
 
-            // Descending order (புதிய ஆர்டர்கள் முதலில்)
             return bTime.compareTo(aTime);
           });
 
@@ -136,11 +133,6 @@ class MyOrdersPage extends StatelessWidget {
               final method = data['delivery_method'] ?? 'Take_Away';
               final tableNo = data['table_no'] ?? 'N/A';
 
-              // 🟢 Charges breakdown — subtotal / service_charge /
-              // service_charge_rate are now saved on the order doc by
-              // payment_page.dart. Older orders placed before this change
-              // won't have them, so fall back to treating the whole total
-              // as the subtotal with a 0% service charge.
               final num subtotal = (data['subtotal'] as num?) ?? total;
               final num serviceCharge = (data['service_charge'] as num?) ?? 0;
               final num serviceChargeRate =
@@ -236,9 +228,6 @@ class MyOrdersPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
 
-                      // 🟢 Charges breakdown row — Subtotal, Service Charge
-                      // (labeled with the actual rate applied, e.g. 8.1%
-                      // for dine-in / 2.6% for take-away), then the Total.
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -281,11 +270,17 @@ class MyOrdersPage extends StatelessWidget {
                             (itemMap['price'] as num?)?.toDouble() ?? 0.0;
                         final iKind = itemMap['kind'] ?? '';
 
-                        // Drinks specific data
+                        // 🟢 Dynamic Data
+                        final iSize = itemMap['size'] as String?;
+                        final iMenuChoices =
+                            itemMap['menuChoices'] as Map<String, dynamic>? ??
+                            {};
+
+                        // Legacy Drinks specific data
                         final iType = itemMap['type'] ?? '';
                         final iSugar = itemMap['sugar'] ?? '';
 
-                        // Foods specific data
+                        // Extra Notes & Options
                         final iExtraNote = itemMap['extraNote'] ?? '';
                         final iAddOptions =
                             itemMap['additionalOptions'] as List<dynamic>? ??
@@ -305,12 +300,14 @@ class MyOrdersPage extends StatelessWidget {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    '${iQty}x $iName',
-                                    style: const TextStyle(
-                                      color: kWhite,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15,
+                                  Expanded(
+                                    child: Text(
+                                      '${iQty}x $iName',
+                                      style: const TextStyle(
+                                        color: kWhite,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                      ),
                                     ),
                                   ),
                                   Text(
@@ -323,7 +320,32 @@ class MyOrdersPage extends StatelessWidget {
                                 ],
                               ),
 
-                              // Drinks Options View (Type & Sugar)
+                              // 🟢 Explicitly separate the Portion / Size view
+                              if (iSize != null && iSize.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text(
+                                    '📏 Portion: $iSize',
+                                    style: const TextStyle(
+                                      color: kMuted,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+
+                              if (iMenuChoices.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text(
+                                    '✔️ ${iMenuChoices.values.join(', ')}',
+                                    style: const TextStyle(
+                                      color: kMuted,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+
                               if (iKind == 'drink' &&
                                   (iType.isNotEmpty || iSugar.isNotEmpty))
                                 Padding(
@@ -337,7 +359,6 @@ class MyOrdersPage extends StatelessWidget {
                                   ),
                                 ),
 
-                              // Extra Note View
                               if (iExtraNote != null &&
                                   iExtraNote.toString().isNotEmpty)
                                 Padding(
@@ -351,7 +372,6 @@ class MyOrdersPage extends StatelessWidget {
                                   ),
                                 ),
 
-                              // Additional Options Fields View (Extras)
                               if (iAddOptions.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 6.0),
@@ -421,9 +441,6 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 
-  // 🟢 Human-readable label for the delivery method, used to make the
-  // service-charge line self-explanatory (e.g. "Service Charge (Dine-In •
-  // 8.1%)") instead of just showing a bare percentage.
   String _methodLabel(String method) {
     return method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
   }

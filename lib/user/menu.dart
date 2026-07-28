@@ -292,7 +292,6 @@ class _MenuPageState extends State<MenuPage> {
                             kind: _kind,
                             category: _selectedCategory,
                             searchQuery: _searchQuery,
-                            // 🟢 Receives the specific actualKind for the tapped item
                             onTapItem: (m, actualKind) => _showItemSheet(
                               context,
                               actualKind,
@@ -557,7 +556,6 @@ class _MenuGrid extends StatelessWidget {
   final _MenuKind kind;
   final String? category;
   final String searchQuery;
-  // 🟢 Callback now takes the item Map AND its actual _MenuKind
   final void Function(Map<String, dynamic>, _MenuKind) onTapItem;
 
   const _MenuGrid({
@@ -573,7 +571,6 @@ class _MenuGrid extends StatelessWidget {
         .collection('menu_items')
         .where('status', isEqualTo: 'on');
 
-    // 🟢 Apply itemType and category filters ONLY if we are NOT searching globally
     if (searchQuery.isEmpty) {
       q = q.where('itemType', isEqualTo: _itemTypeFor(kind));
       if (category != null) {
@@ -591,7 +588,6 @@ class _MenuGrid extends StatelessWidget {
 
         var docs = snap.data?.docs ?? [];
 
-        // 🟢 Client-side filtering by name
         if (searchQuery.isNotEmpty) {
           docs = docs.where((d) {
             final m = (d.data() as Map<String, dynamic>?) ?? {};
@@ -637,8 +633,6 @@ class _MenuGrid extends StatelessWidget {
             final discounted = _isDiscounted(m);
             final finalPrice = _effectivePrice(m);
 
-            // 🟢 Determine the actual type of this item to pass back on tap
-            // This guarantees items from a global search open the sheet correctly
             final typeStr = (m['itemType'] as String?) ?? _itemTypeFor(kind);
             _MenuKind actualKind = kind;
             if (typeStr == 'drink')
@@ -666,6 +660,11 @@ class _MenuGrid extends StatelessWidget {
                       flex: 5,
                       child: Stack(
                         children: [
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(16),
+                            ),
+                          ),
                           ClipRRect(
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(16),
@@ -803,11 +802,14 @@ void _showItemSheet(
 ) {
   final name = (item['name'] as String?) ?? '';
   final imageUrl = (item['imageUrl'] as String?) ?? '';
-  final originalPrice = ((item['price'] as num?) ?? 0).toDouble();
-  final basePrice = _effectivePrice(item);
-  final discounted = _isDiscounted(item);
   final dbNote = (item['note'] as String?) ?? '';
   final category = (item['category'] as String?) ?? '';
+
+  final bool hasMultipleSizes = item['hasMultipleSizes'] == true;
+  final List<Map<String, dynamic>> sizes = List<Map<String, dynamic>>.from(
+    item['sizes'] ?? [],
+  );
+
   final List<String> menuChoiceIds = List<String>.from(
     item['menuChoices'] ?? [],
   );
@@ -815,6 +817,11 @@ void _showItemSheet(
       (item['additionalOptions'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+
+  String? initialSelectedSize;
+  if (hasMultipleSizes && sizes.isNotEmpty) {
+    initialSelectedSize = sizes.first['name'] as String?;
+  }
 
   showModalBottomSheet(
     context: context,
@@ -825,27 +832,104 @@ void _showItemSheet(
     ),
     builder: (ctx) {
       int qty = 1;
-      String drinkType = 'Hot';
-      String sugar = 'Normal';
       final noteCtrl = TextEditingController();
       final Map<String, String?> selectedChoice = {};
       final Set<int> selectedAddOns = {};
 
+      String? selectedSizeName = initialSelectedSize;
+
       double computeTotal() {
+        double currentOriginalPrice = ((item['price'] as num?) ?? 0).toDouble();
+        if (hasMultipleSizes && selectedSizeName != null) {
+          final matchedSize = sizes.firstWhere(
+            (s) => s['name'] == selectedSizeName,
+            orElse: () => sizes.first,
+          );
+          currentOriginalPrice = ((matchedSize['price'] as num?) ?? 0)
+              .toDouble();
+        }
+
+        double currentEffectivePrice = currentOriginalPrice;
+        if (_isDiscounted(item)) {
+          final discountType = (item['discountType'] as String?) ?? 'percent';
+          final discountValue =
+              (item['discountValue'] as num?)?.toDouble() ?? 0;
+          if (discountType == 'percent') {
+            currentEffectivePrice =
+                currentOriginalPrice -
+                (currentOriginalPrice * discountValue / 100);
+          } else {
+            currentEffectivePrice = currentOriginalPrice - discountValue;
+          }
+          if (currentEffectivePrice < 0) currentEffectivePrice = 0;
+        }
+
         double addOnTotal = 0;
         for (final idx in selectedAddOns) {
           addOnTotal += ((additionalOptions[idx]['price'] as num?) ?? 0)
               .toDouble();
         }
-        return (basePrice + addOnTotal) * qty;
+
+        return (currentEffectivePrice + addOnTotal) * qty;
       }
 
-      Future<void> addToChat(StateSetter setS) async {
+      double getCurrentDisplayOriginalPrice() {
+        if (hasMultipleSizes && selectedSizeName != null) {
+          final matchedSize = sizes.firstWhere(
+            (s) => s['name'] == selectedSizeName,
+            orElse: () => sizes.first,
+          );
+          return ((matchedSize['price'] as num?) ?? 0).toDouble();
+        }
+        return ((item['price'] as num?) ?? 0).toDouble();
+      }
+
+      // 🟢 Changed to return a Future<bool> to confirm validation
+      Future<bool> addToChat(StateSetter setS) async {
+        // --- VALIDATION LOGIC ---
+        if (hasMultipleSizes &&
+            sizes.isNotEmpty &&
+            (selectedSizeName == null || selectedSizeName!.isEmpty)) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Please select a Portion / Size.',
+                  style: TextStyle(color: Colors.white),
+                ),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+          return false;
+        }
+
+        for (final groupId in menuChoiceIds) {
+          final val = selectedChoice[groupId];
+          if (val == null || val.isEmpty) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Please make sure to select all required options.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  backgroundColor: Colors.redAccent,
+                ),
+              );
+            }
+            return false;
+          }
+        }
+        // ------------------------
+
         final uid = uidHint ?? await _ensureUid();
-        if (uid == null) return;
+        if (uid == null) return false;
+
         final chosenAddOns = selectedAddOns
             .map((i) => additionalOptions[i])
             .toList();
+
         final payload = <String, dynamic>{
           'kind': _itemTypeFor(kind),
           'name': name,
@@ -856,166 +940,180 @@ void _showItemSheet(
           'menuChoices': selectedChoice,
           'additionalOptions': chosenAddOns,
           'createdAt': FieldValue.serverTimestamp(),
+          'note': dbNote,
+          'extraNote': noteCtrl.text.trim().isEmpty
+              ? null
+              : noteCtrl.text.trim(),
         };
-        if (kind == _MenuKind.drinks) {
-          payload.addAll({'type': drinkType, 'sugar': sugar});
-        } else {
-          payload.addAll({
-            'note': dbNote,
-            'extraNote': noteCtrl.text.trim().isEmpty
-                ? null
-                : noteCtrl.text.trim(),
-          });
+
+        if (hasMultipleSizes && selectedSizeName != null) {
+          payload['size'] = selectedSizeName;
         }
+
         await FirebaseFirestore.instance
             .collection('chat')
             .doc(uid)
             .collection('items')
             .add(payload);
+
+        return true;
       }
 
       return StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 12,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  height: 5,
-                  width: 50,
-                  decoration: BoxDecoration(
-                    color: kMuted.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: _WebSafeImage(
-                            imageUrl: imageUrl,
-                            width: 100,
-                            height: 100,
-                            fallback: Container(
-                              color: kDarkCard,
-                              child: const Icon(
-                                Icons.image,
-                                color: kMuted,
-                                size: 40,
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (discounted)
-                          Positioned(
-                            top: 4,
-                            left: 4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: kDiscount,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                _discountBadgeText(item),
-                                style: const TextStyle(
-                                  color: kWhite,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
+        builder: (ctx, setS) {
+          final currentOriginalDisplay = getCurrentDisplayOriginalPrice();
+          double currentEffectiveDisplay = currentOriginalDisplay;
+          if (_isDiscounted(item)) {
+            final discountType = (item['discountType'] as String?) ?? 'percent';
+            final discountValue =
+                (item['discountValue'] as num?)?.toDouble() ?? 0;
+            if (discountType == 'percent') {
+              currentEffectiveDisplay =
+                  currentOriginalDisplay -
+                  (currentOriginalDisplay * discountValue / 100);
+            } else {
+              currentEffectiveDisplay = currentOriginalDisplay - discountValue;
+            }
+            if (currentEffectiveDisplay < 0) currentEffectiveDisplay = 0;
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 12,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 5,
+                    width: 50,
+                    decoration: BoxDecoration(
+                      color: kMuted.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(5),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Stack(
                         children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              color: kWhite,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 20,
-                            ),
-                          ),
-                          if (discounted)
-                            Row(
-                              children: [
-                                Text(
-                                  'CHF ${originalPrice.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    color: kMuted,
-                                    fontSize: 13,
-                                    decoration: TextDecoration.lineThrough,
-                                    decorationColor: kMuted,
-                                  ),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: _WebSafeImage(
+                              imageUrl: imageUrl,
+                              width: 100,
+                              height: 100,
+                              fallback: Container(
+                                color: kDarkCard,
+                                child: const Icon(
+                                  Icons.image,
+                                  color: kMuted,
+                                  size: 40,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'CHF ${basePrice.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: kDiscount,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            )
-                          else
-                            Text(
-                              'CHF ${basePrice.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: kPrimary,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
                               ),
                             ),
-                          if (kind != _MenuKind.drinks && dbNote.isNotEmpty)
-                            Text(
-                              dbNote,
-                              style: const TextStyle(
-                                color: kMuted,
-                                fontSize: 13,
+                          ),
+                          if (_isDiscounted(item))
+                            Positioned(
+                              top: 4,
+                              left: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kDiscount,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  _discountBadgeText(item),
+                                  style: const TextStyle(
+                                    color: kWhite,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ),
                             ),
                         ],
                       ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 20,
+                              ),
+                            ),
+                            if (_isDiscounted(item))
+                              Row(
+                                children: [
+                                  Text(
+                                    'CHF ${currentOriginalDisplay.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      color: kMuted,
+                                      fontSize: 13,
+                                      decoration: TextDecoration.lineThrough,
+                                      decorationColor: kMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'CHF ${currentEffectiveDisplay.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: kDiscount,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              Text(
+                                'CHF ${currentEffectiveDisplay.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  color: kPrimary,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            if (kind != _MenuKind.drinks && dbNote.isNotEmpty)
+                              Text(
+                                dbNote,
+                                style: const TextStyle(
+                                  color: kMuted,
+                                  fontSize: 13,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  if (hasMultipleSizes && sizes.isNotEmpty) ...[
+                    _InlineOptionRow(
+                      title: 'Portion / Size',
+                      values: sizes.map((s) => s['name'] as String).toList(),
+                      selected: selectedSizeName ?? '',
+                      onChanged: (val) => setS(() => selectedSizeName = val),
+                      showRequired: true,
                     ),
+                    const SizedBox(height: 16),
                   ],
-                ),
-                const SizedBox(height: 24),
-                if (kind == _MenuKind.drinks) ...[
-                  _SectionTitle(AppLanguage.getText('type')),
-                  _ChipRow(
-                    values: const ['Hot', 'Iced'],
-                    selected: drinkType,
-                    onChanged: (v) => setS(() => drinkType = v),
-                  ),
-                  const SizedBox(height: 16),
-                  _SectionTitle(AppLanguage.getText('sugar')),
-                  _ChipRow(
-                    values: const ['Normal', 'Half'],
-                    selected: sugar,
-                    onChanged: (v) => setS(() => sugar = v),
-                  ),
-                  const SizedBox(height: 16),
-                ] else ...[
+
                   _SectionTitle(AppLanguage.getText('note_optional')),
                   TextField(
                     controller: noteCtrl,
@@ -1033,127 +1131,131 @@ void _showItemSheet(
                     ),
                   ),
                   const SizedBox(height: 20),
-                ],
-                if (menuChoiceIds.isNotEmpty) ...[
-                  _MenuChoicesSection(
-                    choiceIds: menuChoiceIds,
-                    selectedChoice: selectedChoice,
-                    onChanged: (gid, val) =>
-                        setS(() => selectedChoice[gid] = val),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (additionalOptions.isNotEmpty) ...[
-                  _AdditionalOptionsSection(
-                    options: additionalOptions,
-                    selected: selectedAddOns,
-                    onToggle: (idx) => setS(() {
-                      selectedAddOns.contains(idx)
-                          ? selectedAddOns.remove(idx)
-                          : selectedAddOns.add(idx);
-                    }),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                _SectionTitle(AppLanguage.getText('quantity')),
-                Row(
-                  children: [
-                    _QtyBtn(
-                      icon: Icons.remove,
-                      onTap: () => setS(() => qty = qty > 1 ? qty - 1 : 1),
+
+                  if (menuChoiceIds.isNotEmpty) ...[
+                    _MenuChoicesSection(
+                      choiceIds: menuChoiceIds,
+                      selectedChoice: selectedChoice,
+                      onChanged: (gid, val) =>
+                          setS(() => selectedChoice[gid] = val),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        '$qty',
+                    const SizedBox(height: 8),
+                  ],
+
+                  if (additionalOptions.isNotEmpty) ...[
+                    _AdditionalOptionsSection(
+                      options: additionalOptions,
+                      selected: selectedAddOns,
+                      onToggle: (idx) => setS(() {
+                        selectedAddOns.contains(idx)
+                            ? selectedAddOns.remove(idx)
+                            : selectedAddOns.add(idx);
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  _SectionTitle(AppLanguage.getText('quantity')),
+                  Row(
+                    children: [
+                      _QtyBtn(
+                        icon: Icons.remove,
+                        onTap: () => setS(() => qty = qty > 1 ? qty - 1 : 1),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          '$qty',
+                          style: const TextStyle(
+                            color: kWhite,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      _QtyBtn(icon: Icons.add, onTap: () => setS(() => qty++)),
+                      const Spacer(),
+                      Text(
+                        'CHF ${computeTotal().toStringAsFixed(2)}',
                         style: const TextStyle(
                           color: kWhite,
-                          fontSize: 20,
                           fontWeight: FontWeight.w700,
+                          fontSize: 16,
                         ),
                       ),
-                    ),
-                    _QtyBtn(icon: Icons.add, onTap: () => setS(() => qty++)),
-                    const Spacer(),
-                    Text(
-                      'CHF ${computeTotal().toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: kWhite,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: kPrimary.withOpacity(0.8)),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: kPrimary.withOpacity(0.8)),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                        ),
-                        onPressed: () async {
-                          await addToChat(setS);
-                          if (context.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  AppLanguage.getText('added_to_cart'),
-                                ),
-                                backgroundColor: kPrimary,
-                              ),
-                            );
-                          }
-                        },
-                        child: Text(
-                          AppLanguage.getText('add_to_cart'),
-                          style: const TextStyle(color: kWhite),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kPrimary,
-                          foregroundColor: kWhite,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () async {
-                          await addToChat(setS);
-                          if (context.mounted) {
-                            Navigator.pop(ctx);
-                            final uid = await _ensureUid();
-                            if (uid != null)
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      CheckoutPage(uid: uid, tableNo: tableNo),
+                          onPressed: () async {
+                            final success = await addToChat(setS);
+                            if (success && context.mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    AppLanguage.getText('added_to_cart'),
+                                  ),
+                                  backgroundColor: kPrimary,
                                 ),
                               );
-                          }
-                        },
-                        child: Text(
-                          AppLanguage.getText('buy_now'),
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                            }
+                          },
+                          child: Text(
+                            AppLanguage.getText('add_to_cart'),
+                            style: const TextStyle(color: kWhite),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: kPrimary,
+                            foregroundColor: kWhite,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final success = await addToChat(setS);
+                            if (success && context.mounted) {
+                              Navigator.pop(ctx);
+                              final uid = await _ensureUid();
+                              if (uid != null)
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => CheckoutPage(
+                                      uid: uid,
+                                      tableNo: tableNo,
+                                    ),
+                                  ),
+                                );
+                            }
+                          },
+                          child: Text(
+                            AppLanguage.getText('buy_now'),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     },
   );
@@ -1198,99 +1300,16 @@ class _MenuChoicesSection extends StatelessWidget {
             final heading = (data['heading'] as String?) ?? '';
             final options = List<String>.from(data['options'] ?? []);
             final groupId = doc.id;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: kWhite.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: kMuted.withOpacity(0.2)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        heading,
-                        style: const TextStyle(
-                          color: kWhite,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: kPrimary.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'Required',
-                          style: TextStyle(
-                            color: kPrimary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ...options.map((opt) {
-                    final isSelected = selectedChoice[groupId] == opt;
-                    return InkWell(
-                      onTap: () => onChanged(groupId, opt),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 6,
-                          horizontal: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              width: 20,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isSelected
-                                      ? kPrimary
-                                      : kMuted.withOpacity(0.5),
-                                  width: 2,
-                                ),
-                                color: isSelected
-                                    ? kPrimary
-                                    : Colors.transparent,
-                              ),
-                              child: isSelected
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: kWhite,
-                                      size: 12,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              opt,
-                              style: TextStyle(
-                                color: isSelected ? kWhite : kMuted,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                ],
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: _InlineOptionRow(
+                title: heading,
+                values: options,
+                selected: selectedChoice[groupId] ?? '',
+                onChanged: (val) => onChanged(groupId, val),
+                showRequired:
+                    true, // Marking all DB choices as Required visually
               ),
             );
           }).toList(),
@@ -1435,35 +1454,100 @@ class _SectionTitle extends StatelessWidget {
   );
 }
 
-class _ChipRow extends StatelessWidget {
+class _InlineOptionRow extends StatelessWidget {
+  final String title;
   final List<String> values;
   final String selected;
   final ValueChanged<String> onChanged;
-  const _ChipRow({
+  final bool showRequired;
+
+  const _InlineOptionRow({
+    required this.title,
     required this.values,
     required this.selected,
     required this.onChanged,
+    this.showRequired = false,
   });
+
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 10,
-    children: values.map((v) {
-      final on = v == selected;
-      return ChoiceChip(
-        label: Text(v),
-        selected: on,
-        labelStyle: TextStyle(
-          color: on ? kWhite : kMuted,
-          fontWeight: on ? FontWeight.bold : FontWeight.normal,
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 10.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: kMuted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (showRequired) ...[
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: kPrimary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Required',
+                    style: TextStyle(
+                      color: kPrimary,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
-        selectedColor: kPrimary,
-        backgroundColor: kWhite.withOpacity(0.05),
-        showCheckmark: false,
-        side: BorderSide(color: on ? kPrimary : kMuted.withOpacity(0.3)),
-        onSelected: (_) => onChanged(v),
-      );
-    }).toList(),
-  );
+        const SizedBox(width: 16),
+        Expanded(
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
+            children: values.map((v) {
+              final on = v == selected;
+              return InkWell(
+                onTap: () => onChanged(v),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: on ? kPrimary : kWhite,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    v,
+                    style: TextStyle(
+                      color: on ? kWhite : const Color(0xFF7B957B),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _QtyBtn extends StatelessWidget {

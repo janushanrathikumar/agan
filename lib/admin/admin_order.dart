@@ -351,7 +351,14 @@ class AdminOrderDetailsPage extends StatelessWidget {
 
               // Items List
               ...items.map((item) {
-                final String name = item['name'] ?? 'Item';
+                final String baseName = item['name'] ?? 'Item';
+                // 🟢 Extract size/portion
+                final String size = item['size'] ?? '';
+                // 🟢 Append size to name for PDF
+                final String name = size.isNotEmpty
+                    ? '$baseName ($size)'
+                    : baseName;
+
                 final num qty = item['qty'] ?? 1;
                 final num price = item['price'] ?? 0;
                 final num lineTotal = price * qty;
@@ -475,9 +482,9 @@ class AdminOrderDetailsPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'Order Details',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                   color: kPrimary,
@@ -579,7 +586,12 @@ class AdminOrderDetailsPage extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: kMuted, fontSize: 14)),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(color: kMuted, fontSize: 14),
+          ),
+        ),
         Text(
           'CHF ${value.toStringAsFixed(2)}',
           style: const TextStyle(
@@ -601,6 +613,10 @@ class AdminOrderDetailsPage extends StatelessWidget {
     // 🟢 category is now saved on every item kind (drinks included), so
     // show it as a small chip under the item name.
     final String category = (item['category'] ?? '').toString();
+
+    // 🟢 Extract the new Portion / Size
+    final String iSize = item['size'] as String? ?? '';
+    final String displayName = iSize.isNotEmpty ? '$name ($iSize)' : name;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -635,7 +651,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '$name  x$qty',
+                        '$displayName  x$qty',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -675,6 +691,21 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 6),
+
+                // 🟢 Explicitly separate the Portion / Size view
+                if (iSize.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4.0),
+                    child: Text(
+                      '📏 Portion: $iSize',
+                      style: const TextStyle(
+                        color: kMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+
                 // Kind-specific details
                 if (kind == 'drink') _buildDrinkDetails(item),
                 // 🟢 'food' AND 'combo' items both use the food-style
