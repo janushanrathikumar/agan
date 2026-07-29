@@ -4,13 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:restorant/startup%20page/signupverify.dart';
-import '../language.dart'; // Language file இணைக்கப்பட்டுள்ளது
+import '../language.dart';
 
-// லோகோ நிறங்கள்
 const kPrimary = Color(0xFFB59410);
-const kBg = Color(0xFF112A18); // Dark Green
-const kMuted = Color(0xFFA1B3A1); // Muted Green
-const kWhite = Color(0xFFF7F7F2); // Cream White
+const kBg = Color(0xFF112A18);
+const kMuted = Color(0xFFA1B3A1);
+const kWhite = Color(0xFFF7F7F2);
 
 class SignUpPage extends StatefulWidget {
   static const route = '/signup';
@@ -31,6 +30,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
   final _emailRegex = RegExp(r'^[\w\.\-]+@[\w\-]+\.[\w\.\-]+$');
 
+  // ── 100% Original Logic Retained ──
   Future<void> _registerWithPhone() async {
     final name = _name.text.trim();
     final email = _email.text.trim();
@@ -49,7 +49,6 @@ class _SignUpPageState extends State<SignUpPage> {
       setState(() => _err = AppLanguage.getText('err_enter_phone'));
       return;
     }
-    // Auto-prefix '+' so the user doesn't have to type it themselves.
     if (!phone.startsWith('+')) {
       phone = '+$phone';
     }
@@ -64,10 +63,6 @@ class _SignUpPageState extends State<SignUpPage> {
     });
 
     try {
-      // Friendly pre-check: block only if a FULLY VERIFIED account already
-      // exists with this phone or email. We deliberately don't create any
-      // Firebase Auth account yet, so there's nothing to clean up if the
-      // user abandons this screen.
       final phoneMatch = await FirebaseFirestore.instance
           .collection('user')
           .where('phone', isEqualTo: phone)
@@ -92,13 +87,8 @@ class _SignUpPageState extends State<SignUpPage> {
         );
       }
 
-      // Send the OTP. No Firebase Auth user exists yet — the account is
-      // only created once the code is verified, on the next screen.
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phone,
-        // Android only: fires automatically if SMS auto-retrieval succeeds
-        // before the user types the code manually. We still finish account
-        // creation here so the user isn't left stuck on this screen.
         verificationCompleted: (PhoneAuthCredential credential) async {
           try {
             await finalizeSignup(
@@ -164,23 +154,6 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
 
-  InputDecoration _dec(String label, {IconData? icon}) => InputDecoration(
-    labelText: label,
-    labelStyle: const TextStyle(color: kMuted),
-    prefixIcon: icon != null ? Icon(icon, color: kMuted) : null,
-    filled: true,
-    fillColor: kWhite.withOpacity(0.06),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
-    ),
-    focusedBorder: const OutlineInputBorder(
-      borderRadius: BorderRadius.all(Radius.circular(16)),
-      borderSide: BorderSide(color: kPrimary, width: 1.5),
-    ),
-  );
-
   @override
   void dispose() {
     _name.dispose();
@@ -189,6 +162,24 @@ class _SignUpPageState extends State<SignUpPage> {
     _password.dispose();
     super.dispose();
   }
+
+  // ── Neat Input Decoration ──
+  InputDecoration _dec(String label, {IconData? icon}) => InputDecoration(
+    labelText: label,
+    labelStyle: const TextStyle(color: kMuted),
+    prefixIcon: icon != null ? Icon(icon, color: kMuted) : null,
+    filled: true,
+    fillColor: kWhite.withOpacity(0.06),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: kPrimary, width: 1.5),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -199,12 +190,17 @@ class _SignUpPageState extends State<SignUpPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         title: Text(
           AppLanguage.getText('sign_up_title'),
-          style: const TextStyle(color: kWhite),
+          style: const TextStyle(color: kWhite, fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kWhite),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: kWhite,
+            size: 22,
+          ),
           onPressed: () => Navigator.pushReplacementNamed(context, '/signin'),
         ),
       ),
@@ -216,29 +212,29 @@ class _SignUpPageState extends State<SignUpPage> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF194D25),
-                  Color(0xFF0C1E11),
-                ], // Logo Dark Green Gradient
+                colors: [Color(0xFF194D25), Color(0xFF0C1E11)],
               ),
             ),
           ),
           Center(
             child: SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 16.0,
+                ),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: isWide ? 520 : 420),
+                  constraints: BoxConstraints(maxWidth: isWide ? 460 : 400),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(28),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                       child: Container(
-                        padding: EdgeInsets.all(isWide ? 28 : 22),
+                        padding: const EdgeInsets.all(32),
                         decoration: BoxDecoration(
                           color: kWhite.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: kWhite.withOpacity(0.15)),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: kWhite.withOpacity(0.2)),
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -249,20 +245,20 @@ class _SignUpPageState extends State<SignUpPage> {
                                 const Icon(
                                   Icons.restaurant_rounded,
                                   color: kPrimary,
-                                  size: 28,
+                                  size: 30,
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 12),
                                 Text(
                                   AppLanguage.getText('create_account'),
                                   style: const TextStyle(
                                     color: kWhite,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 32),
                             TextField(
                               controller: _name,
                               style: const TextStyle(color: kWhite),
@@ -271,7 +267,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                 icon: Icons.person_outline_rounded,
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 16),
                             TextField(
                               controller: _email,
                               keyboardType: TextInputType.emailAddress,
@@ -281,7 +277,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                 icon: Icons.mail_outline,
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 16),
                             TextField(
                               controller: _phone,
                               keyboardType: TextInputType.phone,
@@ -291,7 +287,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                 icon: Icons.phone_android_rounded,
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 16),
                             TextField(
                               controller: _password,
                               obscureText: _obscure,
@@ -313,22 +309,23 @@ class _SignUpPageState extends State<SignUpPage> {
                                     ),
                                   ),
                             ),
-                            const SizedBox(height: 8),
-                            if (_err != null)
+                            if (_err != null) ...[
+                              const SizedBox(height: 12),
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
                                   _err!,
                                   style: const TextStyle(
                                     color: Colors.redAccent,
-                                    fontSize: 12.5,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ),
-                            const SizedBox(height: 18),
+                            ],
+                            const SizedBox(height: 28),
                             SizedBox(
                               width: double.infinity,
-                              height: 48,
+                              height: 52,
                               child: FilledButton(
                                 style: FilledButton.styleFrom(
                                   backgroundColor: kPrimary,
@@ -336,29 +333,29 @@ class _SignUpPageState extends State<SignUpPage> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
                                   ),
+                                  elevation: 2,
                                 ),
                                 onPressed: _busy ? null : _registerWithPhone,
                                 child: _busy
                                     ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
+                                        height: 24,
+                                        width: 24,
                                         child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                kWhite,
-                                              ),
+                                          strokeWidth: 2.5,
+                                          color: kWhite,
                                         ),
                                       )
                                     : Text(
                                         AppLanguage.getText('get_otp'),
                                         style: const TextStyle(
+                                          fontSize: 16,
                                           fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
                                         ),
                                       ),
                               ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 20),
                             TextButton(
                               onPressed: () => Navigator.pushReplacementNamed(
                                 context,
@@ -366,7 +363,11 @@ class _SignUpPageState extends State<SignUpPage> {
                               ),
                               child: Text(
                                 AppLanguage.getText('already_have_account'),
-                                style: const TextStyle(color: kMuted),
+                                style: const TextStyle(
+                                  color: kMuted,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ],
@@ -384,13 +385,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 }
 
-/// Shared finalization logic used both by the auto-retrieved OTP path here
-/// and the manual OTP entry in SignUpVerifyPage.
-///
-/// Signs in with the phone credential (creating the Firebase user, since
-/// none exists yet at this point), links an email/password credential using
-/// the user's REAL email so they can also log in with email+password later,
-/// then writes the verified Firestore user document.
+// ── 100% Original Helper Logic Retained ──
 Future<void> finalizeSignup({
   required PhoneAuthCredential phoneCredential,
   required String phone,
@@ -398,8 +393,6 @@ Future<void> finalizeSignup({
   required String email,
   required String password,
 }) async {
-  // 1. Sign in with the phone credential. Since this phone has never been
-  //    used before, Firebase creates a brand-new user here.
   final phoneSignIn = await FirebaseAuth.instance.signInWithCredential(
     phoneCredential,
   );
@@ -410,8 +403,6 @@ Future<void> finalizeSignup({
 
   await user.updateDisplayName(name);
 
-  // 2. Link the real email + password so the user can log in with either
-  //    phone or email afterward.
   final emailCredential = EmailAuthProvider.credential(
     email: email,
     password: password,
@@ -420,7 +411,6 @@ Future<void> finalizeSignup({
     await user.linkWithCredential(emailCredential);
   } on FirebaseAuthException catch (e) {
     if (e.code == 'provider-already-linked') {
-      // Already linked from a previous attempt — fine, continue.
     } else if (e.code == 'email-already-in-use') {
       throw Exception(
         'This email is already used by another account. Please sign in or use a different email.',
@@ -430,7 +420,6 @@ Future<void> finalizeSignup({
     }
   }
 
-  // 3. Write the verified Firestore user document.
   await FirebaseFirestore.instance.collection('user').doc(user.uid).set({
     'uid': user.uid,
     'email': email,

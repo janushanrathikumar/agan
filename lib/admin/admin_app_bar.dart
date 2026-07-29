@@ -1,9 +1,8 @@
+// lib/admin/admin_app_bar.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-// Assuming these files exist relative to this one
+import 'package:restorant/admin/manage_menu_items.dart';
 import 'add_category.dart';
-import 'add_food_menu.dart';
 import 'admin_order.dart';
 import 'add_menu_chocie.dart';
 import 'promotion.dart';
@@ -19,7 +18,7 @@ class AdminAppBar extends StatefulWidget implements PreferredSizeWidget {
   const AdminAppBar({super.key});
 
   @override
-  Size get preferredSize => const Size.fromHeight(75);
+  Size get preferredSize => const Size.fromHeight(70);
 
   @override
   State<AdminAppBar> createState() => _AdminAppBarState();
@@ -32,13 +31,13 @@ class _AdminAppBarState extends State<AdminAppBar> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: kPrimary, size: 22),
-        const SizedBox(width: 10),
+        Icon(icon, color: kPrimary, size: 20),
+        const SizedBox(width: 12),
         Text(
           title,
           style: const TextStyle(
             color: kWhite,
-            fontSize: 15,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -50,7 +49,7 @@ class _AdminAppBarState extends State<AdminAppBar> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: kBg,
+        backgroundColor: const Color(0xFF2A2A2A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Confirm Logout", style: TextStyle(color: kWhite)),
         content: const Text(
@@ -66,9 +65,8 @@ class _AdminAppBarState extends State<AdminAppBar> {
             style: ElevatedButton.styleFrom(
               backgroundColor: kPrimary,
               foregroundColor: kWhite,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
@@ -83,13 +81,11 @@ class _AdminAppBarState extends State<AdminAppBar> {
 
     if (confirm != true) return;
     if (!mounted) return;
-
     setState(() => _loggingOut = true);
 
     try {
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
-
       Navigator.of(
         context,
         rootNavigator: true,
@@ -111,32 +107,40 @@ class _AdminAppBarState extends State<AdminAppBar> {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF2C2B2A), Color(0xFF121212)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Color(0xFF222222),
         boxShadow: [
           BoxShadow(
-            color: Colors.black54,
-            blurRadius: 12,
-            offset: Offset(0, 4),
+            color: Colors.black45,
+            blurRadius: 10,
+            offset: Offset(0, 3),
           ),
         ],
+        border: Border(bottom: BorderSide(color: Colors.white10, width: 1)),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
               PopupMenuButton<String>(
                 tooltip: "Menu Navigation",
-                icon: const Icon(Icons.menu_rounded, color: kPrimary, size: 30),
-                color: kBg,
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: kPrimary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.grid_view_rounded,
+                    color: kPrimary,
+                    size: 24,
+                  ),
+                ),
+                color: const Color(0xFF2A2A2A),
                 elevation: 12,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: const BorderSide(color: kMuted, width: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Colors.white10),
                 ),
                 onSelected: (value) {
                   switch (value) {
@@ -151,10 +155,12 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
-                    case 'add_food':
+                    case 'manage_menu_items':
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const AddMenuPage()),
+                        MaterialPageRoute(
+                          builder: (_) => const ManageMenuItemsPage(),
+                        ),
                       );
                       break;
                     case 'add_category':
@@ -173,14 +179,6 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
-                    case 'add_promotion':
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AdminPromotionsPage(),
-                        ),
-                      );
-                      break;
                     case 'add_additional_option':
                       Navigator.push(
                         context,
@@ -189,26 +187,35 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
+                    // case 'add_promotion':
+                    //   Navigator.push(
+                    //     context,
+                    //     MaterialPageRoute(
+                    //       builder: (_) => const AdminPromotionsPage(),
+                    //     ),
+                    //   );
+                    //   break;
                   }
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
                   PopupMenuItem<String>(
                     value: 'home',
-                    child: _buildMenuItemChild(Icons.home_rounded, 'Home'),
+                    child: _buildMenuItemChild(Icons.home_rounded, 'Dashboard'),
                   ),
                   const PopupMenuDivider(),
-                  PopupMenuItem<String>(
-                    value: 'add_food',
-                    child: _buildMenuItemChild(
-                      Icons.fastfood_rounded,
-                      'Add Menu',
-                    ),
-                  ),
                   PopupMenuItem<String>(
                     value: 'Order',
                     child: _buildMenuItemChild(
                       Icons.receipt_long_rounded,
-                      'View Orders',
+                      'Orders',
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'manage_menu_items',
+                    child: _buildMenuItemChild(
+                      Icons.menu_book_rounded,
+                      'Manage Menu Items',
                     ),
                   ),
                   PopupMenuItem<String>(
@@ -222,33 +229,33 @@ class _AdminAppBarState extends State<AdminAppBar> {
                     value: 'add_menu_choice',
                     child: _buildMenuItemChild(
                       Icons.select_all_rounded,
-                      'Add Choice',
-                    ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'add_promotion',
-                    child: _buildMenuItemChild(
-                      Icons.local_offer_rounded,
-                      'Add Promotion',
+                      'Menu Choice',
                     ),
                   ),
                   PopupMenuItem<String>(
                     value: 'add_additional_option',
                     child: _buildMenuItemChild(
                       Icons.add_circle_outline_rounded,
-                      'Manage Options',
+                      'Menu Additional Options',
                     ),
                   ),
+                  // PopupMenuItem<String>(
+                  //   value: 'add_promotion',
+                  //   child: _buildMenuItemChild(
+                  //     Icons.local_offer_rounded,
+                  //     'Add Promotion',
+                  //   ),
+                  // ),
                 ],
               ),
-              const SizedBox(width: 14),
-              Expanded(
+              const SizedBox(width: 16),
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
+                  children: [
                     Text(
-                      "Admin Dashboard",
+                      "Admin Panel",
                       style: TextStyle(
                         color: kWhite,
                         fontSize: 18,
@@ -256,10 +263,9 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         letterSpacing: 0.5,
                       ),
                     ),
-                    SizedBox(height: 3),
                     Text(
-                      "Manage menus, categories & promotions",
-                      style: TextStyle(color: kMuted, fontSize: 13),
+                      "Manage your restaurant",
+                      style: TextStyle(color: kMuted, fontSize: 12),
                     ),
                   ],
                 ),
@@ -275,10 +281,17 @@ class _AdminAppBarState extends State<AdminAppBar> {
                     )
                   : IconButton(
                       tooltip: "Log out",
-                      icon: const Icon(
-                        Icons.logout_rounded,
-                        color: kPrimary,
-                        size: 28,
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.logout_rounded,
+                          color: Colors.redAccent,
+                          size: 22,
+                        ),
                       ),
                       onPressed: _handleLogout,
                     ),

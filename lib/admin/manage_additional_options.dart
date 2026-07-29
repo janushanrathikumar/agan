@@ -24,11 +24,7 @@ class _ManageAdditionalOptionsPageState
     final priceCtrl = TextEditingController(
       text: currentData?['price']?.toString() ?? '',
     );
-    final catalogCtrl = TextEditingController(
-      text: currentData?['catalog'] ?? '',
-    );
 
-    // Seed the type from existing data, default to food
     String selectedType = currentData?['type'] ?? 'food';
     bool isSaving = false;
 
@@ -61,7 +57,7 @@ class _ManageAdditionalOptionsPageState
                     ),
                     const SizedBox(height: 16),
 
-                    // 🟢 Food / Drink / Combo selector
+                    // Food / Drink / Combo selector
                     Container(
                       decoration: BoxDecoration(
                         color: kFieldBg,
@@ -155,8 +151,6 @@ class _ManageAdditionalOptionsPageState
                       controller: priceCtrl,
                       isNumber: true,
                     ),
-                    const SizedBox(height: 12),
-                    _input(label: 'Catalog Code', controller: catalogCtrl),
 
                     const SizedBox(height: 20),
                     Row(
@@ -183,7 +177,6 @@ class _ManageAdditionalOptionsPageState
                                   final price =
                                       double.tryParse(priceCtrl.text.trim()) ??
                                       0;
-                                  final catalog = catalogCtrl.text.trim();
 
                                   if (name.isEmpty) return;
 
@@ -192,8 +185,7 @@ class _ManageAdditionalOptionsPageState
                                     final data = {
                                       'name': name,
                                       'price': price,
-                                      'catalog': catalog,
-                                      'type': selectedType, // 🟢 Save type
+                                      'type': selectedType,
                                     };
 
                                     if (docId == null) {
@@ -293,7 +285,7 @@ class _ManageAdditionalOptionsPageState
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('additional_options')
-            .orderBy('type') // Optional: groups them nicely in the list
+            .orderBy('type')
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -318,6 +310,7 @@ class _ManageAdditionalOptionsPageState
               final data = docs[index].data() as Map<String, dynamic>;
               final docId = docs[index].id;
               final typeStr = _capitalize((data['type'] as String?) ?? 'Food');
+              final price = (data['price'] ?? 0).toString();
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -356,8 +349,9 @@ class _ManageAdditionalOptionsPageState
                       ),
                     ],
                   ),
+                  // 🟢 விலை மட்டும் CHF உடன் காட்டப்படும்
                   subtitle: Text(
-                    'Price: ${data['price']} | Code: ${data['catalog']}',
+                    'Price: CHF $price',
                     style: const TextStyle(color: kMuted),
                   ),
                   trailing: Row(

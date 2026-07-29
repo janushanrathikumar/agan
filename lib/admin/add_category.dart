@@ -5,14 +5,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
-// வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க இந்த இம்போர்ட்டுகள் தேவை
+// வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
-const kPrimary = Color(0xFFB59410);
-const kBg = Color(0xFF2A2928);
-const kMuted = Color(0xFFB7B7B6);
-const kWhite = Color(0xFFFFFFFF);
+
+// 🟢 FULL DARK THEME COLORS
+const kPrimary = Color(0xFFB59410); // Gold/Yellow
+const kBg = Color(0xFF121212); // Deep Dark Background
+const kCardBg = Color(0xFF2A2928); // Dark Card Background
+const kMuted = Color(0xFF8E8E8E); // Muted Gray
+const kWhite = Color(0xFFFFFFFF); // White for Text
 
 class AddCategoryPage extends StatefulWidget {
   const AddCategoryPage({super.key});
@@ -22,18 +25,18 @@ class AddCategoryPage extends StatefulWidget {
 
 class _AddCategoryPageState extends State<AddCategoryPage> {
   final _formKey = GlobalKey<FormState>();
+  final _itemNoCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
+
   Uint8List? _iconBytes;
   String? _iconFileName;
   bool _saving = false;
-
-  // 🟢 New: every category is now tagged as Food or Drink, so
-  // add_menu_item.dart can show only the categories that match the
-  // item type someone is currently adding.
   String _categoryType = 'food';
+  String? _selectedCategoryId; // To track selected category
 
   @override
   void dispose() {
+    _itemNoCtrl.dispose();
     _nameCtrl.dispose();
     super.dispose();
   }
@@ -71,16 +74,25 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     }
   }
 
-  Future<void> _save() async {
+  // 🟢 Add / Edit Save Function
+  Future<void> _saveCategory({DocumentSnapshot? existingDoc}) async {
     if (!_formKey.currentState!.validate()) return;
-    if (_iconBytes == null) {
+
+    final isEdit = existingDoc != null;
+    final existingData = isEdit
+        ? existingDoc.data() as Map<String, dynamic>
+        : {};
+
+    if (!isEdit && _iconBytes == null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Pick a category image')));
       return;
     }
 
+    final itemNo = _itemNoCtrl.text.trim();
     final name = _nameCtrl.text.trim();
+
     if (name.contains('/')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Category name cannot contain "/"')),
@@ -90,41 +102,68 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
 
     setState(() => _saving = true);
     try {
-      final safeBase = (_iconFileName ?? name).replaceAll(
-        RegExp(r'[^a-zA-Z0-9._-]+'),
-        '_',
-      );
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
-      final ref = FirebaseStorage.instance.ref('menu_category_icons/$fileName');
+      String iconUrl = existingData['iconUrl'] ?? '';
+      String iconFileName = existingData['iconFileName'] ?? '';
 
-      await ref.putData(
-        _iconBytes!,
-        SettableMetadata(contentType: _guessContentType(_iconFileName)),
-      );
-      final url = await ref.getDownloadURL();
+      // Upload new image if selected
+      if (_iconBytes != null) {
+        final safeBase = (_iconFileName ?? name).replaceAll(
+          RegExp(r'[^a-zA-Z0-9._-]+'),
+          '_',
+        );
+        iconFileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
+        final ref = FirebaseStorage.instance.ref(
+          'menu_category_icons/$iconFileName',
+        );
 
+        await ref.putData(
+          _iconBytes!,
+          SettableMetadata(contentType: _guessContentType(_iconFileName)),
+        );
+        iconUrl = await ref.getDownloadURL();
+      }
+
+      // Save to Firestore
       await FirebaseFirestore.instance
           .collection('menu_category')
           .doc(name)
           .set({
+            'itemNo': itemNo,
             'name': name,
-            'iconUrl': url,
-            'iconFileName': fileName,
-            // 🟢 Saved so add_menu_item.dart can filter categories by
-            // whether "Food" or "Drink" is currently selected there.
+            'iconUrl': iconUrl,
+            'iconFileName': iconFileName,
             'type': _categoryType,
-            'createdAt': FieldValue.serverTimestamp(),
+            'createdAt': isEdit
+                ? existingData['createdAt']
+                : FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
+      // If name changed during edit, delete the old document
+      if (isEdit && existingDoc.id != name) {
+        await FirebaseFirestore.instance
+            .collection('menu_category')
+            .doc(existingDoc.id)
+            .delete();
+        setState(() => _selectedCategoryId = name);
+      } else if (!isEdit) {
+        setState(() => _selectedCategoryId = name);
+      }
+
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Saved: $name')));
+
+      // 🟢 டயலாங்கை மட்டும் க்ளோஸ் செய்ய `Navigator.pop(context)` பயன்படுத்தப்பட்டுள்ளது
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(isEdit ? 'Updated: $name' : 'Saved: $name')),
+      );
+
+      // ஃபார்மை க்ளியர் செய்தல்
+      _itemNoCtrl.clear();
       _nameCtrl.clear();
       setState(() {
         _iconBytes = null;
         _iconFileName = null;
-        _categoryType = 'food';
       });
     } catch (e) {
       if (mounted) {
@@ -137,19 +176,25 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     }
   }
 
+  // 🟢 Delete Category Function
   Future<void> _confirmAndDelete(DocumentSnapshot doc) async {
     final data = (doc.data() as Map<String, dynamic>?) ?? {};
     final name = doc.id;
     final iconFileName = (data['iconFileName'] as String?) ?? '';
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete category?'),
-        content: Text('This will remove "$name" and its image.'),
+        backgroundColor: kCardBg,
+        title: const Text('Delete category?', style: TextStyle(color: kWhite)),
+        content: Text(
+          'This will remove "$name" and its image.',
+          style: const TextStyle(color: kMuted),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: kMuted)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -161,7 +206,6 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     );
     if (ok != true) return;
 
-    setState(() => _saving = true);
     try {
       if (iconFileName.isNotEmpty) {
         final ref = FirebaseStorage.instance.ref(
@@ -172,6 +216,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
         } catch (_) {}
       }
       await doc.reference.delete();
+      setState(() => _selectedCategoryId = null);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -183,23 +228,23 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
           context,
         ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
       }
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
-  // வெப் பிளாட்ஃபார்மில் CORS எர்ரர் இல்லாமல் இமேஜ் காட்ட உதவும் பிரத்யேக விட்ஜெட்
-  Widget _buildTableImage(String iconUrl) {
+  // 🟢 CORS Fix: Web-Safe Image Builder
+  Widget _buildWebSafeImage(
+    String iconUrl, {
+    double height = 150,
+    double width = 150,
+  }) {
     if (iconUrl.isEmpty) {
-      return const Icon(Icons.image_not_supported);
+      return Icon(Icons.image_not_supported, size: height / 2, color: kMuted);
     }
 
     if (kIsWeb) {
-      // ஒவ்வொரு இமேஜுக்கும் தனித்தனி ID உருவாக்குகிறது
       final String viewId =
           'img-${iconUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
 
-      // HTML Image Element-ஐ ரிஜிஸ்டர் செய்கிறது (இது CORS-ஐ பைபாஸ் செய்யும்)
       ui_web.platformViewRegistry.registerViewFactory(
         viewId,
         (int viewId) => html.ImageElement()
@@ -208,190 +253,154 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
           ..style.width = '100%'
           ..style.height = '100%'
           ..style.objectFit = 'cover'
-          ..style.borderRadius = '6px',
+          ..style.borderRadius = '12px',
       );
 
       return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          height: 40,
-          width: 40,
+          height: height,
+          width: width,
           child: HtmlElementView(viewType: viewId),
         ),
       );
     } else {
-      // மொபைல் போன்களுக்கு (Android/iOS) பழையபடி Image.network வேலை செய்யும்
       return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
         child: Image.network(
           iconUrl,
-          height: 40,
-          width: 40,
+          height: height,
+          width: width,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+          errorBuilder: (_, __, ___) =>
+              Icon(Icons.broken_image, size: height / 2, color: kMuted),
         ),
       );
     }
   }
 
-  // 🟢 Small colored chip showing Food / Drink / Combo in the categories table.
-  Widget _buildTypeChip(String type) {
-    Color color;
-    String label;
-    if (type == 'drink') {
-      color = Colors.blueAccent;
-      label = 'Drink';
-    } else if (type == 'combo') {
-      color = Colors.purpleAccent;
-      label = 'Combo';
+  // 🟢 Show Add / Edit Dialog Form
+  void _showCategoryForm({DocumentSnapshot? existingDoc}) {
+    if (existingDoc != null) {
+      final data = existingDoc.data() as Map<String, dynamic>;
+      _itemNoCtrl.text = data['itemNo'] ?? '';
+      _nameCtrl.text = data['name'] ?? existingDoc.id;
+      _categoryType = data['type'] ?? 'food';
+      _iconBytes = null;
     } else {
-      color = kPrimary;
-      label = 'Food';
+      _itemNoCtrl.clear();
+      _nameCtrl.clear();
+      _categoryType = 'food';
+      _iconBytes = null;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color, width: 1),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
+    showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final isEdit = existingDoc != null;
+          final existingImageUrl = isEdit
+              ? (existingDoc.data() as Map<String, dynamic>)['iconUrl']
+              : null;
 
-  @override
-  Widget build(BuildContext context) {
-    final hasImg = _iconBytes != null;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Menu Category'),
-        backgroundColor: kPrimary,
-        foregroundColor: kWhite,
-      ),
-      backgroundColor: kBg,
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ---- Form card ----
-          Card(
-            color: kWhite,
+          return AlertDialog(
+            backgroundColor: kCardBg,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: kMuted, width: 1),
+              side: const BorderSide(color: kPrimary, width: 1),
             ),
-            elevation: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+            title: Text(
+              isEdit ? 'Edit Category' : 'Add Menu Category',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: kWhite,
+              ),
+            ),
+            content: SingleChildScrollView(
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 🟢 Food / Drink / Combo selector — determines which
-                    // item type this category will show up under when
-                    // someone is adding a menu item. Combo was added
-                    // because orders can already contain combo items
-                    // (see admin_orders_page.dart), but until now there
-                    // was no way to create a combo category or item.
+                    // Category Type
                     Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFFAE6),
+                        color: kBg,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: kMuted),
+                        border: Border.all(color: kMuted.withOpacity(0.3)),
                       ),
                       child: Row(
-                        children: [
-                          Expanded(
+                        children: ['food', 'drink', 'combo'].map((type) {
+                          return Expanded(
                             child: RadioListTile<String>(
                               dense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                              title: const Text(
-                                'Food',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                type.toUpperCase(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: kWhite,
+                                ),
                               ),
-                              value: 'food',
+                              value: type,
                               groupValue: _categoryType,
                               activeColor: kPrimary,
-                              onChanged: (v) =>
-                                  setState(() => _categoryType = v!),
+                              onChanged: (v) {
+                                setState(() => _categoryType = v!);
+                                setDialogState(() {});
+                              },
                             ),
-                          ),
-                          Container(width: 1, height: 40, color: kMuted),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                              title: const Text(
-                                'Drink',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              value: 'drink',
-                              groupValue: _categoryType,
-                              activeColor: kPrimary,
-                              onChanged: (v) =>
-                                  setState(() => _categoryType = v!),
-                            ),
-                          ),
-                          Container(width: 1, height: 40, color: kMuted),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                              title: const Text(
-                                'Combo',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              value: 'combo',
-                              groupValue: _categoryType,
-                              activeColor: kPrimary,
-                              onChanged: (v) =>
-                                  setState(() => _categoryType = v!),
-                            ),
-                          ),
-                        ],
+                          );
+                        }).toList(),
                       ),
                     ),
                     const SizedBox(height: 14),
+                    // Image Picker
                     InkWell(
-                      onTap: _pickImage,
+                      onTap: () async {
+                        await _pickImage();
+                        setDialogState(() {});
+                      },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: double.infinity,
-                        height: 160,
+                        height: 140,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFFAE6),
+                          color: kBg,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: kMuted),
+                          border: Border.all(color: kMuted.withOpacity(0.3)),
                         ),
                         alignment: Alignment.center,
-                        child: hasImg
+                        child: _iconBytes != null
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
                                 child: Image.memory(
                                   _iconBytes!,
-                                  height: 140,
+                                  height: 120,
                                   fit: BoxFit.contain,
                                 ),
+                              )
+                            : (isEdit &&
+                                  existingImageUrl != null &&
+                                  existingImageUrl.isNotEmpty)
+                            ? _buildWebSafeImage(
+                                existingImageUrl,
+                                height: 120,
+                                width: double.infinity,
                               )
                             : const Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.image, size: 36, color: kPrimary),
+                                  Icon(
+                                    Icons.add_photo_alternate,
+                                    size: 36,
+                                    color: kPrimary,
+                                  ),
                                   SizedBox(height: 8),
-                                  Text('Tap to choose category image'),
-                                  SizedBox(height: 4),
                                   Text(
-                                    '(PNG with transparency preferred)',
-                                    style: TextStyle(color: Colors.black54),
+                                    'Tap to choose image',
+                                    style: TextStyle(color: kMuted),
                                   ),
                                 ],
                               ),
@@ -399,7 +408,15 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                     ),
                     const SizedBox(height: 14),
                     TextFormField(
+                      controller: _itemNoCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: kWhite),
+                      decoration: _dec('Category ID / Number (e.g., 1, 2)'),
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
                       controller: _nameCtrl,
+                      style: const TextStyle(color: kWhite),
                       decoration: _dec('Category name'),
                       validator: (v) {
                         final t = v?.trim() ?? '';
@@ -408,162 +425,377 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kPrimary,
-                          foregroundColor: kWhite,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: _saving ? null : _save,
-                        child: Text(
-                          _saving ? 'Saving…' : 'Save Category',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                    if (_saving)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 12),
-                        child: LinearProgressIndicator(),
-                      ),
                   ],
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          // ---- Table card ----
-          Card(
-            color: kWhite,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: kMuted, width: 1),
-            ),
-            elevation: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Categories',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 12),
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('menu_category')
-                        .orderBy('createdAt', descending: true)
-                        .snapshots(),
-                    builder: (context, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      }
-                      if (snap.hasError) {
-                        return Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text('Error: ${snap.error}'),
-                        );
-                      }
-                      final docs = snap.data?.docs ?? [];
-                      if (docs.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text('No categories yet.'),
-                        );
-                      }
-
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 760),
-                          child: DataTable(
-                            headingRowHeight: 44,
-                            dataRowMinHeight: 56,
-                            dataRowMaxHeight: 72,
-                            columns: const [
-                              DataColumn(label: Text('Icon')),
-                              DataColumn(label: Text('Name')),
-                              DataColumn(label: Text('Type')),
-                              DataColumn(label: Text('Created')),
-                              DataColumn(label: Text('Actions')),
-                            ],
-                            rows: docs.map((d) {
-                              final m =
-                                  (d.data() as Map<String, dynamic>?) ?? {};
-                              final name = (m['name'] as String?) ?? d.id;
-                              final iconUrl = (m['iconUrl'] as String?) ?? '';
-                              // 🟢 Categories saved before this change won't
-                              // have a `type` field yet — default those to
-                              // 'food' instead of showing blank/crashing.
-                              final categoryType =
-                                  (m['type'] as String?) ?? 'food';
-                              final ts = m['createdAt'];
-                              DateTime? dt;
-                              if (ts is Timestamp) dt = ts.toDate();
-                              final createdStr = dt != null
-                                  ? '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-                                        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-                                  : '—';
-
-                              return DataRow(
-                                cells: [
-                                  // திருத்தப்பட்ட பகுதி: இங்கு புதிய _buildTableImage பயன்படுத்தப்பட்டுள்ளது
-                                  DataCell(_buildTableImage(iconUrl)),
-                                  DataCell(Text(name)),
-                                  DataCell(_buildTypeChip(categoryType)),
-                                  DataCell(Text(createdStr)),
-                                  DataCell(
-                                    IconButton(
-                                      tooltip: 'Delete',
-                                      icon: const Icon(
-                                        Icons.delete,
-                                        color: Colors.red,
-                                      ),
-                                      onPressed: () => _confirmAndDelete(d),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel', style: TextStyle(color: kMuted)),
               ),
-            ),
-          ),
-        ],
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _saving
+                    ? null
+                    : () => _saveCategory(existingDoc: existingDoc),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.black,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        isEdit ? 'Update' : 'Save',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   InputDecoration _dec(String label) => InputDecoration(
     labelText: label,
+    labelStyle: const TextStyle(color: kMuted),
     filled: true,
-    fillColor: const Color(0xFFFFFAE6),
+    fillColor: kBg,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: kMuted),
+      borderSide: BorderSide(color: kMuted.withOpacity(0.3)),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
       borderSide: const BorderSide(color: kPrimary, width: 1.4),
     ),
   );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kBg,
+      appBar: AppBar(
+        title: const Text(
+          'Menu Categories',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+        ),
+        backgroundColor: kPrimary,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth > 700;
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: isDesktop ? 280 : constraints.maxWidth,
+                  child: _buildSidebar(),
+                ),
+                if (isDesktop) const SizedBox(width: 16),
+                if (isDesktop) Expanded(child: _buildRightPanel()),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Card(
+      color: kCardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: kMuted.withOpacity(0.2), width: 1),
+      ),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Categories',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: kWhite,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: kPrimary,
+                    side: const BorderSide(color: kPrimary),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 0,
+                    ),
+                  ),
+                  onPressed: () => _showCategoryForm(),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            const Divider(color: Colors.white24),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('menu_category')
+                    .snapshots(),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: kPrimary),
+                    );
+                  }
+                  final docs = snap.data?.docs ?? [];
+                  if (docs.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No categories yet.',
+                        style: TextStyle(color: kMuted),
+                      ),
+                    );
+                  }
+
+                  var sortedDocs = docs.toList();
+                  sortedDocs.sort((a, b) {
+                    final d1 = a.data() as Map<String, dynamic>? ?? {};
+                    final d2 = b.data() as Map<String, dynamic>? ?? {};
+                    final n1 =
+                        int.tryParse(d1['itemNo']?.toString() ?? '') ?? 0;
+                    final n2 =
+                        int.tryParse(d2['itemNo']?.toString() ?? '') ?? 0;
+                    return n1.compareTo(n2);
+                  });
+
+                  return ListView.builder(
+                    itemCount: sortedDocs.length,
+                    itemBuilder: (context, index) {
+                      final doc = sortedDocs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final name = data['name'] ?? doc.id;
+                      final isSelected = _selectedCategoryId == doc.id;
+
+                      return InkWell(
+                        onTap: () =>
+                            setState(() => _selectedCategoryId = doc.id),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? kPrimary.withOpacity(0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: isSelected
+                                ? Border.all(color: kPrimary)
+                                : null,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.drag_indicator,
+                                color: kMuted,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: isSelected ? kPrimary : kWhite,
+                                  ),
+                                ),
+                              ),
+                              if (isSelected)
+                                const Icon(
+                                  Icons.circle,
+                                  color: kPrimary,
+                                  size: 10,
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRightPanel() {
+    return Card(
+      color: kCardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: kMuted.withOpacity(0.2), width: 1),
+      ),
+      elevation: 4,
+      child: _selectedCategoryId == null
+          ? const Center(
+              child: Text(
+                'Select a category to view details',
+                style: TextStyle(color: kMuted, fontSize: 16),
+              ),
+            )
+          : StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('menu_category')
+                  .doc(_selectedCategoryId)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return const Center(
+                    child: Text(
+                      'Category deleted or not found.',
+                      style: TextStyle(color: kWhite),
+                    ),
+                  );
+                }
+
+                final doc = snapshot.data!;
+                final data = doc.data() as Map<String, dynamic>;
+                final name = data['name'] ?? doc.id;
+                final itemNo = data['itemNo'] ?? '-';
+                final type = data['type'] ?? 'food';
+                final iconUrl = data['iconUrl'] ?? '';
+
+                return Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Category Details',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: kWhite,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: kPrimary,
+                                  side: const BorderSide(color: kPrimary),
+                                ),
+                                onPressed: () =>
+                                    _showCategoryForm(existingDoc: doc),
+                                icon: const Icon(Icons.edit, size: 18),
+                                label: const Text('Edit'),
+                              ),
+                              const SizedBox(width: 12),
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.red.shade900,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () => _confirmAndDelete(doc),
+                                icon: const Icon(Icons.delete, size: 18),
+                                label: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      const Divider(color: Colors.white24),
+                      const SizedBox(height: 24),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 150,
+                            width: 150,
+                            decoration: BoxDecoration(
+                              color: kBg,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: kMuted.withOpacity(0.3),
+                              ),
+                            ),
+                            child: _buildWebSafeImage(
+                              iconUrl,
+                              height: 150,
+                              width: 150,
+                            ),
+                          ),
+                          const SizedBox(width: 32),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _detailRow('Category Name:', name),
+                                const SizedBox(height: 16),
+                                _detailRow('Category ID / Order:', itemNo),
+                                const SizedBox(height: 16),
+                                _detailRow(
+                                  'Type:',
+                                  type.toString().toUpperCase(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _detailRow(String title, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 14, color: kMuted)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: kWhite,
+          ),
+        ),
+      ],
+    );
+  }
 }

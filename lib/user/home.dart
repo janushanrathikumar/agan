@@ -16,6 +16,7 @@ const kWhite = Color(0xFFF7F7F2);
 const kCardBg = Color(0xFF1A3822);
 const kItemBg = Color(0xFF1E3A24);
 const kDarkBar = Color(0xFF0C1E11);
+const kDiscount = Color(0xFFE0483E);
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -69,7 +70,6 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Scaffold removed the AppBar here to prevent the "Double App Bar"
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: _CartFab(
@@ -89,7 +89,7 @@ class HomePage extends StatelessWidget {
             children: [
               // ── Main action buttons (Dine In & Take Away) ──────────────────
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
                   children: [
                     Expanded(
@@ -100,7 +100,7 @@ class HomePage extends StatelessWidget {
                         onTap: () => _handleDineIn(context),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: _BigActionButton(
                         label: AppLanguage.getText('take_away'),
@@ -114,9 +114,9 @@ class HomePage extends StatelessWidget {
               ),
               const SizedBox(height: 32),
 
-              // ── Promo section header ──────────────────────────────
+              // ── Promo & Combos section header ─────────────────────────────
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -124,68 +124,36 @@ class HomePage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Special Offers',
+                          'Special Offers & Combos',
                           style: TextStyle(
                             color: kWhite,
-                            fontSize: 24,
+                            fontSize: 22,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.5,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "Today's best deals for you",
+                          "Today's best deals and combos for you",
                           style: TextStyle(
                             color: kMuted.withOpacity(0.8),
-                            fontSize: 14,
+                            fontSize: 13,
                           ),
                         ),
                       ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kPrimary.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: kPrimary.withOpacity(0.4)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.local_fire_department_rounded,
-                            color: kPrimary,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            'HOT',
-                            style: TextStyle(
-                              color: kPrimary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
 
-              // ── Big promo carousel ────────────────────────────────
+              // ── Big promo & combo carousel ────────────────────────────────
               _PromoCarousel(
                 onDineIn: () => _handleDineIn(context),
                 onTakeAway: () => _handleTakeAway(context),
               ),
 
-              const SizedBox(
-                height: 120,
-              ), // Extra padding for the floating cart
+              const SizedBox(height: 120),
             ],
           ),
         ),
@@ -230,7 +198,7 @@ class _CartFab extends StatelessWidget {
         if (total == 0) return const SizedBox.shrink();
 
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: SizedBox(
             height: 65,
             width: double.infinity,
@@ -299,7 +267,7 @@ class _CartFab extends StatelessWidget {
   }
 }
 
-// ── Big Promo Carousel ───────────────────────────────────────────────────────
+// ── Big Promo & Combo Carousel ───────────────────────────────────────────────
 class _PromoCarousel extends StatefulWidget {
   final VoidCallback onDineIn;
   final VoidCallback onTakeAway;
@@ -386,7 +354,7 @@ class _PromoCarouselState extends State<_PromoCarousel> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
-            height: 260,
+            height: 280,
             child: Center(child: CircularProgressIndicator(color: kPrimary)),
           );
         }
@@ -398,7 +366,7 @@ class _PromoCarouselState extends State<_PromoCarousel> {
         return Column(
           children: [
             SizedBox(
-              height: 280,
+              height: 290,
               child: PageView.builder(
                 controller: _ctrl,
                 itemCount: promoDocs.length,
@@ -407,17 +375,23 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                   final data = promoDocs[index].data() as Map<String, dynamic>;
                   final name = data['name'] ?? 'Special Offer';
                   final imageUrl = (data['imageUrl'] ?? '') as String;
-                  final itemType = (data['itemType'] ?? 'food') as String;
-                  final num originalPrice = data['price'] ?? 0;
-                  final num offerPrice = data['offerPrice'] ?? 0;
+
+                  // 🟢 itemType ஐ பாதுகாப்பாகப் பெறுதல் மற்றும் 'combo' என  செய்தல்
+                  final itemType = (data['itemType'] ?? '')
+                      .toString()
+                      .toLowerCase();
                   final bool isCombo = itemType == 'combo';
 
-                  double discPct = 0;
-                  if (originalPrice > 0 && originalPrice > offerPrice) {
-                    discPct =
-                        ((originalPrice - offerPrice) / originalPrice * 100)
-                            .roundToDouble();
-                  }
+                  final num originalPrice = data['price'] ?? 0;
+                  // // ஒருவேளை offerPrice இல்லாத பட்சத்தில் சாதாரண price-ஐ எடுத்துக்கொள்ளும்
+                  final num offerPrice = data['offerPrice'] ?? originalPrice;
+
+                  // double discPct = 0;
+                  // if (originalPrice > 0 && originalPrice > offerPrice) {
+                  //   discPct =
+                  //       ((originalPrice - offerPrice) / originalPrice * 100)
+                  //           .roundToDouble();
+                  // }
 
                   final isActive = _current == index;
 
@@ -429,15 +403,15 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                       margin: EdgeInsets.only(
                         left: 8,
                         right: 8,
-                        top: isActive ? 0 : 20,
-                        bottom: isActive ? 10 : 30,
+                        top: isActive ? 0 : 16,
+                        bottom: isActive ? 10 : 26,
                       ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(28),
                         boxShadow: isActive
                             ? [
                                 BoxShadow(
-                                  color: kPrimary.withOpacity(0.3),
+                                  color: kPrimary.withOpacity(0.35),
                                   blurRadius: 25,
                                   offset: const Offset(0, 10),
                                 ),
@@ -483,26 +457,25 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                               ),
                             ),
 
-                            // Badges
+                            // 🟢 Badges (COMBO என இருந்தால் மட்டும் காட்டும், HOT நீக்கப்பட்டது)
                             Positioned(
                               top: 16,
                               left: 16,
                               child: Row(
                                 children: [
-                                  _Badge(
-                                    label: isCombo ? 'COMBO' : 'PROMO',
-                                    color: isCombo
-                                        ? const Color(0xFFFF8C00)
-                                        : const Color(0xFFE53935),
-                                    icon: Icons.local_offer_rounded,
-                                  ),
-                                  if (discPct > 0) ...[
-                                    const SizedBox(width: 8),
-                                    _Badge(
-                                      label: '-${discPct.toInt()}%',
-                                      color: const Color(0xFF2E7D32),
+                                  if (isCombo)
+                                    const _Badge(
+                                      label: 'COMBO',
+                                      color: Color(0xFFFF8C00),
+                                      icon: Icons.fastfood_rounded,
                                     ),
-                                  ],
+                                  // if (discPct > 0) ...[
+                                  //   if (isCombo) const SizedBox(width: 8),
+                                  //   _Badge(R
+                                  //     label: '-${discPct.toInt()}%',
+                                  //     color: const Color(0xFF2E7D32),
+                                  //   ),
+                                  // ],
                                 ],
                               ),
                             ),
@@ -1037,7 +1010,7 @@ class _EmptyPromo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
         height: 180,
         width: double.infinity,
@@ -1071,7 +1044,7 @@ class _EmptyPromo extends StatelessWidget {
   }
 }
 
-// ── Promo Item Sheet (Functionality preserved from original) ─────────────────
+// ── Promo Item Sheet ─────────────────────────────────────────────────────────
 class _PromoItemSheet extends StatefulWidget {
   final Map<String, dynamic> itemData;
   const _PromoItemSheet({required this.itemData});
@@ -1082,8 +1055,21 @@ class _PromoItemSheet extends StatefulWidget {
 class _PromoItemSheetState extends State<_PromoItemSheet> {
   int _qty = 1;
   final TextEditingController _noteCtrl = TextEditingController();
+
+  // 🟢 ஏற்றுமதி ஸாயஸ் (Sizes) அல்லது தேர்வுக்கான மாறிகள்
+  Map<String, dynamic>? _selectedSize;
   String? _selectedChoice;
   final List<Map<String, dynamic>> _selectedAddons = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // ஒருவேளை sizes இருக்கிறதா எனச் சோதித்து முதல் சைஸை இயல்பாகத் தேர்ந்தெடுக்கலாம்
+    final List<dynamic> sizes = widget.itemData['sizes'] ?? [];
+    if (sizes.isNotEmpty) {
+      _selectedSize = sizes.first as Map<String, dynamic>;
+    }
+  }
 
   @override
   void dispose() {
@@ -1092,11 +1078,16 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
   }
 
   double get _basePrice {
+    final bool hasMultipleSizes = widget.itemData['hasMultipleSizes'] ?? false;
+    if (hasMultipleSizes && _selectedSize != null) {
+      return (_selectedSize!['price'] as num?)?.toDouble() ?? 0.0;
+    }
+
     final bool isPromo = widget.itemData['isPromoActive'] ?? false;
-    return ((isPromo ? widget.itemData['offerPrice'] : widget.itemData['price'])
-                as num?)
-            ?.toDouble() ??
-        0.0;
+    final num priceVal = isPromo
+        ? (widget.itemData['offerPrice'] ?? widget.itemData['price'] ?? 0)
+        : (widget.itemData['price'] ?? 0);
+    return (priceVal as num).toDouble();
   }
 
   double get _totalPrice {
@@ -1110,17 +1101,20 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
   Future<void> _addToCart({bool goToCheckout = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
     final cartItem = {
       'name': widget.itemData['name'] ?? '',
       'price': _basePrice,
       'qty': _qty,
       'imageUrl': widget.itemData['imageUrl'] ?? '',
       'kind': widget.itemData['itemType'] ?? 'food',
+      'size': _selectedSize != null ? _selectedSize!['name'] ?? '' : '',
       'note': _noteCtrl.text.trim(),
       'additionalOptions': _selectedAddons,
       'menuChoices': _selectedChoice != null ? {'Choice': _selectedChoice} : {},
       'createdAt': FieldValue.serverTimestamp(),
     };
+
     try {
       await FirebaseFirestore.instance
           .collection('chat')
@@ -1155,10 +1149,11 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
         );
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
@@ -1166,7 +1161,9 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
   Widget build(BuildContext context) {
     final name = widget.itemData['name'] ?? 'Item';
     final imageUrl = (widget.itemData['imageUrl'] ?? '') as String;
-    final num offerPrice = widget.itemData['offerPrice'] ?? 0;
+
+    final List<dynamic> sizes = widget.itemData['sizes'] ?? [];
+    final bool hasMultipleSizes = widget.itemData['hasMultipleSizes'] ?? false;
     final List<dynamic> choices = widget.itemData['menuChoices'] ?? [];
     final List<dynamic> addons = widget.itemData['additionalOptions'] ?? [];
 
@@ -1230,7 +1227,7 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'CHF ${offerPrice.toStringAsFixed(2)}',
+                              'CHF ${_basePrice.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 color: kPrimary,
                                 fontSize: 20,
@@ -1243,6 +1240,53 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                     ],
                   ),
                   const SizedBox(height: 24),
+
+                  // 🟢 Sizes Selection (புதிய டேட்டாவின் படி multiple sizes இருந்தால் காண்பிக்கும்)
+                  if (hasMultipleSizes && sizes.isNotEmpty) ...[
+                    const Text(
+                      'Select Portion / Size',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: kBg,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: sizes.map((s) {
+                          final sMap = s as Map<String, dynamic>;
+                          final sName = sMap['name'] ?? '';
+                          final sPrice =
+                              (sMap['price'] as num?)?.toDouble() ?? 0.0;
+                          return RadioListTile<Map<String, dynamic>>(
+                            title: Text(
+                              sName,
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'CHF ${sPrice.toStringAsFixed(2)}',
+                              style: const TextStyle(color: kMuted),
+                            ),
+                            activeColor: kPrimary,
+                            value: sMap,
+                            groupValue: _selectedSize,
+                            onChanged: (val) =>
+                                setState(() => _selectedSize = val),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
                   const Text(
                     'Note (optional)',
                     style: TextStyle(
@@ -1432,7 +1476,7 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: SizedBox(
                           height: 54,

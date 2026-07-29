@@ -61,7 +61,7 @@ class _StartPageState extends State<StartPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Premium Background Gradient ──────────────────────────────────────
+          // ── Premium Background Gradient ──
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -72,7 +72,7 @@ class _StartPageState extends State<StartPage> {
             ),
           ),
 
-          // ── Ambient Background Glows ─────────────────────────────────────────
+          // ── Ambient Background Glows ──
           Positioned(
             top: -100,
             right: -50,
@@ -93,16 +93,15 @@ class _StartPageState extends State<StartPage> {
           SafeArea(
             child: Column(
               children: [
-                // ── Top Bar (Language Toggle & Skip) ───────────────────────────
+                // ── Top Bar (Language Toggle & Skip) ──
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24.0,
-                    vertical: 8.0,
+                    vertical: 12.0,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Language Toggle Pill
                       Container(
                         decoration: BoxDecoration(
                           color: kWhite.withOpacity(0.1),
@@ -114,7 +113,7 @@ class _StartPageState extends State<StartPage> {
                           onTap: _toggleLanguage,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
+                              horizontal: 16,
                               vertical: 8,
                             ),
                             child: Row(
@@ -138,8 +137,6 @@ class _StartPageState extends State<StartPage> {
                           ),
                         ),
                       ),
-
-                      // Skip Button
                       TextButton(
                         onPressed: () => Navigator.pushReplacementNamed(
                           context,
@@ -158,7 +155,7 @@ class _StartPageState extends State<StartPage> {
                   ),
                 ),
 
-                // ── Slides Carousel (Glassmorphism Cards) ──────────────────────
+                // ── Slides Carousel (Glassmorphism Cards) ──
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
@@ -182,10 +179,7 @@ class _StartPageState extends State<StartPage> {
                                   sigmaY: 12,
                                 ),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 32,
-                                  ),
+                                  padding: const EdgeInsets.all(32),
                                   decoration: BoxDecoration(
                                     color: kWhite.withOpacity(0.06),
                                     borderRadius: BorderRadius.circular(32),
@@ -217,7 +211,7 @@ class _StartPageState extends State<StartPage> {
                                         style: const TextStyle(
                                           color: kWhite,
                                           fontSize: 26,
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight: FontWeight.bold,
                                           letterSpacing: 0.5,
                                         ),
                                       ),
@@ -228,7 +222,7 @@ class _StartPageState extends State<StartPage> {
                                         style: TextStyle(
                                           color: kMuted.withOpacity(0.9),
                                           fontSize: 16,
-                                          height: 1.4,
+                                          height: 1.5,
                                         ),
                                       ),
                                     ],
@@ -243,9 +237,9 @@ class _StartPageState extends State<StartPage> {
                   ),
                 ),
 
-                // ── Animated Dots Indicator ────────────────────────────────────
+                // ── Animated Dots Indicator ──
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
@@ -253,9 +247,9 @@ class _StartPageState extends State<StartPage> {
                       (i) => AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeOutCubic,
-                        margin: const EdgeInsets.symmetric(horizontal: 5),
-                        height: 10,
-                        width: _currentIndex == i ? 30 : 10,
+                        margin: const EdgeInsets.symmetric(horizontal: 6),
+                        height: 8,
+                        width: _currentIndex == i ? 32 : 8,
                         decoration: BoxDecoration(
                           color: _currentIndex == i
                               ? kPrimary
@@ -276,12 +270,11 @@ class _StartPageState extends State<StartPage> {
                   ),
                 ),
 
-                // ── Bottom Action Buttons ──────────────────────────────────────
+                // ── Bottom Action Buttons ──
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
                   child: Row(
                     children: [
-                      // Sign Up (Outline Button)
                       Expanded(
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
@@ -309,8 +302,6 @@ class _StartPageState extends State<StartPage> {
                         ),
                       ),
                       const SizedBox(width: 16),
-
-                      // Next / Log In (Filled Button)
                       Expanded(
                         child: FilledButton(
                           style: FilledButton.styleFrom(
@@ -320,8 +311,7 @@ class _StartPageState extends State<StartPage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            elevation: 8,
-                            shadowColor: kPrimary.withOpacity(0.5),
+                            elevation: 4,
                           ),
                           onPressed: () {
                             if (_currentIndex < slides.length - 1) {

@@ -7,29 +7,26 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import 'choice_dialog.dart';
 import 'manage_menu_items.dart';
-// import 'manage_additional_options.dart'; // Import this if navigating from this page
 
-// Web Image CORS error avoidance imports
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui_web' as ui_web;
 import 'dart:html' as html;
 
-// --- Your Exact Color Constants ---
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kWhite = Color(0xFFFFFFFF);
 const kMuted = Color(0xFFB7B7B6);
 const kFieldBg = Color(0xFF383735);
-// ----------------------------------
 
-// 🟢 Helper class for dynamic Size Option rows
 class SizeOptionField {
   final TextEditingController name = TextEditingController();
-  final TextEditingController price = TextEditingController();
+  final TextEditingController dineInPrice = TextEditingController();
+  final TextEditingController takeAwayPrice = TextEditingController();
 
   void dispose() {
     name.dispose();
-    price.dispose();
+    dineInPrice.dispose();
+    takeAwayPrice.dispose();
   }
 }
 
@@ -41,11 +38,11 @@ class AddMenuPage extends StatefulWidget {
 }
 
 class _AddMenuPageState extends State<AddMenuPage> {
+  final _itemNo = TextEditingController(); // 🟢 NEW FIELD: Item ID / No
   final _name = TextEditingController();
   final _note = TextEditingController();
-  final _price = TextEditingController(); // Standard single price
+  final _price = TextEditingController();
 
-  // 🟢 Size Options state
   bool _hasMultipleSizes = false;
   final List<SizeOptionField> _sizeOptions = [];
 
@@ -55,19 +52,16 @@ class _AddMenuPageState extends State<AddMenuPage> {
   String? _selectedCategory;
   String? _selectedCategoryIconUrl;
 
-  String _itemType = 'food'; // 'food' or 'drink'
+  String _itemType = 'food';
 
-  // 🟢 Discount state
   bool _hasDiscount = false;
-  String _discountType = 'percent'; // 'percent' or 'amount'
+  String _discountType = 'percent';
   final _discountValue = TextEditingController();
 
-  // 🟢 Menu Choices State
   List<Map<String, dynamic>> _allAvailableChoices = [];
   final List<Map<String, dynamic>> _selectedMenuChoices = [];
   String? _dropdownChoiceValue;
 
-  // 🟢 Additional Options State
   List<Map<String, dynamic>> _allAvailableOptions = [];
   final List<Map<String, dynamic>> _selectedOptions = [];
   String? _dropdownOptionValue;
@@ -84,6 +78,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
 
   @override
   void dispose() {
+    _itemNo.dispose(); // 🟢 Dispose new field
     _name.dispose();
     _note.dispose();
     _price.dispose();
@@ -94,7 +89,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
     super.dispose();
   }
 
-  // 🟢 Add / Remove Size option fields
   void _addSizeField() => setState(() => _sizeOptions.add(SizeOptionField()));
 
   void _removeSizeField(int index) {
@@ -180,6 +174,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
     });
 
     try {
+      final itemNo = _itemNo.text.trim(); // 🟢 Get Item No
       final name = _name.text.trim();
       final note = _note.text.trim();
 
@@ -187,7 +182,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
       if (_selectedCategory == null) throw Exception('Select a category.');
       if (_imgBytes == null) throw Exception('Pick an image.');
 
-      // 🟢 Validate Prices based on Size Strategy
       double? basePrice;
       List<Map<String, dynamic>> sizesData = [];
 
@@ -197,15 +191,33 @@ class _AddMenuPageState extends State<AddMenuPage> {
         }
         for (var size in _sizeOptions) {
           final sName = size.name.text.trim();
-          final sPrice = double.tryParse(size.price.text.trim());
-          if (sName.isEmpty || sPrice == null) {
-            throw Exception('All sizes must have a valid name and price.');
+          final dPrice = double.tryParse(size.dineInPrice.text.trim());
+
+          final tPriceText = size.takeAwayPrice.text.trim();
+          final tPrice = tPriceText.isEmpty
+              ? null
+              : double.tryParse(tPriceText);
+
+          if (sName.isEmpty || dPrice == null) {
+            throw Exception(
+              'All sizes must have a valid name and dine-in price.',
+            );
           }
-          sizesData.add({'name': sName, 'price': sPrice});
+
+          final sizeMap = <String, dynamic>{
+            'name': sName,
+            'price': dPrice,
+            'dineInPrice': dPrice,
+          };
+
+          if (tPrice != null) {
+            sizeMap['takeAwayPrice'] = tPrice;
+          }
+
+          sizesData.add(sizeMap);
         }
-        // Set the primary basePrice to the lowest size price for sorting/display defaults
         basePrice = sizesData
-            .map((e) => e['price'] as double)
+            .map((e) => e['dineInPrice'] as double)
             .reduce((a, b) => a < b ? a : b);
       } else {
         basePrice = double.tryParse(_price.text.trim());
@@ -214,7 +226,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
         }
       }
 
-      // 🟢 Validate discount value if discount is enabled
       double discountValue = 0;
       if (_hasDiscount) {
         discountValue = double.tryParse(_discountValue.text.trim()) ?? 0;
@@ -226,13 +237,12 @@ class _AddMenuPageState extends State<AddMenuPage> {
         }
       }
 
-      // 🟢 Serialize Selected Additional Options
       List<Map<String, dynamic>> optionsData = _selectedOptions.map((opt) {
         return {
           'name': opt['name'],
           'price': opt['price'],
           'catalog': opt['catalog'],
-          'type': opt['type'], // Preserve type
+          'type': opt['type'],
         };
       }).toList();
 
@@ -253,6 +263,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
           .toList();
 
       await FirebaseFirestore.instance.collection('menu_items').add({
+        'itemNo': itemNo, // 🟢 Save new field
         'name': name,
         'note': note.isEmpty ? null : note,
         'price': basePrice,
@@ -280,6 +291,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
         ),
       );
 
+      _itemNo.clear(); // 🟢 Clear new field
       _name.clear();
       _note.clear();
       _price.clear();
@@ -317,7 +329,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
       _selectedCategoryIconUrl = null;
       _selectedMenuChoices.clear();
       _dropdownChoiceValue = null;
-      // Clear additional options when type changes so we don't accidentally save a Drink option to a Food item
       _selectedOptions.clear();
       _dropdownOptionValue = null;
     });
@@ -336,7 +347,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         children: [
-          // ── Type Selector ───────────────────────────────────────────
           Container(
             decoration: BoxDecoration(
               color: kFieldBg,
@@ -406,7 +416,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 20),
 
-          // ── Basic Info & Pricing ────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -416,10 +425,14 @@ class _AddMenuPageState extends State<AddMenuPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 🟢 NEW INPUT FOR ITEM NO
+                _input(
+                  label: 'Item ID / Number (e.g., 1, 2, 003)',
+                  controller: _itemNo,
+                ),
+                const SizedBox(height: 16),
                 _input(label: 'Item Name', controller: _name),
                 const SizedBox(height: 16),
-
-                // Multiple Sizes Toggle
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   activeColor: kPrimary,
@@ -431,7 +444,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
                     ),
                   ),
                   subtitle: const Text(
-                    'Enable if item has sizes (e.g. Small vs Regular)',
+                    'Enable if item has sizes with distinct Dine-In and Take-Away prices',
                     style: TextStyle(color: kMuted, fontSize: 12),
                   ),
                   value: _hasMultipleSizes,
@@ -439,12 +452,10 @@ class _AddMenuPageState extends State<AddMenuPage> {
                     setState(() {
                       _hasMultipleSizes = val;
                       if (val && _sizeOptions.isEmpty) {
-                        // 🟢 Auto-add Default Size 1
                         final opt1 = SizeOptionField();
                         opt1.name.text = 'Kleine Portion';
                         _sizeOptions.add(opt1);
 
-                        // 🟢 Auto-add Default Size 2
                         final opt2 = SizeOptionField();
                         opt2.name.text = 'Portion';
                         _sizeOptions.add(opt2);
@@ -454,7 +465,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
                 ),
                 const SizedBox(height: 8),
 
-                // Pricing Inputs Based on Toggle
                 if (!_hasMultipleSizes)
                   _input(
                     label: 'Standard Price',
@@ -471,7 +481,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Size Variants',
+                            'Size Variants (Dine-In & Take-Away)',
                             style: TextStyle(
                               color: kPrimary,
                               fontWeight: FontWeight.bold,
@@ -498,33 +508,58 @@ class _AddMenuPageState extends State<AddMenuPage> {
                         itemBuilder: (context, index) {
                           final sizeOpt = _sizeOptions[index];
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 3,
-                                  child: _miniInput(
-                                    'Size (e.g. Kleine Portion)',
-                                    sizeOpt.name,
-                                  ),
+                            padding: const EdgeInsets.only(bottom: 12.0),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: kBg,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: kMuted.withOpacity(0.2),
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  flex: 2,
-                                  child: _miniInput(
-                                    'Price',
-                                    sizeOpt.price,
-                                    isNumber: true,
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _miniInput(
+                                          'Size Name (e.g. Portion)',
+                                          sizeOpt.name,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.redAccent,
+                                        ),
+                                        onPressed: () =>
+                                            _removeSizeField(index),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.remove_circle_outline,
-                                    color: Colors.redAccent,
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _miniInput(
+                                          'Dine-In Price',
+                                          sizeOpt.dineInPrice,
+                                          isNumber: true,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _miniInput(
+                                          'Take-Away Price (Opt)',
+                                          sizeOpt.takeAwayPrice,
+                                          isNumber: true,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  onPressed: () => _removeSizeField(index),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -536,7 +571,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 20),
 
-          // ── Discount ────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -615,7 +649,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 20),
 
-          // ── Menu Choices ────────────────────────────────────────────
           const Text(
             'Menu Choices',
             style: TextStyle(
@@ -736,7 +769,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ),
           const SizedBox(height: 24),
 
-          // ── Additional Options (Filtered Dropdown Implementation) ────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -765,7 +797,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Builder(
               builder: (context) {
-                // 🟢 FILTER additional options based on selected _itemType
                 final matchingOptions = _allAvailableOptions.where((opt) {
                   final optType = (opt['type'] as String?) ?? 'food';
                   return optType == _itemType;
@@ -788,7 +819,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
                           (opt) => DropdownMenuItem<String>(
                             value: opt['id'],
                             child: Text(
-                              "${opt['name']} (Price: ${opt['price']})",
+                              '${opt['name']} (+CHF ${((opt['price'] as num?) ?? 0).toStringAsFixed(2)})',
                               style: const TextStyle(color: kWhite),
                             ),
                           ),
@@ -854,7 +885,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ),
           const SizedBox(height: 24),
 
-          // ── Description / Category / Image ──────────────────────────
           const Text(
             'Item Details',
             style: TextStyle(
@@ -985,7 +1015,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── Error ───────────────────────────────────────────────────
           if (_err != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -995,7 +1024,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
               ),
             ),
 
-          // ── Save Button ─────────────────────────────────────────────
           SizedBox(
             width: double.infinity,
             height: 52,
@@ -1015,32 +1043,29 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 20),
 
-          // ── Manage Menu Items ───────────────────────────────────────
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.settings, color: kWhite, size: 18),
-              label: const Text(
-                'Manage Menu Items',
-                style: TextStyle(color: kWhite),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: kMuted.withOpacity(0.5)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ManageMenuItemsPage()),
-              ),
-            ),
-          ),
-          const SizedBox(height: 40),
+          // SizedBox(
+          //   width: double.infinity,
+          //   child: OutlinedButton.icon(
+          //     icon: const Icon(Icons.settings, color: kWhite, size: 18),
+          //     label: const Text(
+          //       'Manage Menu Items',
+          //       style: TextStyle(color: kWhite),
+          //     ),
+          //     style: OutlinedButton.styleFrom(
+          //       side: BorderSide(color: kMuted.withOpacity(0.5)),
+          //       padding: const EdgeInsets.symmetric(vertical: 14),
+          //     ),
+          //     onPressed: () => Navigator.push(
+          //       context,
+          //       MaterialPageRoute(builder: (_) => const ManageMenuItemsPage()),
+          //     ),
+          //   ),
+          // ),
+          // const SizedBox(height: 40),
         ],
       ),
     );
   }
-
-  // ── Input Widgets ─────────────────────────────────────────────────────
 
   String _typeLabel(String type) {
     if (type == 'drink') return 'Drink';
@@ -1083,7 +1108,9 @@ class _AddMenuPageState extends State<AddMenuPage> {
   }) {
     return TextField(
       controller: controller,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      keyboardType: isNumber
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : TextInputType.text,
       style: const TextStyle(color: kWhite, fontSize: 12),
       decoration: InputDecoration(
         labelText: label,

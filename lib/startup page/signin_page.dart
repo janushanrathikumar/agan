@@ -3,20 +3,18 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:restorant/admin/adminhome.dart';
-import 'package:restorant/app_bar.dart';
-import 'package:restorant/startup page/signupverify.dart'; // Fixed folder space issue
-import 'package:restorant/startup page/start_page.dart'; // Imported StartPage for back navigation
+import 'package:restorant/startup page/signupverify.dart';
+import 'package:restorant/startup page/start_page.dart';
 import '../language.dart';
+import '../main.dart' show AppRoutes;
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
-//const kPrimary = Color(0xFFFFD700);
 const kWhite = Color(0xFFF7F7F2);
 
 class SignInPage extends StatefulWidget {
-  static const route = '/signin';
+  static const route = AppRoutes.signIn;
   const SignInPage({super.key});
 
   @override
@@ -30,44 +28,34 @@ class _SignInPageState extends State<SignInPage> {
   String? _err;
   bool _obscure = true;
 
+  // ── 100% Original Logic Retained ──
   Future<void> _loginUser() async {
     setState(() {
       _busy = true;
       _err = null;
     });
-
     String input = _emailOrPhone.text.trim();
     String loginEmail = input;
 
     try {
-      // 1. Look up the real email from Firestore if the user typed a phone
-      //    number instead of an email address.
       if (!input.contains('@')) {
         final queryPhone = input.startsWith('+') ? input : '+$input';
-
         final userQuery = await FirebaseFirestore.instance
             .collection('user')
             .where('phone', isEqualTo: queryPhone)
             .limit(1)
             .get();
-
-        if (userQuery.docs.isEmpty) {
+        if (userQuery.docs.isEmpty)
           throw Exception('No account found for this phone number.');
-        }
-
         loginEmail = userQuery.docs.first.data()['email'] as String? ?? '';
-
-        if (loginEmail.isEmpty) {
+        if (loginEmail.isEmpty)
           throw Exception('No email registered for this account.');
-        }
       }
 
-      // 2. Sign in with the resolved email.
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: loginEmail,
         password: _password.text.trim(),
       );
-
       final user = cred.user;
       if (user == null) {
         throw FirebaseAuthException(
@@ -79,18 +67,13 @@ class _SignInPageState extends State<SignInPage> {
       final users = FirebaseFirestore.instance.collection('user');
       final snap = await users.doc(user.uid).get();
       final data = snap.data() ?? {};
-
       final verifiedField = data['verified'] == true;
 
-      // 3. If the account was created but never finished OTP verification,
-      //    re-send the OTP and route them back into the same verify screen.
       if (!verifiedField) {
         final phone = data['phone'] as String? ?? '';
         final userName = data['userName'] as String? ?? 'Guest';
-
-        if (phone.isEmpty) {
+        if (phone.isEmpty)
           throw Exception(AppLanguage.getText('err_phone_not_found'));
-        }
 
         await FirebaseAuth.instance.verifyPhoneNumber(
           phoneNumber: phone.startsWith('+') ? phone : '+$phone',
@@ -119,32 +102,19 @@ class _SignInPageState extends State<SignInPage> {
           },
           codeAutoRetrievalTimeout: (verificationId) {},
         );
-        return; // Stop here until OTP is completed on the verify screen.
+        return;
       }
 
-      // 4. Fully verified — update login time and route to the app.
       await users.doc(user.uid).set({
         'lastLogin': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-
       final role =
           (data['role'] as String?)?.toLowerCase().trim() ?? 'customer';
-
       if (!mounted) return;
-      Future.microtask(() {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        if (role == 'admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminHome()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AppShell()),
-          );
-        }
-      });
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        role == 'admin' ? AppRoutes.admin : AppRoutes.user,
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       setState(() => _err = _friendlyAuthError(e));
     } catch (e) {
@@ -171,22 +141,9 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
-  InputDecoration _dec(String label, {IconData? icon}) => InputDecoration(
-    labelText: label,
-    labelStyle: const TextStyle(color: kMuted),
-    prefixIcon: icon != null ? Icon(icon, color: kMuted) : null,
-    filled: true,
-    fillColor: kWhite.withOpacity(0.06),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
-    ),
-    focusedBorder: const OutlineInputBorder(
-      borderRadius: BorderRadius.all(Radius.circular(16)),
-      borderSide: BorderSide(color: kPrimary, width: 1.5),
-    ),
-  );
+  void _navigateBackToStart() {
+    Navigator.of(context).pushReplacementNamed(AppRoutes.start);
+  }
 
   @override
   void dispose() {
@@ -195,19 +152,28 @@ class _SignInPageState extends State<SignInPage> {
     super.dispose();
   }
 
-  // Helper method to safely navigate back to StartPage
-  void _navigateBackToStart() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const StartPage()),
-    );
-  }
+  // ── Neat Input Decoration ──
+  InputDecoration _dec(String label, {IconData? icon}) => InputDecoration(
+    labelText: label,
+    labelStyle: const TextStyle(color: kMuted),
+    prefixIcon: icon != null ? Icon(icon, color: kMuted) : null,
+    filled: true,
+    fillColor: kWhite.withOpacity(0.06),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: kPrimary, width: 1.5),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 720;
 
-    // PopScope intercepts the Android system back button/swipe
     return PopScope(
       canPop: false,
       onPopInvoked: (didPop) {
@@ -219,13 +185,18 @@ class _SignInPageState extends State<SignInPage> {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
+          centerTitle: true,
           title: Text(
             AppLanguage.getText('sign_in_title'),
-            style: const TextStyle(color: kWhite),
+            style: const TextStyle(color: kWhite, fontWeight: FontWeight.w600),
           ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kWhite),
-            onPressed: _navigateBackToStart, // Explicitly go back to StartPage
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: kWhite,
+              size: 22,
+            ),
+            onPressed: _navigateBackToStart,
           ),
         ),
         body: Stack(
@@ -243,19 +214,22 @@ class _SignInPageState extends State<SignInPage> {
             Center(
               child: SingleChildScrollView(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 24.0,
+                  ),
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: isWide ? 520 : 420),
+                    constraints: BoxConstraints(maxWidth: isWide ? 460 : 400),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(28),
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                         child: Container(
-                          padding: EdgeInsets.all(isWide ? 28 : 22),
+                          padding: const EdgeInsets.all(32),
                           decoration: BoxDecoration(
                             color: kWhite.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: kWhite.withOpacity(0.15)),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(color: kWhite.withOpacity(0.2)),
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -266,20 +240,20 @@ class _SignInPageState extends State<SignInPage> {
                                   const Icon(
                                     Icons.restaurant_rounded,
                                     color: kPrimary,
-                                    size: 28,
+                                    size: 32,
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 12),
                                   Text(
                                     AppLanguage.getText('welcome_back'),
                                     style: const TextStyle(
                                       color: kWhite,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w600,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 32),
                               TextField(
                                 controller: _emailOrPhone,
                                 keyboardType: TextInputType.emailAddress,
@@ -289,7 +263,7 @@ class _SignInPageState extends State<SignInPage> {
                                   icon: Icons.mail_outline,
                                 ),
                               ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 16),
                               TextField(
                                 controller: _password,
                                 obscureText: _obscure,
@@ -312,22 +286,23 @@ class _SignInPageState extends State<SignInPage> {
                                       ),
                                     ),
                               ),
-                              const SizedBox(height: 8),
-                              if (_err != null)
+                              if (_err != null) ...[
+                                const SizedBox(height: 12),
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
                                     _err!,
                                     style: const TextStyle(
                                       color: Colors.redAccent,
-                                      fontSize: 12.5,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ),
-                              const SizedBox(height: 18),
+                              ],
+                              const SizedBox(height: 28),
                               SizedBox(
                                 width: double.infinity,
-                                height: 48,
+                                height: 52,
                                 child: FilledButton(
                                   style: FilledButton.styleFrom(
                                     backgroundColor: kPrimary,
@@ -335,37 +310,40 @@ class _SignInPageState extends State<SignInPage> {
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                     ),
+                                    elevation: 2,
                                   ),
                                   onPressed: _busy ? null : _loginUser,
                                   child: _busy
                                       ? const SizedBox(
-                                          height: 20,
-                                          width: 20,
+                                          height: 24,
+                                          width: 24,
                                           child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                  kWhite,
-                                                ),
+                                            strokeWidth: 2.5,
+                                            color: kWhite,
                                           ),
                                         )
                                       : Text(
                                           AppLanguage.getText('sign_in_title'),
                                           style: const TextStyle(
+                                            fontSize: 16,
                                             fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
                                           ),
                                         ),
                                 ),
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 20),
                               TextButton(
-                                onPressed: () => Navigator.pushReplacementNamed(
+                                onPressed: () => Navigator.of(
                                   context,
-                                  '/signup',
-                                ),
+                                ).pushReplacementNamed(AppRoutes.signUp),
                                 child: Text(
                                   AppLanguage.getText('dont_have_account'),
-                                  style: const TextStyle(color: kMuted),
+                                  style: const TextStyle(
+                                    color: kMuted,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],

@@ -1,3 +1,4 @@
+// lib/user/app_bar.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:restorant/startup%20page/signin_page.dart';
@@ -6,9 +7,8 @@ import 'package:restorant/user/home.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/OrderDetails.dart';
 import 'package:restorant/user/AccountPage.dart';
+import 'package:restorant/startup%20page/signin_page.dart'; // Login page import
 
-import 'startup page/signin_page.dart';
-import 'startup page/signup_page.dart';
 import '../language.dart';
 
 const kPrimary = Color(0xFFB59410);
@@ -16,6 +16,7 @@ const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);
 const kDarkBar = Color(0xFF0C1E11);
+const kDiscount = Color(0xFFE0483E);
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -34,6 +35,53 @@ class _AppShellState extends State<AppShell> {
           ? 'en'
           : 'de';
     });
+  }
+
+  void _confirmLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: kWhite.withOpacity(0.2)),
+        ),
+        title: const Text(
+          'Logout',
+          style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Are you sure you want to log out?',
+          style: TextStyle(color: kMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: kMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDiscount,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                // Navigate to Login Page and remove all previous routes
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const SignInPage()),
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text('Logout', style: TextStyle(color: kWhite)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -71,7 +119,6 @@ class _AppShellState extends State<AppShell> {
 
         return Scaffold(
           backgroundColor: kBg,
-          // ── Unified, Beautiful App Bar ─────────────────────────────────────
           appBar: AppBar(
             backgroundColor: kBg,
             foregroundColor: kWhite,
@@ -79,7 +126,6 @@ class _AppShellState extends State<AppShell> {
             toolbarHeight: 70,
             title: Row(
               children: [
-                // Displaying the logo right in the main App Bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.asset(
@@ -119,7 +165,6 @@ class _AppShellState extends State<AppShell> {
               ],
             ),
             actions: [
-              // Stylish Language Toggle Pill
               Container(
                 margin: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
@@ -150,80 +195,43 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
               const SizedBox(width: 8),
-
-              // Profile / Logout Menu
-              PopupMenuButton<String>(
-                color: kDarkBar, // from home_page colors
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: kDiscount.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: kDiscount.withOpacity(0.3)),
                 ),
-                offset: const Offset(0, 50),
-                icon: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: kPrimary.withOpacity(0.4),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const CircleAvatar(
-                    backgroundColor: kPrimary,
-                    radius: 18,
-                    child: Icon(Icons.person, color: kWhite, size: 22),
-                  ),
-                ),
-                onSelected: (v) async {
-                  if (v == 'signin') {
-                    Navigator.pushNamed(context, SignInPage.route);
-                  } else if (v == 'signup') {
-                    Navigator.pushNamed(context, SignUpPage.route);
-                  } else if (v == 'logout') {
-                    // FULL LOGOUT: Sign out and clear the entire navigation stack
-                    await FirebaseAuth.instance.signOut();
-                    if (!context.mounted) return;
-
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      SignInPage.route,
-                      (route) =>
-                          false, // This guarantees the user cannot swipe back to the app
-                    );
-                  }
-                },
-                itemBuilder: (context) {
-                  if (user == null) {
-                    return [
-                      _buildMenuItem(
-                        'signin',
-                        AppLanguage.getText('sign_in'),
-                        Icons.login,
-                      ),
-                      _buildMenuItem(
-                        'signup',
-                        AppLanguage.getText('sign_up'),
-                        Icons.person_add,
-                      ),
-                    ];
-                  }
-                  return [
-                    _buildMenuItem(
-                      'logout',
-                      AppLanguage.getText('log_out'),
-                      Icons.logout,
-                      isDestructive: true,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => _confirmLogout(context),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.person_outline_rounded,
+                          color: kDiscount,
+                          size: 16,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'LOGOUT',
+                          style: TextStyle(
+                            color: kDiscount,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                  ];
-                },
+                  ),
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
             ],
           ),
           body: tabs[_index].page,
-
-          // ── Modern Floating Bottom Navigation ──────────────────────────────
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               color: kDarkBar,
@@ -279,28 +287,6 @@ class _AppShellState extends State<AppShell> {
           ),
         );
       },
-    );
-  }
-
-  PopupMenuItem<String> _buildMenuItem(
-    String value,
-    String text,
-    IconData icon, {
-    bool isDestructive = false,
-  }) {
-    final color = isDestructive ? Colors.redAccent : kWhite;
-    return PopupMenuItem(
-      value: value,
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 12),
-          Text(
-            text,
-            style: TextStyle(color: color, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
     );
   }
 }
