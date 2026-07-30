@@ -647,131 +647,175 @@ class _CategoryRail extends StatelessWidget {
     required this.onResolvedFirst,
   });
 
-  Query _getMenuQuery() {
-    return FirebaseFirestore.instance
-        .collection('menu_items')
-        .where('itemType', isEqualTo: _itemTypeFor(kind))
-        .where('status', isEqualTo: 'on');
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.transparent,
-      child: StreamBuilder<QuerySnapshot>(
-        key: ValueKey(kind),
-        stream: _getMenuQuery().snapshots(),
-        builder: (context, itemsSnap) {
-          final availableCategoryNames = <String>{};
-          for (final d in (itemsSnap.data?.docs ?? [])) {
-            final cat =
-                (((d.data() as Map<String, dynamic>?) ?? {})['category']
-                    as String?) ??
-                '';
-            if (cat.isNotEmpty) availableCategoryNames.add(cat);
-          }
-          final filteredCategoryDocs = allCategoryDocs
-              .where((doc) => availableCategoryNames.contains(doc.id))
-              .toList(growable: false);
+    // 1. Filter categories directly using the 'type' field from your database
+    final targetType = _itemTypeFor(kind);
 
-          if (filteredCategoryDocs.isEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => onResolvedFirst(null),
-            );
-            return const Center(
-              child: Text(
-                'No categories',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: kMuted, fontSize: 12),
+    final filteredCategoryDocs = allCategoryDocs
+        .where((doc) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          final catType = (data['type'] as String?) ?? '';
+          return catType == targetType;
+        })
+        .toList(growable: false);
+
+    // 2. Sort categories by itemNo so they appear in the correct order
+    filteredCategoryDocs.sort((a, b) {
+      final dataA = a.data() as Map<String, dynamic>? ?? {};
+      final dataB = b.data() as Map<String, dynamic>? ?? {};
+      final noA = double.tryParse(dataA['itemNo']?.toString().trim() ?? '');
+      final noB = double.tryParse(dataB['itemNo']?.toString().trim() ?? '');
+
+      if (noA != null && noB != null) return noA.compareTo(noB);
+      if (noA != null) return -1;
+      if (noB != null) return 1;
+      return 0;
+    });
+
+    // 3. Extract category names
+    final categoryNames = filteredCategoryDocs
+        .map((d) {
+          final data = d.data() as Map<String, dynamic>? ?? {};
+          return (data['name'] as String?) ?? '';
+        })
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+
+    // If nothing is selected or the selected category is invalid, set to "All" (null)
+    if (selected != null && !categoryNames.contains(selected)) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => onResolvedFirst(null),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      itemCount: filteredCategoryDocs.length + 1, // Add +1 for the "All" Button
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (_, i) {
+        // --- 1. "All" Button (எல்லா item-களையும் காட்ட) ---
+        if (i == 0) {
+          final isSel = selected == null;
+
+          return GestureDetector(
+            onTap: () => onSelect(null), // null அனுப்பினால் எல்லா items வரும்
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              decoration: BoxDecoration(
+                color: isSel ? kWhite.withOpacity(0.12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSel ? kWhite.withOpacity(0.3) : Colors.transparent,
+                ),
+                boxShadow: isSel
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                        ),
+                      ]
+                    : null,
               ),
-            );
-          }
-
-          final categoryNames = filteredCategoryDocs
-              .map((d) => d.id)
-              .toList(growable: false);
-          if (selected == null || !categoryNames.contains(selected)) {
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => onResolvedFirst(categoryNames.first),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            itemCount: filteredCategoryDocs.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (_, i) {
-              final d = filteredCategoryDocs[i];
-              final name = d.id;
-              final iconUrl =
-                  (((d.data() as Map<String, dynamic>?) ?? {})['iconUrl']
-                      as String?) ??
-                  '';
-              final isSel = selected == name;
-
-              return GestureDetector(
-                onTap: () => onSelect(name),
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 10),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSel
-                        ? kWhite.withOpacity(0.12)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isSel
-                          ? kWhite.withOpacity(0.3)
-                          : Colors.transparent,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 36, // அளவு 48-லிருந்து 36-ஆக குறைக்கப்பட்டுள்ளது
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: kWhite.withOpacity(0.05),
+                      shape: BoxShape.circle, // வட்ட வடிவில் (Simple look)
                     ),
-                    boxShadow: isSel
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 8,
-                            ),
-                          ]
-                        : null,
+                    child: Icon(
+                      Icons
+                          .grid_view_rounded, // 'apps'-க்கு பதிலாக மென்மையான Icon
+                      color: isSel ? kWhite : kMuted,
+                      size:
+                          18, // ஐகான் அளவு 30-லிருந்து 18-ஆக குறைக்கப்பட்டுள்ளது
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _WebSafeImage(
-                          imageUrl: iconUrl,
-                          width: 48,
-                          height: 48,
-                          fallback: Icon(
-                            Icons.fastfood,
-                            color: isSel ? kWhite : kMuted,
-                            size: 30,
-                          ),
-                        ),
+                  const SizedBox(
+                    height: 6,
+                  ), // இடைவெளி சற்று குறைக்கப்பட்டுள்ளது
+                  Text(
+                    'All',
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: isSel ? kWhite : kMuted,
+                      fontSize: 11,
+                      fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // --- 2. Dynamic Categories (database-ல் இருந்து வரும் பிரிவுகள்) ---
+        final d = filteredCategoryDocs[i - 1];
+        final data = d.data() as Map<String, dynamic>? ?? {};
+        final name = (data['name'] as String?) ?? '';
+        final iconUrl = (data['iconUrl'] as String?) ?? '';
+        final isSel = selected == name;
+
+        return GestureDetector(
+          onTap: () => onSelect(name),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            decoration: BoxDecoration(
+              color: isSel ? kWhite.withOpacity(0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSel ? kWhite.withOpacity(0.3) : Colors.transparent,
+              ),
+              boxShadow: isSel
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        name,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isSel ? kWhite : kMuted,
-                          fontSize: 11,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                    ]
+                  : null,
+            ),
+            child: Column(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _WebSafeImage(
+                    imageUrl: iconUrl,
+                    width: 48,
+                    height: 48,
+                    fallback: Icon(
+                      Icons.fastfood,
+                      color: isSel ? kWhite : kMuted,
+                      size: 30,
+                    ),
                   ),
                 ),
-              );
-            },
-          );
-        },
-      ),
+                const SizedBox(height: 8),
+                Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isSel ? kWhite : kMuted,
+                    fontSize: 11,
+                    fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
