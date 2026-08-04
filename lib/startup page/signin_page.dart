@@ -1,6 +1,7 @@
 // lib/startup_page/signin_page.dart
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // ── Autofill-க்காக இது தேவை ──
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:restorant/startup page/signupverify.dart';
@@ -28,7 +29,6 @@ class _SignInPageState extends State<SignInPage> {
   String? _err;
   bool _obscure = true;
 
-  // ── 100% Original Logic Retained ──
   Future<void> _loginUser() async {
     setState(() {
       _busy = true;
@@ -45,11 +45,13 @@ class _SignInPageState extends State<SignInPage> {
             .where('phone', isEqualTo: queryPhone)
             .limit(1)
             .get();
-        if (userQuery.docs.isEmpty)
+        if (userQuery.docs.isEmpty) {
           throw Exception('No account found for this phone number.');
+        }
         loginEmail = userQuery.docs.first.data()['email'] as String? ?? '';
-        if (loginEmail.isEmpty)
+        if (loginEmail.isEmpty) {
           throw Exception('No email registered for this account.');
+        }
       }
 
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -72,8 +74,9 @@ class _SignInPageState extends State<SignInPage> {
       if (!verifiedField) {
         final phone = data['phone'] as String? ?? '';
         final userName = data['userName'] as String? ?? 'Guest';
-        if (phone.isEmpty)
+        if (phone.isEmpty) {
           throw Exception(AppLanguage.getText('err_phone_not_found'));
+        }
 
         await FirebaseAuth.instance.verifyPhoneNumber(
           phoneNumber: phone.startsWith('+') ? phone : '+$phone',
@@ -108,8 +111,15 @@ class _SignInPageState extends State<SignInPage> {
       await users.doc(user.uid).set({
         'lastLogin': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
       final role =
           (data['role'] as String?)?.toLowerCase().trim() ?? 'customer';
+
+      // ── Autofill Save Trigger ──
+      // வெற்றிகரமாக Login ஆனதும் OS-ஐ Password Save செய்யக் கேட்க சொல்கிறோம்
+      TextInput.finishAutofillContext();
+      // ───────────────────────────
+
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil(
         role == 'admin' ? AppRoutes.admin : AppRoutes.user,
@@ -152,7 +162,6 @@ class _SignInPageState extends State<SignInPage> {
     super.dispose();
   }
 
-  // ── Neat Input Decoration ──
   InputDecoration _dec(String label, {IconData? icon}) => InputDecoration(
     labelText: label,
     labelStyle: const TextStyle(color: kMuted),
@@ -231,122 +240,139 @@ class _SignInPageState extends State<SignInPage> {
                             borderRadius: BorderRadius.circular(28),
                             border: Border.all(color: kWhite.withOpacity(0.2)),
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.restaurant_rounded,
-                                    color: kPrimary,
-                                    size: 32,
+
+                          // ── இங்கிருந்து தான் AutofillGroup ஆரம்பமாகிறது ──
+                          child: AutofillGroup(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.restaurant_rounded,
+                                      color: kPrimary,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      AppLanguage.getText('welcome_back'),
+                                      style: const TextStyle(
+                                        color: kWhite,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 32),
+                                TextField(
+                                  controller: _emailOrPhone,
+                                  keyboardType: TextInputType.emailAddress,
+                                  style: const TextStyle(color: kWhite),
+
+                                  // ── Username/Email Autofill Hint ──
+                                  autofillHints: const [
+                                    AutofillHints.email,
+                                    AutofillHints.telephoneNumber,
+                                  ],
+
+                                  decoration: _dec(
+                                    AppLanguage.getText('email_or_phone'),
+                                    icon: Icons.mail_outline,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    AppLanguage.getText('welcome_back'),
-                                    style: const TextStyle(
-                                      color: kWhite,
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _password,
+                                  obscureText: _obscure,
+                                  style: const TextStyle(color: kWhite),
+
+                                  // ── Password Autofill Hint ──
+                                  autofillHints: const [AutofillHints.password],
+
+                                  decoration:
+                                      _dec(
+                                        AppLanguage.getText('password'),
+                                        icon: Icons.lock_outline_rounded,
+                                      ).copyWith(
+                                        suffixIcon: IconButton(
+                                          onPressed: () => setState(
+                                            () => _obscure = !_obscure,
+                                          ),
+                                          icon: Icon(
+                                            _obscure
+                                                ? Icons.visibility
+                                                : Icons.visibility_off,
+                                            color: kMuted,
+                                          ),
+                                        ),
+                                      ),
+                                ),
+                                if (_err != null) ...[
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      _err!,
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 32),
-                              TextField(
-                                controller: _emailOrPhone,
-                                keyboardType: TextInputType.emailAddress,
-                                style: const TextStyle(color: kWhite),
-                                decoration: _dec(
-                                  AppLanguage.getText('email_or_phone'),
-                                  icon: Icons.mail_outline,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _password,
-                                obscureText: _obscure,
-                                style: const TextStyle(color: kWhite),
-                                decoration:
-                                    _dec(
-                                      AppLanguage.getText('password'),
-                                      icon: Icons.lock_outline_rounded,
-                                    ).copyWith(
-                                      suffixIcon: IconButton(
-                                        onPressed: () => setState(
-                                          () => _obscure = !_obscure,
-                                        ),
-                                        icon: Icon(
-                                          _obscure
-                                              ? Icons.visibility
-                                              : Icons.visibility_off,
-                                          color: kMuted,
-                                        ),
+                                const SizedBox(height: 28),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: kPrimary,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
+                                      elevation: 2,
                                     ),
-                              ),
-                              if (_err != null) ...[
-                                const SizedBox(height: 12),
-                                Align(
-                                  alignment: Alignment.centerLeft,
+                                    onPressed: _busy ? null : _loginUser,
+                                    child: _busy
+                                        ? const SizedBox(
+                                            height: 24,
+                                            width: 24,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                              color: kWhite,
+                                            ),
+                                          )
+                                        : Text(
+                                            AppLanguage.getText(
+                                              'sign_in_title',
+                                            ),
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                TextButton(
+                                  onPressed: () => Navigator.of(
+                                    context,
+                                  ).pushReplacementNamed(AppRoutes.signUp),
                                   child: Text(
-                                    _err!,
+                                    AppLanguage.getText('dont_have_account'),
                                     style: const TextStyle(
-                                      color: Colors.redAccent,
-                                      fontSize: 13,
+                                      color: kMuted,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 28),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 52,
-                                child: FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: kPrimary,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    elevation: 2,
-                                  ),
-                                  onPressed: _busy ? null : _loginUser,
-                                  child: _busy
-                                      ? const SizedBox(
-                                          height: 24,
-                                          width: 24,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.5,
-                                            color: kWhite,
-                                          ),
-                                        )
-                                      : Text(
-                                          AppLanguage.getText('sign_in_title'),
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              TextButton(
-                                onPressed: () => Navigator.of(
-                                  context,
-                                ).pushReplacementNamed(AppRoutes.signUp),
-                                child: Text(
-                                  AppLanguage.getText('dont_have_account'),
-                                  style: const TextStyle(
-                                    color: kMuted,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),

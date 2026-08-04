@@ -38,7 +38,7 @@ class AddMenuPage extends StatefulWidget {
 }
 
 class _AddMenuPageState extends State<AddMenuPage> {
-  final _itemNo = TextEditingController(); // 🟢 NEW FIELD: Item ID / No
+  final _itemNo = TextEditingController();
   final _name = TextEditingController();
   final _note = TextEditingController();
   final _price = TextEditingController();
@@ -64,7 +64,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
 
   List<Map<String, dynamic>> _allAvailableOptions = [];
   final List<Map<String, dynamic>> _selectedOptions = [];
-  String? _dropdownOptionValue;
 
   bool _saving = false;
   String? _err;
@@ -78,7 +77,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
 
   @override
   void dispose() {
-    _itemNo.dispose(); // 🟢 Dispose new field
+    _itemNo.dispose();
     _name.dispose();
     _note.dispose();
     _price.dispose();
@@ -174,7 +173,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
     });
 
     try {
-      final itemNo = _itemNo.text.trim(); // 🟢 Get Item No
+      final itemNo = _itemNo.text.trim();
       final name = _name.text.trim();
       final note = _note.text.trim();
 
@@ -239,6 +238,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
 
       List<Map<String, dynamic>> optionsData = _selectedOptions.map((opt) {
         return {
+          'id': opt['id'],
           'name': opt['name'],
           'price': opt['price'],
           'catalog': opt['catalog'],
@@ -263,7 +263,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
           .toList();
 
       await FirebaseFirestore.instance.collection('menu_items').add({
-        'itemNo': itemNo, // 🟢 Save new field
+        'itemNo': itemNo,
         'name': name,
         'note': note.isEmpty ? null : note,
         'price': basePrice,
@@ -291,7 +291,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
         ),
       );
 
-      _itemNo.clear(); // 🟢 Clear new field
+      _itemNo.clear();
       _name.clear();
       _note.clear();
       _price.clear();
@@ -303,7 +303,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
         _selectedMenuChoices.clear();
         _dropdownChoiceValue = null;
         _selectedOptions.clear();
-        _dropdownOptionValue = null;
         _hasDiscount = false;
         _discountType = 'percent';
         _discountValue.clear();
@@ -330,7 +329,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
       _selectedMenuChoices.clear();
       _dropdownChoiceValue = null;
       _selectedOptions.clear();
-      _dropdownOptionValue = null;
     });
   }
 
@@ -425,7 +423,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 🟢 NEW INPUT FOR ITEM NO
                 _input(
                   label: 'Item ID / Number (e.g., 1, 2, 003)',
                   controller: _itemNo,
@@ -769,6 +766,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ),
           const SizedBox(height: 24),
 
+          // 🟢 NEW Multi-Select Design For Additional Options
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -788,101 +786,29 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: kFieldBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: kMuted.withOpacity(0.3)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Builder(
-              builder: (context) {
-                final matchingOptions = _allAvailableOptions.where((opt) {
-                  final optType = (opt['type'] as String?) ?? 'food';
-                  return optType == _itemType;
-                }).toList();
 
-                return DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _dropdownOptionValue,
-                    isExpanded: true,
-                    dropdownColor: kFieldBg,
-                    icon: const Icon(Icons.arrow_drop_down, color: kWhite),
-                    hint: Text(
-                      matchingOptions.isEmpty
-                          ? 'No ${_typeLabel(_itemType)} additional options yet'
-                          : 'Select Additional Option',
-                      style: const TextStyle(color: kMuted),
-                    ),
-                    items: matchingOptions
-                        .map(
-                          (opt) => DropdownMenuItem<String>(
-                            value: opt['id'],
-                            child: Text(
-                              '${opt['name']} (+CHF ${((opt['price'] as num?) ?? 0).toStringAsFixed(2)})',
-                              style: const TextStyle(color: kWhite),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (newId) {
-                      if (newId != null &&
-                          !_selectedOptions.any((o) => o['id'] == newId)) {
-                        setState(() {
-                          _selectedOptions.add(
-                            _allAvailableOptions.firstWhere(
-                              (o) => o['id'] == newId,
-                            ),
-                          );
-                          _dropdownOptionValue = null;
-                        });
-                      }
-                    },
-                  ),
-                );
-              },
-            ),
+          Builder(
+            builder: (context) {
+              final matchingOptions = _allAvailableOptions.where((opt) {
+                final optType = (opt['type'] as String?) ?? 'food';
+                return optType == _itemType;
+              }).toList();
+
+              return _MultiSelectOptionsField(
+                hint: matchingOptions.isEmpty
+                    ? 'No ${_typeLabel(_itemType)} additional options yet'
+                    : 'Choose additional options...',
+                availableOptions: matchingOptions,
+                selectedOptions: _selectedOptions,
+                onChanged: (newSelection) {
+                  setState(() {
+                    _selectedOptions.clear();
+                    _selectedOptions.addAll(newSelection);
+                  });
+                },
+              );
+            },
           ),
-          const SizedBox(height: 12),
-
-          if (_selectedOptions.isNotEmpty)
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _selectedOptions.length,
-              itemBuilder: (context, index) {
-                final opt = _selectedOptions[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: kFieldBg,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ListTile(
-                    title: Text(
-                      opt['name'] ?? '',
-                      style: const TextStyle(
-                        color: kWhite,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'Price: ${opt['price']} | Code: ${opt['catalog']}',
-                      style: const TextStyle(color: kMuted),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.redAccent,
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _selectedOptions.removeAt(index)),
-                    ),
-                  ),
-                );
-              },
-            ),
           const SizedBox(height: 24),
 
           const Text(
@@ -1042,26 +968,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // SizedBox(
-          //   width: double.infinity,
-          //   child: OutlinedButton.icon(
-          //     icon: const Icon(Icons.settings, color: kWhite, size: 18),
-          //     label: const Text(
-          //       'Manage Menu Items',
-          //       style: TextStyle(color: kWhite),
-          //     ),
-          //     style: OutlinedButton.styleFrom(
-          //       side: BorderSide(color: kMuted.withOpacity(0.5)),
-          //       padding: const EdgeInsets.symmetric(vertical: 14),
-          //     ),
-          //     onPressed: () => Navigator.push(
-          //       context,
-          //       MaterialPageRoute(builder: (_) => const ManageMenuItemsPage()),
-          //     ),
-          //   ),
-          // ),
-          // const SizedBox(height: 40),
         ],
       ),
     );
@@ -1122,6 +1028,234 @@ class _AddMenuPageState extends State<AddMenuPage> {
         focusedBorder: OutlineInputBorder(
           borderSide: const BorderSide(color: kPrimary),
           borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+}
+
+// 🟢 NEW: Custom Multi-Select Field Widget
+class _MultiSelectOptionsField extends StatefulWidget {
+  final String hint;
+  final List<Map<String, dynamic>> availableOptions;
+  final List<Map<String, dynamic>> selectedOptions;
+  final Function(List<Map<String, dynamic>>) onChanged;
+
+  const _MultiSelectOptionsField({
+    required this.hint,
+    required this.availableOptions,
+    required this.selectedOptions,
+    required this.onChanged,
+  });
+
+  @override
+  State<_MultiSelectOptionsField> createState() =>
+      _MultiSelectOptionsFieldState();
+}
+
+class _MultiSelectOptionsFieldState extends State<_MultiSelectOptionsField> {
+  void _showSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return _MultiSelectDialog(
+          availableOptions: widget.availableOptions,
+          initialSelectedOptions: widget.selectedOptions,
+          onSelectionChanged: widget.onChanged,
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: _showSelectionDialog,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(minHeight: 52),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: kFieldBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kMuted.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: widget.selectedOptions.isEmpty
+                  ? Text(widget.hint, style: const TextStyle(color: kMuted))
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.selectedOptions.map((opt) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kPrimary.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            opt['name'] ?? '',
+                            style: const TextStyle(
+                              color: kWhite,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.keyboard_arrow_down, color: kMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 🟢 NEW: Dialog containing Search & Checkboxes
+class _MultiSelectDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> availableOptions;
+  final List<Map<String, dynamic>> initialSelectedOptions;
+  final Function(List<Map<String, dynamic>>) onSelectionChanged;
+
+  const _MultiSelectDialog({
+    required this.availableOptions,
+    required this.initialSelectedOptions,
+    required this.onSelectionChanged,
+  });
+
+  @override
+  State<_MultiSelectDialog> createState() => _MultiSelectDialogState();
+}
+
+class _MultiSelectDialogState extends State<_MultiSelectDialog> {
+  late List<Map<String, dynamic>> _tempSelected;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tempSelected = List.from(widget.initialSelectedOptions);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredOptions = widget.availableOptions.where((opt) {
+      final name = (opt['name'] as String?)?.toLowerCase() ?? '';
+      return name.contains(_searchQuery.toLowerCase());
+    }).toList();
+
+    filteredOptions.sort((a, b) {
+      final aSelected = _tempSelected.any((o) => o['name'] == a['name']);
+      final bSelected = _tempSelected.any((o) => o['name'] == b['name']);
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      final nameA = (a['name'] as String?) ?? '';
+      final nameB = (b['name'] as String?) ?? '';
+      return nameA.compareTo(nameB);
+    });
+
+    return Dialog(
+      backgroundColor: kBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(maxHeight: 500, maxWidth: 400),
+        child: Column(
+          children: [
+            TextField(
+              style: const TextStyle(color: kWhite),
+              decoration: InputDecoration(
+                hintText: 'Search Options...',
+                hintStyle: const TextStyle(color: kMuted),
+                prefixIcon: const Icon(Icons.search, color: kMuted),
+                filled: true,
+                fillColor: kFieldBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: filteredOptions.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No options found',
+                        style: TextStyle(color: kMuted),
+                      ),
+                    )
+                  : RawScrollbar(
+                      thumbColor: kPrimary.withOpacity(0.5),
+                      radius: const Radius.circular(8),
+                      thickness: 4,
+                      child: ListView.builder(
+                        itemCount: filteredOptions.length,
+                        itemBuilder: (context, index) {
+                          final opt = filteredOptions[index];
+                          final isSelected = _tempSelected.any(
+                            (o) => o['name'] == opt['name'],
+                          );
+                          return CheckboxListTile(
+                            activeColor: kPrimary,
+                            checkColor: kWhite,
+                            side: BorderSide(color: kMuted.withOpacity(0.5)),
+                            title: Text(
+                              opt['name'] ?? '',
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'CHF ${((opt['price'] as num?) ?? 0).toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: kMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                            value: isSelected,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _tempSelected.add(opt);
+                                } else {
+                                  _tempSelected.removeWhere(
+                                    (o) => o['name'] == opt['name'],
+                                  );
+                                }
+                              });
+                              widget.onSelectionChanged(_tempSelected);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: kPrimary),
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

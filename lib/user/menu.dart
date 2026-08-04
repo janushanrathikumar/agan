@@ -649,7 +649,6 @@ class _CategoryRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Filter categories directly using the 'type' field from your database
     final targetType = _itemTypeFor(kind);
 
     final filteredCategoryDocs = allCategoryDocs
@@ -660,12 +659,24 @@ class _CategoryRail extends StatelessWidget {
         })
         .toList(growable: false);
 
-    // 2. Sort categories by itemNo so they appear in the correct order
+    // 🟢 AFTER: Strips leading non-digit characters to parse numbers properly
     filteredCategoryDocs.sort((a, b) {
       final dataA = a.data() as Map<String, dynamic>? ?? {};
       final dataB = b.data() as Map<String, dynamic>? ?? {};
-      final noA = double.tryParse(dataA['itemNo']?.toString().trim() ?? '');
-      final noB = double.tryParse(dataB['itemNo']?.toString().trim() ?? '');
+
+      double? parseItemNo(dynamic raw) {
+        if (raw == null) return null;
+        final str = raw.toString().trim();
+        // Extract digits (supports integers and decimals)
+        final match = RegExp(r'\d+(\.\d+)?').firstMatch(str);
+        if (match != null) {
+          return double.tryParse(match.group(0)!);
+        }
+        return null;
+      }
+
+      final noA = parseItemNo(dataA['itemNo']);
+      final noB = parseItemNo(dataB['itemNo']);
 
       if (noA != null && noB != null) return noA.compareTo(noB);
       if (noA != null) return -1;
@@ -673,7 +684,6 @@ class _CategoryRail extends StatelessWidget {
       return 0;
     });
 
-    // 3. Extract category names
     final categoryNames = filteredCategoryDocs
         .map((d) {
           final data = d.data() as Map<String, dynamic>? ?? {};
@@ -682,7 +692,6 @@ class _CategoryRail extends StatelessWidget {
         .where((name) => name.isNotEmpty)
         .toList(growable: false);
 
-    // If nothing is selected or the selected category is invalid, set to "All" (null)
     if (selected != null && !categoryNames.contains(selected)) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => onResolvedFirst(null),
@@ -691,15 +700,14 @@ class _CategoryRail extends StatelessWidget {
 
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      itemCount: filteredCategoryDocs.length + 1, // Add +1 for the "All" Button
+      itemCount: filteredCategoryDocs.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (_, i) {
-        // --- 1. "All" Button (எல்லா item-களையும் காட்ட) ---
         if (i == 0) {
           final isSel = selected == null;
 
           return GestureDetector(
-            onTap: () => onSelect(null), // null அனுப்பினால் எல்லா items வரும்
+            onTap: () => onSelect(null),
             behavior: HitTestBehavior.opaque,
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 10),
@@ -723,23 +731,19 @@ class _CategoryRail extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 36, // அளவு 48-லிருந்து 36-ஆக குறைக்கப்பட்டுள்ளது
+                    width: 36,
                     height: 36,
                     decoration: BoxDecoration(
                       color: kWhite.withOpacity(0.05),
-                      shape: BoxShape.circle, // வட்ட வடிவில் (Simple look)
+                      shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      Icons
-                          .grid_view_rounded, // 'apps'-க்கு பதிலாக மென்மையான Icon
+                      Icons.grid_view_rounded,
                       color: isSel ? kWhite : kMuted,
-                      size:
-                          18, // ஐகான் அளவு 30-லிருந்து 18-ஆக குறைக்கப்பட்டுள்ளது
+                      size: 18,
                     ),
                   ),
-                  const SizedBox(
-                    height: 6,
-                  ), // இடைவெளி சற்று குறைக்கப்பட்டுள்ளது
+                  const SizedBox(height: 6),
                   Text(
                     'All',
                     textAlign: TextAlign.center,
@@ -756,7 +760,6 @@ class _CategoryRail extends StatelessWidget {
           );
         }
 
-        // --- 2. Dynamic Categories (database-ல் இருந்து வரும் பிரிவுகள்) ---
         final d = filteredCategoryDocs[i - 1];
         final data = d.data() as Map<String, dynamic>? ?? {};
         final name = (data['name'] as String?) ?? '';
@@ -835,31 +838,34 @@ class _MenuGrid extends StatelessWidget {
     required this.onTapItem,
   });
 
+  // 🟢 Helper method to compute HIGHEST price from portions/sizes
   double _getDisplayPrice(Map<String, dynamic> m) {
     bool hasMultipleSizes = m['hasMultipleSizes'] == true;
     List<dynamic> sizes = m['sizes'] ?? [];
     if (hasMultipleSizes && sizes.isNotEmpty) {
-      double minPrice = double.infinity;
+      double maxPrice =
+          0.0; // 🟢 Lowest search panrathukku badhula max value match panna 0.0 set panron
+
       for (var s in sizes) {
         if (tableNo == 'Take-Away') {
-          if ((s['name'] as String?)?.toLowerCase().trim() == 'kleine portion')
-            continue;
           if (s['takeAwayPrice'] != null &&
               s['takeAwayPrice'].toString().isNotEmpty) {
             double p = (s['takeAwayPrice'] as num).toDouble();
-            if (p < minPrice) minPrice = p;
+            if (p > maxPrice)
+              maxPrice = p; // 🟢 Ethu perusho athu maxPrice-la store aagum
           }
         } else {
           if (s['dineInPrice'] != null || s['price'] != null) {
             double p = ((s['dineInPrice'] ?? s['price'] ?? 0) as num)
                 .toDouble();
-            if (p < minPrice) minPrice = p;
+            if (p > maxPrice)
+              maxPrice = p; // 🟢 Ethu perusho athu maxPrice-la store aagum
           }
         }
       }
-      return minPrice == double.infinity
+      return maxPrice == 0.0
           ? ((m['price'] as num?)?.toDouble() ?? 0)
-          : minPrice;
+          : maxPrice;
     }
     return ((m['price'] as num?)?.toDouble() ?? 0);
   }
@@ -907,7 +913,6 @@ class _MenuGrid extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Image Box
                 Stack(
                   children: [
                     ClipRRect(
@@ -956,7 +961,6 @@ class _MenuGrid extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(width: 14),
-                // Details Box
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(0, 10, 14, 10),
@@ -1045,13 +1049,24 @@ class _MenuGrid extends StatelessWidget {
           );
 
         var docs = snap.data?.docs ?? [];
-
+        // 🟢 AFTER: Strips leading non-digit characters to sort items numerically
         docs.sort((a, b) {
           final dataA = a.data() as Map<String, dynamic>? ?? {};
           final dataB = b.data() as Map<String, dynamic>? ?? {};
 
-          final noA = double.tryParse(dataA['itemNo']?.toString().trim() ?? '');
-          final noB = double.tryParse(dataB['itemNo']?.toString().trim() ?? '');
+          double? parseItemNo(dynamic raw) {
+            if (raw == null) return null;
+            final str = raw.toString().trim();
+            // Match digits only (e.g. "P01" -> "01", "RK002" -> "002")
+            final match = RegExp(r'\d+(\.\d+)?').firstMatch(str);
+            if (match != null) {
+              return double.tryParse(match.group(0)!);
+            }
+            return null;
+          }
+
+          final noA = parseItemNo(dataA['itemNo']);
+          final noB = parseItemNo(dataB['itemNo']);
 
           if (noA != null && noB != null) return noA.compareTo(noB);
           if (noA != null) return -1;
@@ -1061,18 +1076,16 @@ class _MenuGrid extends StatelessWidget {
           final nameB = (dataB['name'] as String?)?.toLowerCase() ?? '';
           return nameA.compareTo(nameB);
         });
-
         if (searchQuery.isNotEmpty) {
-          docs = docs
-              .where(
-                (d) =>
-                    (((d.data() as Map<String, dynamic>?) ?? {})['name']
-                            as String?)
-                        ?.toLowerCase()
-                        .contains(searchQuery) ??
-                    false,
-              )
-              .toList();
+          docs = docs.where((d) {
+            final data = (d.data() as Map<String, dynamic>?) ?? {};
+
+            final name = (data['name'] as String?)?.toLowerCase() ?? '';
+            final itemNo = (data['itemNo'] as String?)?.toLowerCase() ?? '';
+
+            // Matches either the Item Name OR Item Number (e.g., P01, RK002, 01)
+            return name.contains(searchQuery) || itemNo.contains(searchQuery);
+          }).toList();
         }
 
         if (docs.isEmpty)
@@ -1188,8 +1201,6 @@ void _showItemSheet(
   if (hasMultipleSizes) {
     if (tableNo == 'Take-Away') {
       displaySizes = allSizes.where((s) {
-        if ((s['name'] as String?)?.toLowerCase().trim() == 'kleine portion')
-          return false;
         return s.containsKey('takeAwayPrice') &&
             s['takeAwayPrice'] != null &&
             s['takeAwayPrice'].toString().isNotEmpty;
@@ -1574,18 +1585,69 @@ void _showItemSheet(
                         const SizedBox(height: 8),
                       ],
 
+                      // 🟢 CONDITIONAL UI FOR ADD-ONS (If > 5 show MultiSelect Box, Else show Checkboxes Inline)
                       if (additionalOptions.isNotEmpty) ...[
-                        _AdditionalOptionsSection(
-                          options: additionalOptions,
-                          selected: selectedAddOns,
-                          onToggle: (idx) => setS(() {
-                            selectedAddOns.contains(idx)
-                                ? selectedAddOns.remove(idx)
-                                : selectedAddOns.add(idx);
-                          }),
+                        Row(
+                          children: [
+                            const Text(
+                              'Add-ons',
+                              style: TextStyle(
+                                color: kWhite,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: kMuted.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Optional',
+                                style: TextStyle(
+                                  color: kMuted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 12),
+
+                        if (additionalOptions.length > 5)
+                          _AddOnsMultiSelectField(
+                            options: additionalOptions,
+                            selected: selectedAddOns,
+                            onChanged: (newSelection) {
+                              setS(() {
+                                selectedAddOns.clear();
+                                selectedAddOns.addAll(newSelection);
+                              });
+                            },
+                          )
+                        else
+                          _InlineAddOnsSection(
+                            options: additionalOptions,
+                            selected: selectedAddOns,
+                            onToggle: (idx) {
+                              setS(() {
+                                if (selectedAddOns.contains(idx)) {
+                                  selectedAddOns.remove(idx);
+                                } else {
+                                  selectedAddOns.add(idx);
+                                }
+                              });
+                            },
+                          ),
                         const SizedBox(height: 24),
                       ],
+
                       _SectionTitle('Quantity'),
                       Row(
                         children: [
@@ -1763,11 +1825,258 @@ class _MenuChoicesSection extends StatelessWidget {
   }
 }
 
-class _AdditionalOptionsSection extends StatelessWidget {
+// 🟢 NEW: Multi-Select UI Component for > 5 Add-ons
+class _AddOnsMultiSelectField extends StatelessWidget {
+  final List<Map<String, dynamic>> options;
+  final Set<int> selected;
+  final ValueChanged<Set<int>> onChanged;
+
+  const _AddOnsMultiSelectField({
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        showDialog<Set<int>>(
+          context: context,
+          builder: (ctx) => _AddOnsMultiSelectDialog(
+            options: options,
+            initialSelected: selected,
+            onSelectionChanged: (newSel) {
+              onChanged(newSel);
+            },
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        //minHeight: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: kWhite.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: kWhite.withOpacity(0.15)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: selected.isEmpty
+                  ? const Text(
+                      'Choose add-ons...',
+                      style: TextStyle(color: kMuted),
+                    )
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: selected.map((idx) {
+                        final opt = options[idx];
+                        final optName = (opt['name'] as String?) ?? '';
+                        final optPrice = ((opt['price'] as num?) ?? 0)
+                            .toDouble();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kPrimary.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            optPrice > 0
+                                ? '$optName (+CHF ${optPrice.toStringAsFixed(2)})'
+                                : optName,
+                            style: const TextStyle(
+                              color: kWhite,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.keyboard_arrow_down, color: kMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 🟢 NEW: Dialog UI (Checkbox & Search) for Multi-Select
+class _AddOnsMultiSelectDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> options;
+  final Set<int> initialSelected;
+  final Function(Set<int>) onSelectionChanged;
+
+  const _AddOnsMultiSelectDialog({
+    required this.options,
+    required this.initialSelected,
+    required this.onSelectionChanged,
+  });
+
+  @override
+  State<_AddOnsMultiSelectDialog> createState() =>
+      _AddOnsMultiSelectDialogState();
+}
+
+class _AddOnsMultiSelectDialogState extends State<_AddOnsMultiSelectDialog> {
+  late Set<int> _tempSelected;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tempSelected = Set<int>.from(widget.initialSelected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<MapEntry<int, Map<String, dynamic>>> indexedOptions = widget
+        .options
+        .asMap()
+        .entries
+        .toList();
+
+    final filteredOptions = indexedOptions.where((entry) {
+      final name = (entry.value['name'] as String?)?.toLowerCase() ?? '';
+      return name.contains(_searchQuery.toLowerCase());
+    }).toList();
+
+    filteredOptions.sort((a, b) {
+      final aSelected = _tempSelected.contains(a.key);
+      final bSelected = _tempSelected.contains(b.key);
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      final nameA = (a.value['name'] as String?) ?? '';
+      final nameB = (b.value['name'] as String?) ?? '';
+      return nameA.compareTo(nameB);
+    });
+
+    return Dialog(
+      backgroundColor: kBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(maxHeight: 500, maxWidth: 400),
+        child: Column(
+          children: [
+            TextField(
+              style: const TextStyle(color: kWhite),
+              decoration: InputDecoration(
+                hintText: 'Search Add-ons...',
+                hintStyle: const TextStyle(color: kMuted),
+                prefixIcon: const Icon(Icons.search, color: kMuted),
+                filled: true,
+                fillColor: kWhite.withOpacity(0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: filteredOptions.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No add-ons found',
+                        style: TextStyle(color: kMuted),
+                      ),
+                    )
+                  : RawScrollbar(
+                      thumbColor: kPrimary.withOpacity(0.5),
+                      radius: const Radius.circular(8),
+                      thickness: 4,
+                      child: ListView.builder(
+                        itemCount: filteredOptions.length,
+                        itemBuilder: (context, index) {
+                          final entry = filteredOptions[index];
+                          final originalIndex = entry.key;
+                          final opt = entry.value;
+                          final optName = (opt['name'] as String?) ?? '';
+                          final optPrice = ((opt['price'] as num?) ?? 0)
+                              .toDouble();
+                          final isSelected = _tempSelected.contains(
+                            originalIndex,
+                          );
+
+                          return CheckboxListTile(
+                            activeColor: kPrimary,
+                            checkColor: kWhite,
+                            side: BorderSide(color: kMuted.withOpacity(0.5)),
+                            title: Text(
+                              optName,
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              optPrice > 0
+                                  ? '+CHF ${optPrice.toStringAsFixed(2)}'
+                                  : 'Free',
+                              style: const TextStyle(
+                                color: kMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                            value: isSelected,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _tempSelected.add(originalIndex);
+                                } else {
+                                  _tempSelected.remove(originalIndex);
+                                }
+                              });
+                              widget.onSelectionChanged(_tempSelected);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context, _tempSelected),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 🟢 NEW: Inline UI Component for <= 5 Add-ons
+class _InlineAddOnsSection extends StatelessWidget {
   final List<Map<String, dynamic>> options;
   final Set<int> selected;
   final void Function(int idx) onToggle;
-  const _AdditionalOptionsSection({
+
+  const _InlineAddOnsSection({
     required this.options,
     required this.selected,
     required this.onToggle,
@@ -1784,95 +2093,63 @@ class _AdditionalOptionsSection extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'Add-ons',
-                style: TextStyle(
-                  color: kWhite,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: kMuted.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'Optional',
-                  style: TextStyle(
-                    color: kMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+        children: List.generate(options.length, (i) {
+          final opt = options[i];
+          final optName = (opt['name'] as String?) ?? '';
+          final optPrice = ((opt['price'] as num?) ?? 0).toDouble();
+          final isSelected = selected.contains(i);
+
+          return GestureDetector(
+            onTap: () => onToggle(i),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isSelected ? kPrimary : kMuted.withOpacity(0.5),
+                        width: 2,
+                      ),
+                      color: isSelected ? kPrimary : Colors.transparent,
+                    ),
+                    child: isSelected
+                        ? const Icon(Icons.check, color: kWhite, size: 16)
+                        : null,
                   ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...List.generate(options.length, (i) {
-            final opt = options[i];
-            final optName = (opt['name'] as String?) ?? '';
-            final optPrice = ((opt['price'] as num?) ?? 0).toDouble();
-            final isSelected = selected.contains(i);
-            return GestureDetector(
-              onTap: () => onToggle(i),
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                child: Row(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isSelected
-                              ? kPrimary
-                              : kMuted.withOpacity(0.5),
-                          width: 2,
-                        ),
-                        color: isSelected ? kPrimary : Colors.transparent,
-                      ),
-                      child: isSelected
-                          ? const Icon(Icons.check, color: kWhite, size: 16)
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        optName,
-                        style: TextStyle(
-                          color: isSelected ? kWhite : kMuted,
-                          fontSize: 15,
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      optPrice > 0
-                          ? '+CHF ${optPrice.toStringAsFixed(2)}'
-                          : 'Free',
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      optName,
                       style: TextStyle(
-                        color: isSelected ? kPrimary : kMuted,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+                        color: isSelected ? kWhite : kMuted,
+                        fontSize: 15,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  Text(
+                    optPrice > 0
+                        ? '+CHF ${optPrice.toStringAsFixed(2)}'
+                        : 'Free',
+                    style: TextStyle(
+                      color: isSelected ? kPrimary : kMuted,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-            );
-          }),
-        ],
+            ),
+          );
+        }),
       ),
     );
   }
