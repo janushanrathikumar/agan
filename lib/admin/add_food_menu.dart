@@ -65,6 +65,13 @@ class _AddMenuPageState extends State<AddMenuPage> {
   List<Map<String, dynamic>> _allAvailableOptions = [];
   final List<Map<String, dynamic>> _selectedOptions = [];
 
+  // 🟢 NEW: Take Away availability (e.g. drinks that can't be packed)
+  bool _canTakeAway = true;
+
+  // 🟢 NEW: Combo item selection (search & add existing menu items)
+  List<Map<String, dynamic>> _allComboCandidates = [];
+  final List<Map<String, dynamic>> _selectedComboItems = [];
+
   bool _saving = false;
   String? _err;
 
@@ -73,6 +80,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
     super.initState();
     _fetchAvailableMenuChoices();
     _fetchAvailableOptions();
+    _fetchComboCandidates();
   }
 
   @override
@@ -129,6 +137,25 @@ class _AddMenuPageState extends State<AddMenuPage> {
     }
   }
 
+  // 🟢 NEW: Fetch existing food/drink items that can be bundled into a combo
+  Future<void> _fetchComboCandidates() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('menu_items')
+          .get();
+      if (mounted) {
+        setState(() {
+          _allComboCandidates = snap.docs
+              .map((doc) => {'id': doc.id, ...doc.data()})
+              .where((item) => (item['itemType'] ?? 'food') != 'combo')
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching combo candidates: $e");
+    }
+  }
+
   void _openEditChoiceDialog(Map<String, dynamic> choiceData) {
     showDialog(
       context: context,
@@ -179,7 +206,14 @@ class _AddMenuPageState extends State<AddMenuPage> {
 
       if (name.isEmpty) throw Exception('Name is required.');
       if (_selectedCategory == null) throw Exception('Select a category.');
-      if (_imgBytes == null) throw Exception('Pick an image.');
+
+      if (_itemType == 'combo') {
+        if (_selectedComboItems.isEmpty) {
+          throw Exception('Add at least one item to the combo.');
+        }
+      } else {
+        if (_imgBytes == null) throw Exception('Pick an image.');
+      }
 
       double? basePrice;
       List<Map<String, dynamic>> sizesData = [];
@@ -246,18 +280,39 @@ class _AddMenuPageState extends State<AddMenuPage> {
         };
       }).toList();
 
-      final safeBase = (_imgFileName ?? name).replaceAll(
-        RegExp(r'[^a-zA-Z0-9._-]+'),
-        '_',
-      );
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
-      final imgRef = FirebaseStorage.instance.ref('menu_images/$fileName');
+      String imageUrl = '';
+      String fileName = '';
 
-      await imgRef.putData(
-        _imgBytes!,
-        SettableMetadata(contentType: _guessContentType(_imgFileName)),
-      );
-      final imageUrl = await imgRef.getDownloadURL();
+      if (_itemType == 'combo') {
+        // 🟢 Combo items don't need their own image — reuse the first
+        // selected menu item's image automatically.
+        imageUrl = (_selectedComboItems.first['imageUrl'] as String?) ?? '';
+      } else {
+        final safeBase = (_imgFileName ?? name).replaceAll(
+          RegExp(r'[^a-zA-Z0-9._-]+'),
+          '_',
+        );
+        fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
+        final imgRef = FirebaseStorage.instance.ref('menu_images/$fileName');
+
+        await imgRef.putData(
+          _imgBytes!,
+          SettableMetadata(contentType: _guessContentType(_imgFileName)),
+        );
+        imageUrl = await imgRef.getDownloadURL();
+      }
+
+      final List<Map<String, dynamic>> comboItemsData = _selectedComboItems
+          .map(
+            (item) => {
+              'id': item['id'],
+              'name': item['name'],
+              'price': item['price'],
+              'imageUrl': item['imageUrl'],
+            },
+          )
+          .toList();
+
       final List<String> choiceIds = _selectedMenuChoices
           .map((c) => c['id'] as String)
           .toList();
@@ -280,6 +335,8 @@ class _AddMenuPageState extends State<AddMenuPage> {
         'hasDiscount': _hasDiscount,
         'discountType': _hasDiscount ? _discountType : null,
         'discountValue': _hasDiscount ? discountValue : 0,
+        'canTakeAway': _canTakeAway,
+        'comboItems': comboItemsData,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -307,12 +364,15 @@ class _AddMenuPageState extends State<AddMenuPage> {
         _discountType = 'percent';
         _discountValue.clear();
         _hasMultipleSizes = false;
+        _canTakeAway = true;
+        _selectedComboItems.clear();
 
         for (var opt in _sizeOptions) {
           opt.dispose();
         }
         _sizeOptions.clear();
       });
+      _fetchComboCandidates();
     } catch (e) {
       setState(() => _err = e.toString());
     } finally {
@@ -329,6 +389,13 @@ class _AddMenuPageState extends State<AddMenuPage> {
       _selectedMenuChoices.clear();
       _dropdownChoiceValue = null;
       _selectedOptions.clear();
+      if (val == 'combo') {
+        _hasMultipleSizes = false;
+        _imgBytes = null;
+        _imgFileName = null;
+      } else {
+        _selectedComboItems.clear();
+      }
     });
   }
 
@@ -430,39 +497,69 @@ class _AddMenuPageState extends State<AddMenuPage> {
                 const SizedBox(height: 16),
                 _input(label: 'Item Name', controller: _name),
                 const SizedBox(height: 16),
+                if (_itemType != 'combo') ...[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    activeColor: kPrimary,
+                    title: const Text(
+                      'Has Multiple Sizes?',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Enable if item has sizes with distinct Dine-In and Take-Away prices',
+                      style: TextStyle(color: kMuted, fontSize: 12),
+                    ),
+                    value: _hasMultipleSizes,
+                    onChanged: (val) {
+                      setState(() {
+                        _hasMultipleSizes = val;
+                        if (val && _sizeOptions.isEmpty) {
+                          final opt1 = SizeOptionField();
+                          opt1.name.text = 'Kleine Portion';
+                          _sizeOptions.add(opt1);
+
+                          final opt2 = SizeOptionField();
+                          opt2.name.text = 'Portion';
+                          _sizeOptions.add(opt2);
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // 🟢 NEW: Take Away availability toggle
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   activeColor: kPrimary,
                   title: const Text(
-                    'Has Multiple Sizes?',
+                    'Available for Take Away?',
                     style: TextStyle(
                       color: kWhite,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   subtitle: const Text(
-                    'Enable if item has sizes with distinct Dine-In and Take-Away prices',
+                    'Turn off if this item cannot be packed (e.g. a drink served only in a glass)',
                     style: TextStyle(color: kMuted, fontSize: 12),
                   ),
-                  value: _hasMultipleSizes,
-                  onChanged: (val) {
-                    setState(() {
-                      _hasMultipleSizes = val;
-                      if (val && _sizeOptions.isEmpty) {
-                        final opt1 = SizeOptionField();
-                        opt1.name.text = 'Kleine Portion';
-                        _sizeOptions.add(opt1);
-
-                        final opt2 = SizeOptionField();
-                        opt2.name.text = 'Portion';
-                        _sizeOptions.add(opt2);
-                      }
-                    });
-                  },
+                  value: _canTakeAway,
+                  onChanged: (val) => setState(() => _canTakeAway = val),
                 ),
                 const SizedBox(height: 8),
 
-                if (!_hasMultipleSizes)
+                if (_itemType == 'combo')
+                  _input(
+                    label: 'Combo Price',
+                    controller: _price,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  )
+                else if (!_hasMultipleSizes)
                   _input(
                     label: 'Standard Price',
                     controller: _price,
@@ -811,6 +908,44 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 24),
 
+          // 🟢 NEW: Combo Items — search & add existing menu items
+          if (_itemType == 'combo') ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Combo Items',
+                  style: TextStyle(
+                    color: kWhite,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: kPrimary, size: 24),
+                  onPressed: _fetchComboCandidates,
+                  tooltip: 'Refresh Items',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _ComboItemsField(
+              hint: _allComboCandidates.isEmpty
+                  ? 'No menu items yet — add food/drink items first'
+                  : 'Search & add items to this combo...',
+              availableItems: _allComboCandidates,
+              selectedItems: _selectedComboItems,
+              onChanged: (newSelection) {
+                setState(() {
+                  _selectedComboItems
+                    ..clear()
+                    ..addAll(newSelection);
+                });
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
+
           const Text(
             'Item Details',
             style: TextStyle(
@@ -907,9 +1042,8 @@ class _AddMenuPageState extends State<AddMenuPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                InkWell(
-                  onTap: _pickImage,
-                  child: Container(
+                if (_itemType == 'combo')
+                  Container(
                     height: 150,
                     width: double.infinity,
                     decoration: BoxDecoration(
@@ -917,25 +1051,68 @@ class _AddMenuPageState extends State<AddMenuPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     alignment: Alignment.center,
-                    child: _imgBytes != null
-                        ? Image.memory(_imgBytes!, height: 130)
+                    clipBehavior: Clip.hardEdge,
+                    child: _selectedComboItems.isNotEmpty
+                        ? Image.network(
+                            (_selectedComboItems.first['imageUrl']
+                                    as String?) ??
+                                '',
+                            height: 150,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.broken_image,
+                              color: kMuted,
+                              size: 40,
+                            ),
+                          )
                         : const Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.add_photo_alternate,
+                                Icons.image_outlined,
                                 size: 36,
-                                color: kPrimary,
+                                color: kMuted,
                               ),
                               SizedBox(height: 8),
                               Text(
-                                'Select Image',
-                                style: TextStyle(color: kWhite),
+                                'Image is taken automatically from\nthe first combo item you add',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: kMuted, fontSize: 12),
                               ),
                             ],
                           ),
+                  )
+                else
+                  InkWell(
+                    onTap: _pickImage,
+                    child: Container(
+                      height: 150,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: kFieldBg,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.center,
+                      child: _imgBytes != null
+                          ? Image.memory(_imgBytes!, height: 130)
+                          : const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate,
+                                  size: 36,
+                                  color: kPrimary,
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Select Image',
+                                  style: TextStyle(color: kWhite),
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -1232,6 +1409,293 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
                                 } else {
                                   _tempSelected.removeWhere(
                                     (o) => o['name'] == opt['name'],
+                                  );
+                                }
+                              });
+                              widget.onSelectionChanged(_tempSelected);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: kPrimary),
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 🟢 NEW: Combo Items field — shows selected items as chips with thumbnails
+class _ComboItemsField extends StatefulWidget {
+  final String hint;
+  final List<Map<String, dynamic>> availableItems;
+  final List<Map<String, dynamic>> selectedItems;
+  final Function(List<Map<String, dynamic>>) onChanged;
+
+  const _ComboItemsField({
+    required this.hint,
+    required this.availableItems,
+    required this.selectedItems,
+    required this.onChanged,
+  });
+
+  @override
+  State<_ComboItemsField> createState() => _ComboItemsFieldState();
+}
+
+class _ComboItemsFieldState extends State<_ComboItemsField> {
+  void _showSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return _ComboItemsDialog(
+          availableItems: widget.availableItems,
+          initialSelectedItems: widget.selectedItems,
+          onSelectionChanged: widget.onChanged,
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: _showSelectionDialog,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(minHeight: 52),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: kFieldBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kMuted.withOpacity(0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: widget.selectedItems.isEmpty
+                  ? Text(widget.hint, style: const TextStyle(color: kMuted))
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.selectedItems.map((item) {
+                        final imgUrl = (item['imageUrl'] as String?) ?? '';
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kPrimary.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (imgUrl.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.network(
+                                    imgUrl,
+                                    width: 18,
+                                    height: 18,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox(width: 18, height: 18),
+                                  ),
+                                ),
+                              if (imgUrl.isNotEmpty) const SizedBox(width: 6),
+                              Text(
+                                item['name'] ?? '',
+                                style: const TextStyle(
+                                  color: kWhite,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.keyboard_arrow_down, color: kMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 🟢 NEW: Search & checkbox dialog for combo item selection
+class _ComboItemsDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> availableItems;
+  final List<Map<String, dynamic>> initialSelectedItems;
+  final Function(List<Map<String, dynamic>>) onSelectionChanged;
+
+  const _ComboItemsDialog({
+    required this.availableItems,
+    required this.initialSelectedItems,
+    required this.onSelectionChanged,
+  });
+
+  @override
+  State<_ComboItemsDialog> createState() => _ComboItemsDialogState();
+}
+
+class _ComboItemsDialogState extends State<_ComboItemsDialog> {
+  late List<Map<String, dynamic>> _tempSelected;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tempSelected = List.from(widget.initialSelectedItems);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredItems = widget.availableItems.where((item) {
+      final name = (item['name'] as String?)?.toLowerCase() ?? '';
+      return name.contains(_searchQuery.toLowerCase());
+    }).toList();
+
+    filteredItems.sort((a, b) {
+      final aSelected = _tempSelected.any((o) => o['id'] == a['id']);
+      final bSelected = _tempSelected.any((o) => o['id'] == b['id']);
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      final nameA = (a['name'] as String?) ?? '';
+      final nameB = (b['name'] as String?) ?? '';
+      return nameA.compareTo(nameB);
+    });
+
+    return Dialog(
+      backgroundColor: kBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(maxHeight: 520, maxWidth: 420),
+        child: Column(
+          children: [
+            const Text(
+              'Add Items to Combo',
+              style: TextStyle(
+                color: kWhite,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              style: const TextStyle(color: kWhite),
+              decoration: InputDecoration(
+                hintText: 'Search menu items...',
+                hintStyle: const TextStyle(color: kMuted),
+                prefixIcon: const Icon(Icons.search, color: kMuted),
+                filled: true,
+                fillColor: kFieldBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: filteredItems.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No items found',
+                        style: TextStyle(color: kMuted),
+                      ),
+                    )
+                  : RawScrollbar(
+                      thumbColor: kPrimary.withOpacity(0.5),
+                      radius: const Radius.circular(8),
+                      thickness: 4,
+                      child: ListView.builder(
+                        itemCount: filteredItems.length,
+                        itemBuilder: (context, index) {
+                          final item = filteredItems[index];
+                          final imgUrl = (item['imageUrl'] as String?) ?? '';
+                          final isSelected = _tempSelected.any(
+                            (o) => o['id'] == item['id'],
+                          );
+                          return CheckboxListTile(
+                            activeColor: kPrimary,
+                            checkColor: kWhite,
+                            side: BorderSide(color: kMuted.withOpacity(0.5)),
+                            secondary: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: imgUrl.isNotEmpty
+                                  ? Image.network(
+                                      imgUrl,
+                                      width: 40,
+                                      height: 40,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 40,
+                                        height: 40,
+                                        color: kFieldBg,
+                                        child: const Icon(
+                                          Icons.fastfood,
+                                          color: kMuted,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    )
+                                  : Container(
+                                      width: 40,
+                                      height: 40,
+                                      color: kFieldBg,
+                                      child: const Icon(
+                                        Icons.fastfood,
+                                        color: kMuted,
+                                        size: 18,
+                                      ),
+                                    ),
+                            ),
+                            title: Text(
+                              item['name'] ?? '',
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'CHF ${((item['price'] as num?) ?? 0).toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: kMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                            value: isSelected,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _tempSelected.add(item);
+                                } else {
+                                  _tempSelected.removeWhere(
+                                    (o) => o['id'] == item['id'],
                                   );
                                 }
                               });

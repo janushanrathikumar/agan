@@ -59,6 +59,19 @@ bool _isDiscounted(Map<String, dynamic> m) {
   return m['hasDiscount'] == true && discountValue > 0;
 }
 
+// 🟢 NEW: Sum of the original prices of the items bundled inside a combo,
+// used to show "was CHF X / now CHF Y" savings on combo cards.
+double _comboItemsSum(Map<String, dynamic> m) {
+  final items = (m['comboItems'] as List<dynamic>?) ?? [];
+  double total = 0;
+  for (final it in items) {
+    if (it is Map) {
+      total += (it['price'] as num?)?.toDouble() ?? 0;
+    }
+  }
+  return total;
+}
+
 class _WebSafeImage extends StatelessWidget {
   final String imageUrl;
   final double? width;
@@ -876,8 +889,10 @@ class _MenuGrid extends StatelessWidget {
     double price,
     bool discounted,
     double finalPrice,
-    _MenuKind actualKind,
-  ) {
+    _MenuKind actualKind, {
+    String? badgeText,
+    Color badgeColor = kDiscount,
+  }) {
     final itemNo = (m['itemNo']?.toString().trim() ?? '');
     final rawName = (m['name'] as String?) ?? '';
     final name = itemNo.isNotEmpty ? '$itemNo - $rawName' : rawName;
@@ -899,7 +914,7 @@ class _MenuGrid extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: discounted
-                    ? kDiscount.withOpacity(0.5)
+                    ? badgeColor.withOpacity(0.5)
                     : kWhite.withOpacity(0.1),
                 width: 1,
               ),
@@ -945,11 +960,11 @@ class _MenuGrid extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: kDiscount,
+                            color: badgeColor,
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: Text(
-                            _discountBadgeText(m),
+                            badgeText ?? _discountBadgeText(m),
                             style: const TextStyle(
                               color: kWhite,
                               fontSize: 9,
@@ -1009,7 +1024,7 @@ class _MenuGrid extends StatelessWidget {
                                 Text(
                                   'CHF ${finalPrice.toStringAsFixed(2)}',
                                   style: TextStyle(
-                                    color: discounted ? kDiscount : kPrimary,
+                                    color: discounted ? badgeColor : kPrimary,
                                     fontWeight: FontWeight.w900,
                                     fontSize: 15,
                                   ),
@@ -1049,6 +1064,16 @@ class _MenuGrid extends StatelessWidget {
           );
 
         var docs = snap.data?.docs ?? [];
+
+        // 🟢 NEW: Hide items that can't be packed for Take-Away when the
+        // customer is ordering Take-Away (e.g. drinks served only in a glass)
+        if (tableNo == 'Take-Away') {
+          docs = docs.where((d) {
+            final data = (d.data() as Map<String, dynamic>?) ?? {};
+            return data['canTakeAway'] != false;
+          }).toList();
+        }
+
         // 🟢 AFTER: Strips leading non-digit characters to sort items numerically
         docs.sort((a, b) {
           final dataA = a.data() as Map<String, dynamic>? ?? {};
@@ -1109,7 +1134,7 @@ class _MenuGrid extends StatelessWidget {
               final m = (docs[i].data() as Map<String, dynamic>?) ?? {};
               final price = _getDisplayPrice(m);
               final tempMap = {...m, 'price': price};
-              final discounted = _isDiscounted(tempMap);
+              var discounted = _isDiscounted(tempMap);
               final finalPrice = _effectivePrice(tempMap);
               final typeStr = (m['itemType'] as String?) ?? _itemTypeFor(kind);
               _MenuKind actualKind = kind;
@@ -1120,13 +1145,31 @@ class _MenuGrid extends StatelessWidget {
               else if (typeStr == 'combo')
                 actualKind = _MenuKind.combos;
 
+              // 🟢 NEW: For combos, compare the combo price against the sum
+              // of its individual item prices so the customer sees the deal.
+              var displayPrice = price;
+              String? badgeText;
+              Color badgeColor = kDiscount;
+              if (actualKind == _MenuKind.combos) {
+                final comboSum = _comboItemsSum(m);
+                if (comboSum > finalPrice) {
+                  discounted = true;
+                  displayPrice = comboSum;
+                  badgeText =
+                      '-CHF ${(comboSum - finalPrice).toStringAsFixed(2)}';
+                  badgeColor = const Color(0xFFFF8C00);
+                }
+              }
+
               return _buildItemCard(
                 context,
                 m,
-                price,
+                displayPrice,
                 discounted,
                 finalPrice,
                 actualKind,
+                badgeText: badgeText,
+                badgeColor: badgeColor,
               );
             },
           );
@@ -1146,7 +1189,7 @@ class _MenuGrid extends StatelessWidget {
             final m = (docs[i].data() as Map<String, dynamic>?) ?? {};
             final price = _getDisplayPrice(m);
             final tempMap = {...m, 'price': price};
-            final discounted = _isDiscounted(tempMap);
+            var discounted = _isDiscounted(tempMap);
             final finalPrice = _effectivePrice(tempMap);
             final typeStr = (m['itemType'] as String?) ?? _itemTypeFor(kind);
             _MenuKind actualKind = kind;
@@ -1157,13 +1200,30 @@ class _MenuGrid extends StatelessWidget {
             else if (typeStr == 'combo')
               actualKind = _MenuKind.combos;
 
+            // 🟢 NEW: Same combo-vs-items price comparison for the grid view.
+            var displayPrice = price;
+            String? badgeText;
+            Color badgeColor = kDiscount;
+            if (actualKind == _MenuKind.combos) {
+              final comboSum = _comboItemsSum(m);
+              if (comboSum > finalPrice) {
+                discounted = true;
+                displayPrice = comboSum;
+                badgeText =
+                    '-CHF ${(comboSum - finalPrice).toStringAsFixed(2)}';
+                badgeColor = const Color(0xFFFF8C00);
+              }
+            }
+
             return _buildItemCard(
               context,
               m,
-              price,
+              displayPrice,
               discounted,
               finalPrice,
               actualKind,
+              badgeText: badgeText,
+              badgeColor: badgeColor,
             );
           },
         );
@@ -1228,6 +1288,17 @@ void _showItemSheet(
   final additionalOptions = (item['additionalOptions'] as List<dynamic>? ?? [])
       .map((e) => Map<String, dynamic>.from(e as Map))
       .toList();
+
+  // 🟢 NEW: For combos, compare the combo price against the sum of the
+  // individual item prices so the customer can see the deal (like the
+  // "Your Text ... $50.00" vs combo "$20" comparison on a combo flyer).
+  final bool isCombo = (item['itemType'] as String?) == 'combo';
+  final double comboSum = isCombo ? _comboItemsSum(item) : 0;
+  final List<Map<String, dynamic>> comboItemsList =
+      (item['comboItems'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
   String? initialSelectedSize;
   if (hasMultipleSizes && displaySizes.isNotEmpty)
     initialSelectedSize = displaySizes.first['name'] as String?;
@@ -1372,6 +1443,18 @@ void _showItemSheet(
             if (eff < 0) eff = 0;
           }
 
+          // 🟢 NEW: Prefer the combo-vs-items comparison when it shows a
+          // bigger, more meaningful saving than the plain discount fields.
+          final bool comboHasSavings = isCombo && comboSum > eff;
+          final bool showCompare = _isDiscounted(item) || comboHasSavings;
+          final double compareOriginal = comboHasSavings ? comboSum : orig;
+          final String compareBadgeText = comboHasSavings
+              ? '-CHF ${(comboSum - eff).toStringAsFixed(2)}'
+              : _discountBadgeText(item);
+          final Color compareBadgeColor = comboHasSavings
+              ? const Color(0xFFFF8C00)
+              : kDiscount;
+
           return ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
             child: BackdropFilter(
@@ -1426,7 +1509,7 @@ void _showItemSheet(
                                   ),
                                 ),
                               ),
-                              if (_isDiscounted(item))
+                              if (showCompare)
                                 Positioned(
                                   top: 8,
                                   left: 8,
@@ -1436,11 +1519,11 @@ void _showItemSheet(
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: kDiscount,
+                                      color: compareBadgeColor,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      _discountBadgeText(item),
+                                      compareBadgeText,
                                       style: const TextStyle(
                                         color: kWhite,
                                         fontSize: 10,
@@ -1465,11 +1548,11 @@ void _showItemSheet(
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                if (_isDiscounted(item))
+                                if (showCompare)
                                   Row(
                                     children: [
                                       Text(
-                                        'CHF ${orig.toStringAsFixed(2)}',
+                                        'CHF ${compareOriginal.toStringAsFixed(2)}',
                                         style: const TextStyle(
                                           color: kMuted,
                                           fontSize: 14,
@@ -1480,8 +1563,8 @@ void _showItemSheet(
                                       const SizedBox(width: 8),
                                       Text(
                                         'CHF ${eff.toStringAsFixed(2)}',
-                                        style: const TextStyle(
-                                          color: kDiscount,
+                                        style: TextStyle(
+                                          color: compareBadgeColor,
                                           fontWeight: FontWeight.w900,
                                           fontSize: 18,
                                         ),
@@ -1541,6 +1624,85 @@ void _showItemSheet(
                             ),
                           ),
                         ],
+                      ],
+
+                      if (isCombo && comboItemsList.isNotEmpty) ...[
+                        _SectionTitle('This Combo Includes'),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kWhite.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: kWhite.withOpacity(0.1)),
+                          ),
+                          child: Column(
+                            children: [
+                              for (final ci in comboItemsList)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.check_circle,
+                                        color: kPrimary,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          (ci['name'] as String?) ?? '',
+                                          style: const TextStyle(
+                                            color: kWhite,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        'CHF ${(((ci['price'] as num?) ?? 0).toDouble()).toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          color: kMuted,
+                                          fontSize: 12,
+                                          decoration:
+                                              TextDecoration.lineThrough,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (comboSum > eff) ...[
+                                const Divider(color: kMuted, height: 18),
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'You Save',
+                                        style: TextStyle(
+                                          color: kWhite,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      'CHF ${(comboSum - eff).toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: Color(0xFFFF8C00),
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                       ],
 
                       _SectionTitle('Note (optional)'),

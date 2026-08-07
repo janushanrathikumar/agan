@@ -346,6 +346,30 @@ class _PromoCarouselState extends State<_PromoCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return _buildPromoStream(context, null);
+
+    // 🟢 NEW: Know the customer's current delivery method so combos/promo
+    // items that can't be packed for Take-Away can be hidden here too.
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('food_delivery')
+          .doc(user.uid)
+          .snapshots(),
+      builder: (context, deliverySnap) {
+        String? tableNo;
+        if (deliverySnap.hasData && deliverySnap.data!.exists) {
+          final d = deliverySnap.data!.data() as Map<String, dynamic>?;
+          tableNo = d?['delivery_method'] == 'Take_Away'
+              ? 'Take-Away'
+              : d?['table_no'] as String?;
+        }
+        return _buildPromoStream(context, tableNo);
+      },
+    );
+  }
+
+  Widget _buildPromoStream(BuildContext context, String? tableNo) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('menu_items')
@@ -361,7 +385,16 @@ class _PromoCarouselState extends State<_PromoCarousel> {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
           return _EmptyPromo();
 
-        final promoDocs = snapshot.data!.docs;
+        // 🟢 NEW: Hide promo/combo items that can't be packed for Take-Away
+        // when the customer is currently ordering Take-Away.
+        var promoDocs = snapshot.data!.docs;
+        if (tableNo == 'Take-Away') {
+          promoDocs = promoDocs.where((d) {
+            final data = (d.data() as Map<String, dynamic>?) ?? {};
+            return data['canTakeAway'] != false;
+          }).toList();
+        }
+        if (promoDocs.isEmpty) return _EmptyPromo();
 
         return Column(
           children: [
