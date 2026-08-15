@@ -35,7 +35,7 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildTopBar(context), // 🟢 Passed Context for Back Navigation
+            _buildTopBar(context),
             _buildTabs(),
             Expanded(
               child: Container(
@@ -77,7 +77,6 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
       padding: const EdgeInsets.all(24.0),
       child: Row(
         children: [
-          // 🟢 BACK ARROW ADDED HERE
           IconButton(
             icon: const Icon(Icons.arrow_back_ios_new, color: kWhite, size: 22),
             onPressed: () => Navigator.pop(context),
@@ -469,7 +468,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
           return Scaffold(
             backgroundColor: kBg,
             appBar: AppBar(
-              // 🟢 BACK ARROW ADDED EXPLICITLY HERE TOO
               leading: IconButton(
                 icon: const Icon(
                   Icons.arrow_back_ios_new,
@@ -493,7 +491,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
         final String orderId = orderData['order_id'] ?? documentId;
         final String status = orderData['status'] ?? 'Unknown';
         final String deliveryMethod = orderData['delivery_method'] ?? 'N/A';
-        final String tableNo = (orderData['table_no'] ?? 'N/A').toString();
         final num total = orderData['total'] ?? 0;
         final List<dynamic> items = orderData['items'] ?? [];
 
@@ -501,10 +498,20 @@ class AdminOrderDetailsPage extends StatelessWidget {
         final num serviceCharge = orderData['service_charge'] ?? 0;
         final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
 
+        // 🟢 Extract Username and Role from Firestore Order Data
+        final String username = orderData['username'] ?? 'Guest';
+        final String role = orderData['role'] ?? 'Customer';
+
+        // 🟢 Extract Table and Chair No
+        final String rawTableNo = (orderData['table_no'] ?? 'N/A').toString();
+        final String rawChairNo = (orderData['chair_no'] ?? '').toString();
+        final String displayTable = rawChairNo.isNotEmpty && rawTableNo != 'N/A'
+            ? '$rawTableNo (Chair $rawChairNo)'
+            : rawTableNo;
+
         return Scaffold(
           backgroundColor: kBg,
           appBar: AppBar(
-            // 🟢 EXPLICIT BACK ARROW FOR DETAILS PAGE
             leading: IconButton(
               icon: const Icon(
                 Icons.arrow_back_ios_new,
@@ -546,11 +553,13 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   orderId,
                   status,
                   deliveryMethod,
-                  tableNo,
+                  displayTable, // 🟢 Passed displayTable instead of raw tableNo
                   subtotal,
                   serviceCharge,
                   serviceChargeRate,
                   total,
+                  username,
+                  role,
                 ),
                 const SizedBox(height: 32),
                 const Text(
@@ -593,6 +602,17 @@ class AdminOrderDetailsPage extends StatelessWidget {
     final num serviceCharge = orderData['service_charge'] ?? 0;
     final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
 
+    // 🟢 Extract Username and Role for the PDF
+    final String username = orderData['username'] ?? 'Guest';
+    final String role = orderData['role'] ?? 'Customer';
+
+    // 🟢 Extract and format Table and Chair No for PDF
+    final String rawTableNo = (orderData['table_no'] ?? 'N/A').toString();
+    final String rawChairNo = (orderData['chair_no'] ?? '').toString();
+    final String displayTable = rawChairNo.isNotEmpty && rawTableNo != 'N/A'
+        ? '$rawTableNo (Chair $rawChairNo)'
+        : rawTableNo;
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
@@ -612,10 +632,11 @@ class AdminOrderDetailsPage extends StatelessWidget {
               ),
               pw.SizedBox(height: 10),
               pw.Text('Order ID: ${orderData['order_id']}'),
+              pw.Text('Customer: $username ($role)'),
               pw.Text('Type: ${orderData['delivery_method']}'),
-              if ((orderData['table_no'] ?? 'N/A') != 'N/A' &&
-                  (orderData['table_no'] ?? '').toString().isNotEmpty)
-                pw.Text('Table No: ${orderData['table_no']}'),
+              // 🟢 Formatted table string shown here
+              if (rawTableNo != 'N/A' && rawTableNo.isNotEmpty)
+                pw.Text('Table No: $displayTable'),
               pw.Text('Date: ${DateTime.now().toString().substring(0, 16)}'),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 5),
@@ -753,6 +774,8 @@ class AdminOrderDetailsPage extends StatelessWidget {
     num serviceCharge,
     num serviceChargeRate,
     num total,
+    String username,
+    String role,
   ) {
     return Container(
       decoration: BoxDecoration(
@@ -809,6 +832,10 @@ class AdminOrderDetailsPage extends StatelessWidget {
             ],
           ),
           const Divider(color: kItemBg, thickness: 1, height: 32),
+          _buildSummaryRow(Icons.person, 'Customer', username),
+          const SizedBox(height: 12),
+          _buildSummaryRow(Icons.admin_panel_settings, 'Role', role),
+          const SizedBox(height: 12),
           _buildSummaryRow(Icons.dining, 'Delivery Method', deliveryMethod),
           const SizedBox(height: 12),
           _buildSummaryRow(Icons.table_restaurant, 'Table No', tableNo),

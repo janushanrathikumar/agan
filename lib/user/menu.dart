@@ -59,8 +59,6 @@ bool _isDiscounted(Map<String, dynamic> m) {
   return m['hasDiscount'] == true && discountValue > 0;
 }
 
-// 🟢 NEW: Sum of the original prices of the items bundled inside a combo,
-// used to show "was CHF X / now CHF Y" savings on combo cards.
 double _comboItemsSum(Map<String, dynamic> m) {
   final items = (m['comboItems'] as List<dynamic>?) ?? [];
   double total = 0;
@@ -672,7 +670,6 @@ class _CategoryRail extends StatelessWidget {
         })
         .toList(growable: false);
 
-    // 🟢 AFTER: Strips leading non-digit characters to parse numbers properly
     filteredCategoryDocs.sort((a, b) {
       final dataA = a.data() as Map<String, dynamic>? ?? {};
       final dataB = b.data() as Map<String, dynamic>? ?? {};
@@ -680,7 +677,6 @@ class _CategoryRail extends StatelessWidget {
       double? parseItemNo(dynamic raw) {
         if (raw == null) return null;
         final str = raw.toString().trim();
-        // Extract digits (supports integers and decimals)
         final match = RegExp(r'\d+(\.\d+)?').firstMatch(str);
         if (match != null) {
           return double.tryParse(match.group(0)!);
@@ -851,28 +847,24 @@ class _MenuGrid extends StatelessWidget {
     required this.onTapItem,
   });
 
-  // 🟢 Helper method to compute HIGHEST price from portions/sizes
   double _getDisplayPrice(Map<String, dynamic> m) {
     bool hasMultipleSizes = m['hasMultipleSizes'] == true;
     List<dynamic> sizes = m['sizes'] ?? [];
     if (hasMultipleSizes && sizes.isNotEmpty) {
-      double maxPrice =
-          0.0; // 🟢 Lowest search panrathukku badhula max value match panna 0.0 set panron
+      double maxPrice = 0.0;
 
       for (var s in sizes) {
         if (tableNo == 'Take-Away') {
           if (s['takeAwayPrice'] != null &&
               s['takeAwayPrice'].toString().isNotEmpty) {
             double p = (s['takeAwayPrice'] as num).toDouble();
-            if (p > maxPrice)
-              maxPrice = p; // 🟢 Ethu perusho athu maxPrice-la store aagum
+            if (p > maxPrice) maxPrice = p;
           }
         } else {
           if (s['dineInPrice'] != null || s['price'] != null) {
             double p = ((s['dineInPrice'] ?? s['price'] ?? 0) as num)
                 .toDouble();
-            if (p > maxPrice)
-              maxPrice = p; // 🟢 Ethu perusho athu maxPrice-la store aagum
+            if (p > maxPrice) maxPrice = p;
           }
         }
       }
@@ -1065,8 +1057,6 @@ class _MenuGrid extends StatelessWidget {
 
         var docs = snap.data?.docs ?? [];
 
-        // 🟢 NEW: Hide items that can't be packed for Take-Away when the
-        // customer is ordering Take-Away (e.g. drinks served only in a glass)
         if (tableNo == 'Take-Away') {
           docs = docs.where((d) {
             final data = (d.data() as Map<String, dynamic>?) ?? {};
@@ -1074,7 +1064,6 @@ class _MenuGrid extends StatelessWidget {
           }).toList();
         }
 
-        // 🟢 AFTER: Strips leading non-digit characters to sort items numerically
         docs.sort((a, b) {
           final dataA = a.data() as Map<String, dynamic>? ?? {};
           final dataB = b.data() as Map<String, dynamic>? ?? {};
@@ -1082,7 +1071,6 @@ class _MenuGrid extends StatelessWidget {
           double? parseItemNo(dynamic raw) {
             if (raw == null) return null;
             final str = raw.toString().trim();
-            // Match digits only (e.g. "P01" -> "01", "RK002" -> "002")
             final match = RegExp(r'\d+(\.\d+)?').firstMatch(str);
             if (match != null) {
               return double.tryParse(match.group(0)!);
@@ -1108,7 +1096,6 @@ class _MenuGrid extends StatelessWidget {
             final name = (data['name'] as String?)?.toLowerCase() ?? '';
             final itemNo = (data['itemNo'] as String?)?.toLowerCase() ?? '';
 
-            // Matches either the Item Name OR Item Number (e.g., P01, RK002, 01)
             return name.contains(searchQuery) || itemNo.contains(searchQuery);
           }).toList();
         }
@@ -1145,8 +1132,6 @@ class _MenuGrid extends StatelessWidget {
               else if (typeStr == 'combo')
                 actualKind = _MenuKind.combos;
 
-              // 🟢 NEW: For combos, compare the combo price against the sum
-              // of its individual item prices so the customer sees the deal.
               var displayPrice = price;
               String? badgeText;
               Color badgeColor = kDiscount;
@@ -1200,7 +1185,6 @@ class _MenuGrid extends StatelessWidget {
             else if (typeStr == 'combo')
               actualKind = _MenuKind.combos;
 
-            // 🟢 NEW: Same combo-vs-items price comparison for the grid view.
             var displayPrice = price;
             String? badgeText;
             Color badgeColor = kDiscount;
@@ -1289,9 +1273,6 @@ void _showItemSheet(
       .map((e) => Map<String, dynamic>.from(e as Map))
       .toList();
 
-  // 🟢 NEW: For combos, compare the combo price against the sum of the
-  // individual item prices so the customer can see the deal (like the
-  // "Your Text ... $50.00" vs combo "$20" comparison on a combo flyer).
   final bool isCombo = (item['itemType'] as String?) == 'combo';
   final double comboSum = isCombo ? _comboItemsSum(item) : 0;
   final List<Map<String, dynamic>> comboItemsList =
@@ -1443,8 +1424,6 @@ void _showItemSheet(
             if (eff < 0) eff = 0;
           }
 
-          // 🟢 NEW: Prefer the combo-vs-items comparison when it shows a
-          // bigger, more meaningful saving than the plain discount fields.
           final bool comboHasSavings = isCombo && comboSum > eff;
           final bool showCompare = _isDiscounted(item) || comboHasSavings;
           final double compareOriginal = comboHasSavings ? comboSum : orig;
@@ -1747,7 +1726,6 @@ void _showItemSheet(
                         const SizedBox(height: 8),
                       ],
 
-                      // 🟢 CONDITIONAL UI FOR ADD-ONS (If > 5 show MultiSelect Box, Else show Checkboxes Inline)
                       if (additionalOptions.isNotEmpty) ...[
                         Row(
                           children: [
@@ -1987,7 +1965,6 @@ class _MenuChoicesSection extends StatelessWidget {
   }
 }
 
-// 🟢 NEW: Multi-Select UI Component for > 5 Add-ons
 class _AddOnsMultiSelectField extends StatelessWidget {
   final List<Map<String, dynamic>> options;
   final Set<int> selected;
@@ -2017,7 +1994,6 @@ class _AddOnsMultiSelectField extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: double.infinity,
-        //minHeight: 52,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: kWhite.withOpacity(0.06),
@@ -2072,7 +2048,6 @@ class _AddOnsMultiSelectField extends StatelessWidget {
   }
 }
 
-// 🟢 NEW: Dialog UI (Checkbox & Search) for Multi-Select
 class _AddOnsMultiSelectDialog extends StatefulWidget {
   final List<Map<String, dynamic>> options;
   final Set<int> initialSelected;
@@ -2232,7 +2207,6 @@ class _AddOnsMultiSelectDialogState extends State<_AddOnsMultiSelectDialog> {
   }
 }
 
-// 🟢 NEW: Inline UI Component for <= 5 Add-ons
 class _InlineAddOnsSection extends StatelessWidget {
   final List<Map<String, dynamic>> options;
   final Set<int> selected;

@@ -110,6 +110,9 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
   List<Map<String, dynamic>> _selectedMenuChoices = [];
   String? _dropdownChoiceValue;
 
+  // 🟢 NEW: Menu item availability status[cite: 2]
+  bool _isAvailable = true;
+
   // 🟢 NEW: Take Away availability (e.g. drinks that can't be packed)
   bool _canTakeAway = true;
 
@@ -132,6 +135,9 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     _selectedCategoryIconUrl = widget.itemData['categoryIconUrl'];
     _existingImageUrl = widget.itemData['imageUrl'];
     _existingImageFileName = widget.itemData['imageFileName'];
+
+    // 🟢 NEW: Initialize status value[cite: 2]
+    _isAvailable = (widget.itemData['status'] ?? 'on') == 'on';
 
     _hasMultipleSizes = widget.itemData['hasMultipleSizes'] ?? false;
     final sizesData = widget.itemData['sizes'] as List<dynamic>? ?? [];
@@ -432,6 +438,7 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             'imageFileName': imageFileName,
             'menuChoices': _selectedMenuChoices.map((c) => c['id']).toList(),
             'additionalOptions': optionsData,
+            'status': _isAvailable ? 'on' : 'off', // 🟢 UPDATED[cite: 2]
             'itemType': _itemType,
             'hasDiscount': _hasDiscount,
             'discountType': _hasDiscount ? _discountType : null,
@@ -676,6 +683,27 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                 const SizedBox(height: 16),
                 _input(label: 'Item Name', controller: _name),
                 const SizedBox(height: 16),
+
+                // 🟢 NEW: Availability toggle[cite: 2]
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: kPrimary,
+                  title: const Text(
+                    'Item Available',
+                    style: TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Toggle off to hide this item from the active menu',
+                    style: TextStyle(color: kMuted, fontSize: 12),
+                  ),
+                  value: _isAvailable,
+                  onChanged: (val) => setState(() => _isAvailable = val),
+                ),
+                const SizedBox(height: 8),
+
                 if (_itemType != 'combo') ...[
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,

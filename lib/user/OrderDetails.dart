@@ -193,7 +193,17 @@ class MyOrdersPage extends StatelessWidget {
                           final total =
                               (data['total'] as num?)?.toDouble() ?? 0.0;
                           final method = data['delivery_method'] ?? 'Take_Away';
-                          final tableNo = data['table_no'] ?? 'N/A';
+
+                          // 🟢 Extract table_no and chair_no
+                          final String rawTableNo = (data['table_no'] ?? 'N/A')
+                              .toString();
+                          final String rawChairNo = (data['chair_no'] ?? '')
+                              .toString();
+
+                          // 🟢 Format display table for UI (e.g. "T5 (Chair 2)")
+                          final String displayTable = rawChairNo.isNotEmpty
+                              ? '$rawTableNo (Chair $rawChairNo)'
+                              : rawTableNo;
 
                           final num subtotal =
                               (data['subtotal'] as num?) ?? total;
@@ -320,10 +330,14 @@ class MyOrdersPage extends StatelessWidget {
                                                 ? 'Take-Away'
                                                 : 'Dine-In',
                                           ),
+                                          // 🟢 Use the formatted string here
                                           if (method.toLowerCase() !=
                                                   'take_away' &&
-                                              tableNo != 'no')
-                                            _detailColumn('Table No', tableNo),
+                                              rawTableNo != 'no')
+                                            _detailColumn(
+                                              'Table No',
+                                              displayTable,
+                                            ),
                                         ],
                                       ),
                                       const SizedBox(height: 16),

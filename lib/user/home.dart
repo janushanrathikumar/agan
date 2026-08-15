@@ -1,4 +1,3 @@
-// lib/user/home_page.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,34 +17,79 @@ const kItemBg = Color(0xFF1E3A24);
 const kDarkBar = Color(0xFF0C1E11);
 const kDiscount = Color(0xFFE0483E);
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  String _userRole = 'customer';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserRole();
+  }
+
+  Future<void> _fetchUserRole() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance
+          .collection('user')
+          .doc(user.uid)
+          .get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _userRole =
+              (doc.data()?['role'] as String?)?.toLowerCase().trim() ??
+              'customer';
+        });
+      }
+    }
+  }
+
   Future<void> _handleDineIn(BuildContext context) async {
+    // Step 1: Pick Table Number based on Role Rules
     final tableNo = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _TablePickerSheet(),
+      builder: (_) => _TablePickerSheet(userRole: _userRole),
     );
-    if (tableNo != null && context.mounted) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance
-            .collection('food_delivery')
-            .doc(user.uid)
-            .set({
-              'delivery_method': 'Dine_In',
-              'table_no': tableNo,
-              'timestamp': FieldValue.serverTimestamp(),
-            });
-      }
-      if (context.mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => MenuPage(tableNo: tableNo)),
-        );
-      }
+
+    if (tableNo == null || !context.mounted) return;
+
+    // Step 2: Prompt for Chair Number (Customer or Cashier)
+    final chairNo = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ChairPickerDialog(userRole: _userRole),
+    );
+
+    if (chairNo == null || !context.mounted) return;
+
+    // Step 3: Save Table No and Chair No to Firestore
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('food_delivery')
+          .doc(user.uid)
+          .set({
+            'delivery_method': 'Dine_In',
+            'table_no': tableNo,
+            'chair_no': chairNo,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+    }
+
+    if (context.mounted) {
+      final displayTable = 'Table $tableNo (Chair $chairNo)';
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => MenuPage(tableNo: displayTable)),
+      );
     }
   }
 
@@ -58,6 +102,7 @@ class HomePage extends StatelessWidget {
           .set({
             'delivery_method': 'Take_Away',
             'table_no': '',
+            'chair_no': '',
             'timestamp': FieldValue.serverTimestamp(),
           });
     }
@@ -87,7 +132,6 @@ class HomePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Main action buttons (Dine In & Take Away) ──────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
@@ -113,49 +157,384 @@ class HomePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-
-              // ── Promo & Combos section header ─────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Special Offers & Combos',
-                          style: TextStyle(
-                            color: kWhite,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Today's best deals and combos for you",
-                          style: TextStyle(
-                            color: kMuted.withOpacity(0.8),
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+                    const Text(
+                      'Special Offers & Combos',
+                      style: TextStyle(
+                        color: kWhite,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Today's best deals and combos for you",
+                      style: TextStyle(
+                        color: kMuted.withOpacity(0.8),
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-
-              // ── Big promo & combo carousel ────────────────────────────────
               _PromoCarousel(
                 onDineIn: () => _handleDineIn(context),
                 onTakeAway: () => _handleTakeAway(context),
               ),
-
               const SizedBox(height: 120),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Role-Based Table Picker Sheet ───────────────────────────────────────────
+class _TablePickerSheet extends StatefulWidget {
+  final String userRole;
+  const _TablePickerSheet({required this.userRole});
+
+  @override
+  State<_TablePickerSheet> createState() => _TablePickerSheetState();
+}
+
+class _TablePickerSheetState extends State<_TablePickerSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab;
+  final _typeCtrl = TextEditingController();
+  String? _scannedValue;
+
+  // True if user is Cashier, Waiter, or Admin
+  bool get isStaff =>
+      widget.userRole == 'cashier' ||
+      widget.userRole == 'admin' ||
+      widget.userRole == 'waiter';
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: isStaff ? 2 : 1, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    _typeCtrl.dispose();
+    super.dispose();
+  }
+
+  void _confirm(String val) => Navigator.pop(context, val.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 32,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: kMuted.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const Text(
+              'Select Table',
+              style: TextStyle(
+                color: kWhite,
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isStaff
+                  ? 'Scan the table QR code or type table number manually'
+                  : 'Scan the table QR code to proceed',
+              style: const TextStyle(color: kMuted, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+
+            // Tabs for Cashier/Staff
+            if (isStaff) ...[
+              Container(
+                decoration: BoxDecoration(
+                  color: kBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TabBar(
+                  controller: _tab,
+                  indicator: BoxDecoration(
+                    color: kPrimary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: kWhite,
+                  unselectedLabelColor: kMuted,
+                  dividerColor: Colors.transparent,
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                  tabs: const [
+                    Tab(text: 'Scan QR'),
+                    Tab(text: 'Type No.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
+            SizedBox(
+              height: 230,
+              child: isStaff
+                  ? TabBarView(
+                      controller: _tab,
+                      children: [_buildQrTab(), _buildTypeTab()],
+                    )
+                  : _buildQrTab(), // Customers are forced to Scan
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQrTab() {
+    if (_scannedValue != null) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.check_circle_rounded,
+            color: Colors.greenAccent,
+            size: 64,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Table: $_scannedValue',
+            style: const TextStyle(
+              color: kWhite,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: () => _confirm(_scannedValue!),
+              child: const Text(
+                'Next (Select Chair)',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: kWhite,
+                ),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _scannedValue = null),
+            child: const Text('Scan again', style: TextStyle(color: kMuted)),
+          ),
+        ],
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: MobileScanner(
+        onDetect: (capture) {
+          final val = capture.barcodes.firstOrNull?.rawValue;
+          if (val != null && mounted) setState(() => _scannedValue = val);
+        },
+      ),
+    );
+  }
+
+  Widget _buildTypeTab() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        TextField(
+          controller: _typeCtrl,
+          keyboardType: TextInputType.text,
+          style: const TextStyle(
+            color: kWhite,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+          decoration: InputDecoration(
+            hintText: 'e.g. Table 5 or T5',
+            hintStyle: TextStyle(
+              color: kMuted.withOpacity(0.5),
+              fontWeight: FontWeight.normal,
+            ),
+            filled: true,
+            fillColor: kBg,
+            prefixIcon: const Icon(Icons.table_restaurant, color: kPrimary),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: kPrimary, width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            onPressed: () {
+              final val = _typeCtrl.text.trim();
+              if (val.isNotEmpty) _confirm(val);
+            },
+            child: const Text(
+              'Next (Select Chair)',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: kWhite,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Role-Based Chair Picker Dialog ──────────────────────────────────────────
+// ── Text-Only Chair Picker Dialog ──────────────────────────────────────────
+class _ChairPickerDialog extends StatefulWidget {
+  final String userRole;
+  const _ChairPickerDialog({required this.userRole});
+
+  @override
+  State<_ChairPickerDialog> createState() => _ChairPickerDialogState();
+}
+
+class _ChairPickerDialogState extends State<_ChairPickerDialog> {
+  final _chairCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _chairCtrl.dispose();
+    super.dispose();
+  }
+
+  void _confirm(String val) => Navigator.pop(context, val.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: kCardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: const Text(
+        'Select Chair / Seat',
+        style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+        textAlign: TextAlign.center,
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter your chair number(s) below (e.g. 1, 2, 3)',
+              style: TextStyle(color: kMuted, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _chairCtrl,
+              keyboardType: TextInputType.text,
+              style: const TextStyle(
+                color: kWhite,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: 'e.g. 1, 2 or 1, 2, 3',
+                hintStyle: TextStyle(
+                  color: kMuted.withOpacity(0.5),
+                  fontWeight: FontWeight.normal,
+                ),
+                filled: true,
+                fillColor: kBg,
+                prefixIcon: const Icon(Icons.event_seat, color: kPrimary),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: kPrimary, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                onPressed: () {
+                  final val = _chairCtrl.text.trim();
+                  if (val.isNotEmpty) _confirm(val);
+                },
+                child: const Text(
+                  'Go to Menu',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: kWhite,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -188,8 +567,9 @@ class _CartFab extends StatelessWidget {
           final List addons = m['additionalOptions'] ?? [];
           double addonsTotal = 0;
           for (var a in addons) {
-            if (a is Map)
+            if (a is Map) {
               addonsTotal += (a['price'] as num?)?.toDouble() ?? 0.0;
+            }
           }
           final qty = (m['qty'] as num?)?.toInt() ?? 1;
           total += (itemPrice + addonsTotal) * qty;
@@ -267,7 +647,7 @@ class _CartFab extends StatelessWidget {
   }
 }
 
-// ── Big Promo & Combo Carousel ───────────────────────────────────────────────
+// ── Promo Carousel & Modals ─────────────────────────────────────────────────
 class _PromoCarousel extends StatefulWidget {
   final VoidCallback onDineIn;
   final VoidCallback onTakeAway;
@@ -349,8 +729,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return _buildPromoStream(context, null);
 
-    // 🟢 NEW: Know the customer's current delivery method so combos/promo
-    // items that can't be packed for Take-Away can be hidden here too.
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('food_delivery')
@@ -382,11 +760,10 @@ class _PromoCarouselState extends State<_PromoCarousel> {
             child: Center(child: CircularProgressIndicator(color: kPrimary)),
           );
         }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return _EmptyPromo();
+        }
 
-        // 🟢 NEW: Hide promo/combo items that can't be packed for Take-Away
-        // when the customer is currently ordering Take-Away.
         var promoDocs = snapshot.data!.docs;
         if (tableNo == 'Take-Away') {
           promoDocs = promoDocs.where((d) {
@@ -408,24 +785,12 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                   final data = promoDocs[index].data() as Map<String, dynamic>;
                   final name = data['name'] ?? 'Special Offer';
                   final imageUrl = (data['imageUrl'] ?? '') as String;
-
-                  // 🟢 itemType ஐ பாதுகாப்பாகப் பெறுதல் மற்றும் 'combo' என  செய்தல்
                   final itemType = (data['itemType'] ?? '')
                       .toString()
                       .toLowerCase();
                   final bool isCombo = itemType == 'combo';
-
                   final num originalPrice = data['price'] ?? 0;
-                  // // ஒருவேளை offerPrice இல்லாத பட்சத்தில் சாதாரண price-ஐ எடுத்துக்கொள்ளும்
                   final num offerPrice = data['offerPrice'] ?? originalPrice;
-
-                  // double discPct = 0;
-                  // if (originalPrice > 0 && originalPrice > offerPrice) {
-                  //   discPct =
-                  //       ((originalPrice - offerPrice) / originalPrice * 100)
-                  //           .roundToDouble();
-                  // }
-
                   final isActive = _current == index;
 
                   return GestureDetector(
@@ -472,8 +837,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                                       size: 80,
                                     ),
                                   ),
-
-                            // Sleek Gradient Overlay
                             Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -489,8 +852,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                                 ),
                               ),
                             ),
-
-                            // 🟢 Badges (COMBO என இருந்தால் மட்டும் காட்டும், HOT நீக்கப்பட்டது)
                             Positioned(
                               top: 16,
                               left: 16,
@@ -502,18 +863,9 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                                       color: Color(0xFFFF8C00),
                                       icon: Icons.fastfood_rounded,
                                     ),
-                                  // if (discPct > 0) ...[
-                                  //   if (isCombo) const SizedBox(width: 8),
-                                  //   _Badge(R
-                                  //     label: '-${discPct.toInt()}%',
-                                  //     color: const Color(0xFF2E7D32),
-                                  //   ),
-                                  // ],
                                 ],
                               ),
                             ),
-
-                            // Add button
                             Positioned(
                               top: 16,
                               right: 16,
@@ -538,8 +890,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                                 ),
                               ),
                             ),
-
-                            // Info Bottom
                             Positioned(
                               bottom: 20,
                               left: 20,
@@ -606,8 +956,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                 },
               ),
             ),
-
-            // Modern Dot Indicator
             if (promoDocs.length > 1) ...[
               const SizedBox(height: 16),
               Row(
@@ -634,7 +982,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
   }
 }
 
-// ── Badges & Buttons ─────────────────────────────────────────────────────────
 class _Badge extends StatelessWidget {
   final String label;
   final Color color;
@@ -728,7 +1075,7 @@ class _BigActionButton extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   label,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: kWhite,
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
@@ -743,7 +1090,6 @@ class _BigActionButton extends StatelessWidget {
   }
 }
 
-// ── Modals & Sheets (Method & Table Picker) ──────────────────────────────────
 class _MethodPickerSheet extends StatelessWidget {
   final VoidCallback onDineIn;
   final VoidCallback onTakeAway;
@@ -813,232 +1159,6 @@ class _MethodPickerSheet extends StatelessWidget {
   }
 }
 
-class _TablePickerSheet extends StatefulWidget {
-  const _TablePickerSheet();
-  @override
-  State<_TablePickerSheet> createState() => _TablePickerSheetState();
-}
-
-class _TablePickerSheetState extends State<_TablePickerSheet>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tab;
-  final _typeCtrl = TextEditingController();
-  String? _scannedValue;
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tab.dispose();
-    _typeCtrl.dispose();
-    super.dispose();
-  }
-
-  void _confirm(String val) => Navigator.pop(context, val.trim());
-
-  @override
-  Widget build(BuildContext context) {
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: kCardBg,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 16,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 32,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 5,
-              margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(
-                color: kMuted.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const Text(
-              'Enter Table Number',
-              style: TextStyle(
-                color: kWhite,
-                fontWeight: FontWeight.w800,
-                fontSize: 22,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Scan the QR code or type it manually',
-              style: TextStyle(color: kMuted, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Container(
-              decoration: BoxDecoration(
-                color: kBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TabBar(
-                controller: _tab,
-                indicator: BoxDecoration(
-                  color: kPrimary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: kWhite,
-                unselectedLabelColor: kMuted,
-                dividerColor: Colors.transparent,
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                tabs: const [
-                  Tab(text: 'Scan QR'),
-                  Tab(text: 'Type No.'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              height: 230,
-              child: TabBarView(
-                controller: _tab,
-                children: [_buildQrTab(), _buildTypeTab()],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQrTab() {
-    if (_scannedValue != null) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.check_circle_rounded,
-            color: Colors.greenAccent,
-            size: 64,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Table: $_scannedValue',
-            style: const TextStyle(
-              color: kWhite,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              onPressed: () => _confirm(_scannedValue!),
-              child: const Text(
-                'Go to Menu',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: kWhite,
-                ),
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => setState(() => _scannedValue = null),
-            child: const Text('Scan again', style: TextStyle(color: kMuted)),
-          ),
-        ],
-      );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: MobileScanner(
-        onDetect: (capture) {
-          final val = capture.barcodes.firstOrNull?.rawValue;
-          if (val != null && mounted) setState(() => _scannedValue = val);
-        },
-      ),
-    );
-  }
-
-  Widget _buildTypeTab() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        TextField(
-          controller: _typeCtrl,
-          keyboardType: TextInputType.text,
-          style: const TextStyle(
-            color: kWhite,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-          textAlign: TextAlign.center,
-          decoration: InputDecoration(
-            hintText: 'e.g. T5 or 12',
-            hintStyle: TextStyle(
-              color: kMuted.withOpacity(0.5),
-              fontWeight: FontWeight.normal,
-            ),
-            filled: true,
-            fillColor: kBg,
-            prefixIcon: const Icon(Icons.table_restaurant, color: kPrimary),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: kPrimary, width: 2),
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            onPressed: () {
-              final val = _typeCtrl.text.trim();
-              if (val.isNotEmpty) _confirm(val);
-            },
-            child: const Text(
-              'Go to Menu',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: kWhite,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _EmptyPromo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -1077,7 +1197,6 @@ class _EmptyPromo extends StatelessWidget {
   }
 }
 
-// ── Promo Item Sheet ─────────────────────────────────────────────────────────
 class _PromoItemSheet extends StatefulWidget {
   final Map<String, dynamic> itemData;
   const _PromoItemSheet({required this.itemData});
@@ -1089,7 +1208,6 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
   int _qty = 1;
   final TextEditingController _noteCtrl = TextEditingController();
 
-  // 🟢 ஏற்றுமதி ஸாயஸ் (Sizes) அல்லது தேர்வுக்கான மாறிகள்
   Map<String, dynamic>? _selectedSize;
   String? _selectedChoice;
   final List<Map<String, dynamic>> _selectedAddons = [];
@@ -1097,7 +1215,6 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
   @override
   void initState() {
     super.initState();
-    // ஒருவேளை sizes இருக்கிறதா எனச் சோதித்து முதல் சைஸை இயல்பாகத் தேர்ந்தெடுக்கலாம்
     final List<dynamic> sizes = widget.itemData['sizes'] ?? [];
     if (sizes.isNotEmpty) {
       _selectedSize = sizes.first as Map<String, dynamic>;
@@ -1273,8 +1390,6 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                     ],
                   ),
                   const SizedBox(height: 24),
-
-                  // 🟢 Sizes Selection (புதிய டேட்டாவின் படி multiple sizes இருந்தால் காண்பிக்கும்)
                   if (hasMultipleSizes && sizes.isNotEmpty) ...[
                     const Text(
                       'Select Portion / Size',
@@ -1319,7 +1434,6 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                     ),
                     const SizedBox(height: 24),
                   ],
-
                   const Text(
                     'Note (optional)',
                     style: TextStyle(
@@ -1405,10 +1519,11 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                             checkColor: kWhite,
                             value: isSel,
                             onChanged: (val) => setState(() {
-                              if (val == true)
+                              if (val == true) {
                                 _selectedAddons.add(aMap);
-                              else
+                              } else {
                                 _selectedAddons.remove(aMap);
+                              }
                             }),
                           );
                         }).toList(),
@@ -1548,6 +1663,7 @@ class _SectionLabel extends StatelessWidget {
   final String text;
   final bool required;
   const _SectionLabel(this.text, {required this.required});
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -1587,6 +1703,7 @@ class _QtyBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   const _QtyBtn({required this.icon, required this.onTap});
+
   @override
   Widget build(BuildContext context) {
     return InkWell(

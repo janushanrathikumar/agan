@@ -1,6 +1,7 @@
 // lib/user/checkout.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'payment_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -76,7 +77,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   void initState() {
     super.initState();
     _tableNo = widget.tableNo;
-    // Also try to load from Firestore if not passed
     if (_tableNo == null) _loadTableFromFirestore();
   }
 
@@ -88,11 +88,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (doc.exists) {
       final method = doc.data()?['delivery_method'] ?? '';
       final tableNo = doc.data()?['table_no'] ?? '';
+      final chairNo = doc.data()?['chair_no'] ?? '';
       setState(() {
         if (method == 'Take_Away') {
           _tableNo = 'Take-Away';
         } else if (tableNo.toString().isNotEmpty) {
-          _tableNo = tableNo.toString();
+          _tableNo = chairNo.toString().isNotEmpty
+              ? '$tableNo (Chair $chairNo)'
+              : tableNo.toString();
         }
       });
     }
@@ -100,7 +103,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   void _handleCheckout(double total, List<QueryDocumentSnapshot> docs) {
     if (_tableNo == null || _tableNo!.isEmpty) {
-      // ✅ Must select table/take-away before checkout
       _showTablePicker(total, docs);
     } else {
       _goToPayment();
@@ -113,18 +115,54 @@ class _CheckoutPageState extends State<CheckoutPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _TablePickerSheet(
-        onConfirm: (tableNo) async {
-          // ✅ Save delivery method to Firestore
+        uid: widget.uid,
+        onConfirm: (tableNo, chairNo) async {
           final bool isTakeAway = tableNo == 'Take-Away';
+
+          final currentUser = FirebaseAuth.instance.currentUser;
+          String fallbackName = 'Guest';
+          if (currentUser != null) {
+            fallbackName = (currentUser.displayName?.trim().isNotEmpty ?? false)
+                ? currentUser.displayName!.trim()
+                : (currentUser.email?.split('@').first ?? 'Guest');
+          }
+
+          String username = fallbackName;
+          String role = 'Customer';
+
+          try {
+            final userDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(widget.uid)
+                .get();
+
+            if (userDoc.exists) {
+              final data = userDoc.data();
+              username = data?['username'] ?? data?['name'] ?? fallbackName;
+              role = data?['role'] ?? 'Customer';
+            }
+          } catch (e) {
+            debugPrint('Error fetching user info: $e');
+          }
+
           await FirebaseFirestore.instance
               .collection('food_delivery')
               .doc(widget.uid)
               .set({
+                'uid': widget.uid,
+                'username': username,
+                'role': role,
                 'delivery_method': isTakeAway ? 'Take_Away' : 'Dine_In',
-                'table_no': isTakeAway ? '' : tableNo, // ✅ blank for take-away
+                'table_no': isTakeAway ? '' : tableNo,
+                'chair_no': isTakeAway ? '' : chairNo,
                 'timestamp': FieldValue.serverTimestamp(),
-              });
-          setState(() => _tableNo = tableNo);
+              }, SetOptions(merge: true));
+
+          final String finalTableString = chairNo.isNotEmpty
+              ? '$tableNo (Chair $chairNo)'
+              : tableNo;
+
+          setState(() => _tableNo = finalTableString);
           _goToPayment();
         },
       ),
@@ -184,86 +222,162 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: itemsRef.orderBy('createdAt').snapshots(),
-        builder: (context, snap) {
-          if (!snap.hasData)
-            return const Center(
-              child: CircularProgressIndicator(color: kPrimary),
-            );
-          final docs = snap.data!.docs;
-          if (docs.isEmpty) return const _EmptyCart();
-
-          double total = 0;
-          for (var d in docs) {
-            final m = d.data() as Map<String, dynamic>;
-            total +=
-                ((m['price'] as num?)?.toDouble() ?? 0) *
-                ((m['qty'] as num?)?.toInt() ?? 1);
+      body: FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.uid)
+            .get(),
+        builder: (context, userSnap) {
+          final currentUser = FirebaseAuth.instance.currentUser;
+          String fallbackName = 'Guest';
+          if (currentUser != null) {
+            fallbackName = (currentUser.displayName?.trim().isNotEmpty ?? false)
+                ? currentUser.displayName!.trim()
+                : (currentUser.email?.split('@').first ?? 'Guest');
           }
 
-          return Column(
-            children: [
-              // ── No table banner ──────────────────────────────────
-              if (_tableNo == null || _tableNo!.isEmpty)
-                Container(
-                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.withOpacity(0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.orange,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Please select Dine-In or Take-Away before checkout',
-                          style: TextStyle(color: Colors.orange, fontSize: 13),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => _showTablePicker(total, docs),
-                        child: const Text(
-                          'Select',
-                          style: TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.w700,
+          String username = fallbackName;
+          String role = 'Customer';
+
+          if (userSnap.hasData && userSnap.data!.exists) {
+            final data = userSnap.data!.data() as Map<String, dynamic>?;
+            username = data?['username'] ?? data?['name'] ?? fallbackName;
+            role = data?['role'] ?? 'Customer';
+          }
+
+          return StreamBuilder<QuerySnapshot>(
+            stream: itemsRef.orderBy('createdAt').snapshots(),
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return const Center(
+                  child: CircularProgressIndicator(color: kPrimary),
+                );
+              }
+              final docs = snap.data!.docs;
+              if (docs.isEmpty) return const _EmptyCart();
+
+              double total = 0;
+              for (var d in docs) {
+                final m = d.data() as Map<String, dynamic>;
+                total +=
+                    ((m['price'] as num?)?.toDouble() ?? 0) *
+                    ((m['qty'] as num?)?.toInt() ?? 1);
+              }
+
+              return Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kCard,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: kWhite.withOpacity(0.06)),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: kPrimary.withOpacity(0.2),
+                          radius: 20,
+                          child: const Icon(
+                            Icons.person,
+                            color: kPrimary,
+                            size: 22,
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                username,
+                                style: const TextStyle(
+                                  color: kWhite,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                role,
+                                style: const TextStyle(
+                                  color: kMuted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  if (_tableNo == null || _tableNo!.isEmpty)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.5),
+                        ),
                       ),
-                    ],
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.orange,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Please select Dine-In or Take-Away before checkout',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _showTablePicker(total, docs),
+                            child: const Text(
+                              'Select',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      itemCount: docs.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) =>
+                          _CartItemTile(doc: docs[i], itemsRef: itemsRef),
+                    ),
                   ),
-                ),
-
-              // ── Order list ───────────────────────────────────────
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+                  _OrderSummary(
+                    total: total,
+                    tableNo: _tableNo,
+                    onCheckout: () => _handleCheckout(total, docs),
+                    onChangeTable: () => _showTablePicker(total, docs),
                   ),
-                  itemCount: docs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) =>
-                      _CartItemTile(doc: docs[i], itemsRef: itemsRef),
-                ),
-              ),
-
-              // ── Order summary footer ─────────────────────────────
-              _OrderSummary(
-                total: total,
-                tableNo: _tableNo,
-                onCheckout: () => _handleCheckout(total, docs),
-                onChangeTable: () => _showTablePicker(total, docs),
-              ),
-            ],
+                ],
+              );
+            },
           );
         },
       ),
@@ -316,7 +430,6 @@ class _CartItemTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: _WebSafeImage(
@@ -332,8 +445,6 @@ class _CartItemTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,12 +476,9 @@ class _CartItemTile extends StatelessWidget {
                 ],
               ),
             ),
-
-            // ✅ Qty controls (+ / - buttons) + subtotal
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Qty control
                 Container(
                   decoration: BoxDecoration(
                     color: kBg,
@@ -528,8 +636,6 @@ class _OrderSummary extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
             ),
           ),
-
-          // Table / Take-Away row
           Row(
             children: [
               Icon(
@@ -566,10 +672,7 @@ class _OrderSummary extends StatelessWidget {
               ),
             ],
           ),
-
           const Divider(color: Colors.white10, height: 18),
-
-          // Total + Checkout button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -629,37 +732,80 @@ class _OrderSummary extends StatelessWidget {
   }
 }
 
-// ── Table Picker Sheet ────────────────────────────────────────────────────────
+// ── Table & Chair Picker Sheet ─────────────────────────────────────────────
 class _TablePickerSheet extends StatefulWidget {
-  final void Function(String tableNo) onConfirm;
-  const _TablePickerSheet({required this.onConfirm});
+  final String uid;
+  final void Function(String tableNo, String chairNo) onConfirm; // 🟢 UPDATED
+  const _TablePickerSheet({required this.uid, required this.onConfirm});
 
   @override
   State<_TablePickerSheet> createState() => _TablePickerSheetState();
 }
 
 class _TablePickerSheetState extends State<_TablePickerSheet>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tab;
-  final _typeCtrl = TextEditingController();
-  String? _scannedValue;
+    with TickerProviderStateMixin {
+  TabController? _tabController;
+  final _tableCtrl = TextEditingController();
+  final _chairCtrl = TextEditingController();
+
+  String? _scannedTable;
+  bool _isLoading = true;
+  bool _isStaffOrAdmin = false;
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _fetchUserRole();
+  }
+
+  Future<void> _fetchUserRole() async {
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.uid)
+          .get();
+
+      if (userDoc.exists) {
+        final role = (userDoc.data()?['role'] as String?)?.toLowerCase() ?? '';
+        // Check if Cashier, Admin, or Staff
+        if (role == 'cashier' || role == 'admin' || role == 'staff') {
+          _isStaffOrAdmin = true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching role in picker: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _tabController = TabController(
+            length: _isStaffOrAdmin ? 3 : 2,
+            vsync: this,
+          );
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
-    _tab.dispose();
-    _typeCtrl.dispose();
+    _tabController?.dispose();
+    _tableCtrl.dispose();
+    _chairCtrl.dispose();
     super.dispose();
   }
 
-  void _confirm(String val) {
+  void _confirm(String tableVal, String chairVal) {
     Navigator.pop(context);
-    widget.onConfirm(val.trim().isEmpty ? 'Take-Away' : val.trim());
+    final trimmedTable = tableVal.trim();
+    final trimmedChair = chairVal.trim();
+
+    if (trimmedTable.isEmpty || trimmedTable == 'Take-Away') {
+      widget.onConfirm('Take-Away', '');
+      return;
+    }
+
+    widget.onConfirm(trimmedTable, trimmedChair); // 🟢 Passes both separately
   }
 
   @override
@@ -695,32 +841,54 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
               ),
             ),
             const SizedBox(height: 20),
-            TabBar(
-              controller: _tab,
-              indicatorColor: kPrimary,
-              labelColor: kPrimary,
-              unselectedLabelColor: kMuted,
-              dividerColor: Colors.transparent,
-              tabs: const [
-                Tab(icon: Icon(Icons.qr_code_scanner), text: 'Scan QR'),
-                Tab(icon: Icon(Icons.edit_outlined), text: 'Type No.'),
-                Tab(icon: Icon(Icons.shopping_bag_outlined), text: 'Take-Away'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 220,
-              child: TabBarView(
-                controller: _tab,
-                children: [_buildQrTab(), _buildTypeTab(), _buildTakeAwayTab()],
+
+            if (_isLoading)
+              const SizedBox(
+                height: 220,
+                child: Center(
+                  child: CircularProgressIndicator(color: kPrimary),
+                ),
+              )
+            else ...[
+              TabBar(
+                controller: _tabController,
+                indicatorColor: kPrimary,
+                labelColor: kPrimary,
+                unselectedLabelColor: kMuted,
+                dividerColor: Colors.transparent,
+                tabs: [
+                  const Tab(icon: Icon(Icons.qr_code_scanner), text: 'Scan QR'),
+                  if (_isStaffOrAdmin)
+                    const Tab(
+                      icon: Icon(Icons.edit_outlined),
+                      text: 'Type No.',
+                    ),
+                  const Tab(
+                    icon: Icon(Icons.shopping_bag_outlined),
+                    text: 'Take-Away',
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 260,
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildQrTab(),
+                    if (_isStaffOrAdmin) _buildTypeTab(),
+                    _buildTakeAwayTab(),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
+  // 1. Scan QR Code Tab (Both Customer & Staff)
   Widget _buildQrTab() {
     if (kIsWeb) {
       return Center(
@@ -734,7 +902,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             ),
             const SizedBox(height: 12),
             const Text(
-              'QR scanning not supported on web.\nPlease type your table number.',
+              'QR scanning not supported on web.\nPlease use a mobile device.',
               textAlign: TextAlign.center,
               style: TextStyle(color: kMuted, fontSize: 13),
             ),
@@ -743,81 +911,132 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
       );
     }
 
-    if (_scannedValue != null) {
+    // Step 2 after scanning: Prompt for Chair Number
+    if (_scannedTable != null) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.check_circle, color: Colors.greenAccent, size: 48),
-          const SizedBox(height: 10),
+          const Icon(Icons.check_circle, color: Colors.greenAccent, size: 40),
+          const SizedBox(height: 8),
           Text(
-            'Table: $_scannedValue',
+            'Scanned Table: $_scannedTable',
             style: const TextStyle(
               color: kWhite,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary,
-              foregroundColor: kWhite,
-              shape: RoundedRectangleBorder(
+          const SizedBox(height: 12),
+          TextField(
+            controller: _chairCtrl,
+            style: const TextStyle(color: kWhite, fontSize: 16),
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(
+              hintText: 'Enter Chair No. (e.g. 1, 2, A)',
+              hintStyle: const TextStyle(color: kMuted, fontSize: 14),
+              filled: true,
+              fillColor: kBg,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: kMuted.withOpacity(0.3)),
               ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: kPrimary, width: 2),
+              ),
+              prefixIcon: const Icon(Icons.chair_outlined, color: kPrimary),
             ),
-            onPressed: () => _confirm(_scannedValue!),
-            child: const Text('Confirm Table'),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary,
+                foregroundColor: kWhite,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => _confirm(_scannedTable!, _chairCtrl.text),
+              child: const Text('Confirm Table & Chair'),
+            ),
           ),
           TextButton(
-            onPressed: () => setState(() => _scannedValue = null),
+            onPressed: () => setState(() {
+              _scannedTable = null;
+              _chairCtrl.clear();
+            }),
             child: const Text('Scan again', style: TextStyle(color: kMuted)),
           ),
         ],
       );
     }
 
+    // Step 1: Scanner View
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: MobileScanner(
         onDetect: (capture) {
           final barcode = capture.barcodes.firstOrNull;
           if (barcode?.rawValue != null) {
-            setState(() => _scannedValue = barcode!.rawValue);
+            setState(() => _scannedTable = barcode!.rawValue);
           }
         },
       ),
     );
   }
 
+  // 2. Manual Type Tab (Strictly for Cashiers, Admins, Staff)
   Widget _buildTypeTab() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         TextField(
-          controller: _typeCtrl,
-          autofocus: false,
+          controller: _tableCtrl,
           keyboardType: TextInputType.text,
-          style: const TextStyle(color: kWhite, fontSize: 18),
+          style: const TextStyle(color: kWhite, fontSize: 16),
           textAlign: TextAlign.center,
           decoration: InputDecoration(
-            hintText: 'e.g. T5 or 12',
-            hintStyle: const TextStyle(color: kMuted),
+            hintText: 'Table No. (e.g. T5 or 12)',
+            hintStyle: const TextStyle(color: kMuted, fontSize: 14),
             filled: true,
             fillColor: kBg,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: kMuted.withOpacity(0.3)),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: kPrimary, width: 2),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+            prefixIcon: const Icon(Icons.table_restaurant, color: kPrimary),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _chairCtrl,
+          keyboardType: TextInputType.text,
+          style: const TextStyle(color: kWhite, fontSize: 16),
+          textAlign: TextAlign.center,
+          decoration: InputDecoration(
+            hintText: 'Chair No. (e.g. 1, 2, A)',
+            hintStyle: const TextStyle(color: kMuted, fontSize: 14),
+            filled: true,
+            fillColor: kBg,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: kMuted.withOpacity(0.3)),
             ),
-            prefixIcon: const Icon(Icons.table_restaurant, color: kPrimary),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: kPrimary, width: 2),
+            ),
+            prefixIcon: const Icon(Icons.chair_outlined, color: kPrimary),
           ),
         ),
         const SizedBox(height: 16),
@@ -829,12 +1048,12 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
               foregroundColor: kWhite,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: () => _confirm(_typeCtrl.text),
+            onPressed: () => _confirm(_tableCtrl.text, _chairCtrl.text),
             child: const Text(
-              'Confirm Table',
+              'Confirm Table & Chair',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
@@ -843,12 +1062,13 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     );
   }
 
+  // 3. Take-Away Tab
   Widget _buildTakeAwayTab() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: kPrimary.withOpacity(0.12),
             shape: BoxShape.circle,
@@ -857,10 +1077,10 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
           child: const Icon(
             Icons.shopping_bag_outlined,
             color: kPrimary,
-            size: 44,
+            size: 40,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         const Text(
           'Your order will be\nprepared for pickup',
           textAlign: TextAlign.center,
@@ -870,7 +1090,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 18),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
@@ -879,11 +1099,10 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
               foregroundColor: kWhite,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-            // ✅ 'Take-Away' passed — Firestore will save table_no as ''
-            onPressed: () => _confirm('Take-Away'),
+            onPressed: () => _confirm('Take-Away', ''),
             child: const Text(
               'Continue as Take-Away',
               style: TextStyle(fontWeight: FontWeight.w700),

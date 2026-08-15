@@ -8,6 +8,7 @@ import 'add_menu_chocie.dart';
 import 'promotion.dart';
 import 'manage_additional_options.dart';
 import 'package:restorant/startup%20page/signin_page.dart';
+import 'AdminStaffManagementPage.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF1E1E1E);
@@ -187,6 +188,13 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
+                    case 'User Management':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminStaffManagementPage(),
+                        ),
+                      );
                     // case 'add_promotion':
                     //   Navigator.push(
                     //     context,
@@ -237,6 +245,13 @@ class _AdminAppBarState extends State<AdminAppBar> {
                     child: _buildMenuItemChild(
                       Icons.add_circle_outline_rounded,
                       'Menu Additional Options',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'User Management',
+                    child: _buildMenuItemChild(
+                      Icons.manage_accounts_rounded,
+                      'User Management',
                     ),
                   ),
                   // PopupMenuItem<String>(

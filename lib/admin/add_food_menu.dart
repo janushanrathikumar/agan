@@ -65,6 +65,9 @@ class _AddMenuPageState extends State<AddMenuPage> {
   List<Map<String, dynamic>> _allAvailableOptions = [];
   final List<Map<String, dynamic>> _selectedOptions = [];
 
+  // 🟢 NEW: Menu item availability status[cite: 1]
+  bool _isAvailable = true;
+
   // 🟢 NEW: Take Away availability (e.g. drinks that can't be packed)
   bool _canTakeAway = true;
 
@@ -330,7 +333,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
         'imageFileName': fileName,
         'menuChoices': choiceIds,
         'additionalOptions': optionsData,
-        'status': 'on',
+        'status': _isAvailable ? 'on' : 'off', // 🟢 UPDATED[cite: 1]
         'itemType': _itemType,
         'hasDiscount': _hasDiscount,
         'discountType': _hasDiscount ? _discountType : null,
@@ -365,6 +368,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
         _discountValue.clear();
         _hasMultipleSizes = false;
         _canTakeAway = true;
+        _isAvailable = true; // 🟢 UPDATED[cite: 1]
         _selectedComboItems.clear();
 
         for (var opt in _sizeOptions) {
@@ -497,6 +501,27 @@ class _AddMenuPageState extends State<AddMenuPage> {
                 const SizedBox(height: 16),
                 _input(label: 'Item Name', controller: _name),
                 const SizedBox(height: 16),
+
+                // 🟢 NEW: Availability toggle[cite: 1]
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: kPrimary,
+                  title: const Text(
+                    'Item Available',
+                    style: TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Toggle off to hide this item from the active menu',
+                    style: TextStyle(color: kMuted, fontSize: 12),
+                  ),
+                  value: _isAvailable,
+                  onChanged: (val) => setState(() => _isAvailable = val),
+                ),
+                const SizedBox(height: 8),
+
                 if (_itemType != 'combo') ...[
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
