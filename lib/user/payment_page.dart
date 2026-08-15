@@ -15,7 +15,7 @@ const kBg = Color(0xFF2A2928);
 const kMuted = Color(0xFFB7B7B6);
 const kWhite = Color(0xFFFFFFFF);
 
-// 🟢 Web-Safe Image Widget
+// Web-Safe Image Widget
 class _WebSafeImage extends StatelessWidget {
   final String imageUrl;
   final double width;
@@ -99,7 +99,6 @@ class _PaymentPageState extends State<PaymentPage> {
     }
 
     try {
-      // 🟢 GET USERNAME FROM AUTH FIRST LIKE APP_BAR
       String fallbackName = (user.displayName?.trim().isNotEmpty ?? false)
           ? user.displayName!.trim()
           : (user.email?.split('@').first ?? 'Guest');
@@ -150,6 +149,7 @@ class _PaymentPageState extends State<PaymentPage> {
           'category': m['category'] ?? '',
           'note': m['note'] ?? '',
           'extraNote': m['extraNote'],
+          'size': m['size'] ?? '', // SAVING SIZE TO DB
           'additionalOptions': m['additionalOptions'] ?? [],
           'menuChoices': m['menuChoices'] ?? {},
           'timestamp': (m['createdAt'] is Timestamp)
@@ -186,6 +186,7 @@ class _PaymentPageState extends State<PaymentPage> {
           'hotelId': 'jKuRDFBYEfDUzLdROtoM',
           'userId': user.uid,
           'options': m['additionalOptions'],
+          'size': m['size'], // SAVING SIZE TO SECONDARY DB
         };
       }).toList();
 
@@ -205,8 +206,7 @@ class _PaymentPageState extends State<PaymentPage> {
         'username': username,
         'role': role,
         'table_no': (deliveryData['table_no'] ?? '').toString(),
-        'chair_no': (deliveryData['chair_no'] ?? '')
-            .toString(), // 🟢 Dedicated chair_no field added to Secondary DB
+        'chair_no': (deliveryData['chair_no'] ?? '').toString(),
         'timestamp': FieldValue.serverTimestamp(),
         'Accept_time': FieldValue.serverTimestamp(),
         'delivery_time': DateTime.now().add(const Duration(minutes: 60)),
@@ -237,8 +237,7 @@ class _PaymentPageState extends State<PaymentPage> {
           'status': 'New',
           'delivery_method': deliveryData['delivery_method'] ?? 'Take_Away',
           'table_no': (deliveryData['table_no'] ?? '').toString(),
-          'chair_no': (deliveryData['chair_no'] ?? '')
-              .toString(), // 🟢 Dedicated chair_no field added to Primary DB
+          'chair_no': (deliveryData['chair_no'] ?? '').toString(),
           'timestamp': FieldValue.serverTimestamp(),
         }),
         firestore2.collection('BillOrder').doc(customOrderId).set(orderData2),
@@ -412,8 +411,6 @@ class _PaymentPageState extends State<PaymentPage> {
               final method = delivery['delivery_method'] ?? 'Take_Away';
               final tableNo = delivery['table_no'] ?? 'N/A';
               final chairNo = delivery['chair_no'] ?? '';
-
-              // 🟢 Format display table for UI (e.g. "T5 (Chair 2)")
               final displayTable = chairNo.toString().isNotEmpty
                   ? '$tableNo (Chair $chairNo)'
                   : tableNo.toString();
@@ -421,21 +418,18 @@ class _PaymentPageState extends State<PaymentPage> {
               return StreamBuilder<QuerySnapshot>(
                 stream: itemsRef.snapshots(),
                 builder: (context, snap) {
-                  if (!snap.hasData) {
+                  if (!snap.hasData)
                     return const Center(
                       child: CircularProgressIndicator(color: kPrimary),
                     );
-                  }
-
                   final docs = snap.data!.docs;
-                  if (docs.isEmpty) {
+                  if (docs.isEmpty)
                     return const Center(
                       child: Text(
                         'No items found in cart',
                         style: TextStyle(color: kMuted, fontSize: 16),
                       ),
                     );
-                  }
 
                   double total = 0;
                   for (final d in docs) {
@@ -460,7 +454,6 @@ class _PaymentPageState extends State<PaymentPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // Customer & Dining Details Card
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -502,7 +495,6 @@ class _PaymentPageState extends State<PaymentPage> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-
                               const Text(
                                 'Your Items',
                                 style: TextStyle(
@@ -512,8 +504,6 @@ class _PaymentPageState extends State<PaymentPage> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-
-                              // Item List with Delete Button
                               ListView.separated(
                                 itemCount: docs.length,
                                 shrinkWrap: true,
@@ -530,6 +520,15 @@ class _PaymentPageState extends State<PaymentPage> {
                                   final qty = (m['qty'] as num?)?.toInt() ?? 1;
                                   final imageUrl = m['imageUrl'] ?? '';
                                   final note = m['note'] ?? '';
+                                  final size = m['size']?.toString() ?? '';
+
+                                  final choices = Map<String, dynamic>.from(
+                                    m['menuChoices'] ?? {},
+                                  );
+                                  final addOns =
+                                      m['additionalOptions']
+                                          as List<dynamic>? ??
+                                      [];
 
                                   return Container(
                                     decoration: BoxDecoration(
@@ -574,6 +573,66 @@ class _PaymentPageState extends State<PaymentPage> {
                                                   fontSize: 16,
                                                 ),
                                               ),
+
+                                              // 🟢 SHOWING SIZE HERE
+                                              if (size.isNotEmpty &&
+                                                  size != 'null') ...[
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '📏 Size: $size',
+                                                  style: const TextStyle(
+                                                    color: kMuted,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+
+                                              // 🟢 SHOWING READABLE CHOICES
+                                              if (choices.isNotEmpty) ...[
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '✔️ ${choices.entries.map((e) => '${e.key}: ${e.value}').join(', ')}',
+                                                  style: const TextStyle(
+                                                    color: kMuted,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+
+                                              // 🟢 SHOWING ADD-ONS WITH PRICES
+                                              if (addOns.isNotEmpty) ...[
+                                                const SizedBox(height: 4),
+                                                const Text(
+                                                  '➕ Extras:',
+                                                  style: TextStyle(
+                                                    color: kMuted,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                ...addOns.map((a) {
+                                                  final aName = a['name'] ?? '';
+                                                  final aPrice =
+                                                      (a['price'] as num?)
+                                                          ?.toDouble() ??
+                                                      0.0;
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          left: 4,
+                                                          top: 2,
+                                                        ),
+                                                    child: Text(
+                                                      '• $aName (+CHF ${aPrice.toStringAsFixed(2)})',
+                                                      style: const TextStyle(
+                                                        color: kMuted,
+                                                        fontSize: 11,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }),
+                                              ],
+
                                               if (note.isNotEmpty) ...[
                                                 const SizedBox(height: 4),
                                                 Text(
@@ -619,9 +678,8 @@ class _PaymentPageState extends State<PaymentPage> {
                                               padding: EdgeInsets.zero,
                                               constraints:
                                                   const BoxConstraints(),
-                                              onPressed: () {
-                                                itemsRef.doc(doc.id).delete();
-                                              },
+                                              onPressed: () =>
+                                                  itemsRef.doc(doc.id).delete(),
                                             ),
                                           ],
                                         ),
@@ -630,10 +688,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                   );
                                 },
                               ),
-
                               const SizedBox(height: 20),
-
-                              // Charges breakdown card
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -646,7 +701,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                     _chargeRow('Subtotal', total),
                                     const SizedBox(height: 6),
                                     _chargeRow(
-                                      'Service Charge (${_methodLabel(method)} • ${(serviceChargeRatePreview * 100).toStringAsFixed(1)}%)',
+                                      'Service Charge ( ${(serviceChargeRatePreview * 100).toStringAsFixed(1)}%)',
                                       serviceChargePreview,
                                     ),
                                     const Divider(
@@ -666,8 +721,6 @@ class _PaymentPageState extends State<PaymentPage> {
                           ),
                         ),
                       ),
-
-                      // Sticky Bottom Footer
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: const BoxDecoration(
@@ -763,9 +816,8 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  String _methodLabel(String method) {
-    return method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
-  }
+  String _methodLabel(String method) =>
+      method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
 
   Widget _chargeRow(String label, num value, {bool isBold = false}) {
     return Row(

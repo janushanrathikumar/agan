@@ -622,7 +622,7 @@ class _CartFab extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       const Text(
-                        'View Cart',
+                        'View Cart ',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,

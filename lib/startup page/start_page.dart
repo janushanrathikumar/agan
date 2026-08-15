@@ -7,6 +7,7 @@ import '../language.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
+const kCardBg = Color(0xFF163820);
 const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);
 
@@ -28,6 +29,248 @@ class _StartPageState extends State<StartPage> {
     });
   }
 
+  // Small helper so the pill label follows the current language too.
+  String _aboutLabel() {
+    return AppLanguage.currentLanguage == 'de' ? 'Über uns' : 'About';
+  }
+
+  void _showAboutUsSheet(BuildContext context) {
+    final isDe = AppLanguage.currentLanguage == 'de';
+    final sheetWidth = MediaQuery.of(context).size.width;
+    // Keep the sheet content readable on tablets/web instead of stretching
+    // the text edge-to-edge on very wide screens.
+    final contentMaxWidth = sheetWidth >= 720 ? 640.0 : double.infinity;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.82,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F2615),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: kWhite.withOpacity(0.15)),
+          ),
+          child: Column(
+            children: [
+              // Handle Bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: kMuted.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+                      children: [
+                        Text(
+                          isDe ? 'Unser Restaurant' : 'Our Restaurant',
+                          style: const TextStyle(
+                            color: kWhite,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          isDe
+                              ? 'Angebot & Räumlichkeiten'
+                              : 'Cuisine & Spaces',
+                          style: const TextStyle(
+                            color: kPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Section: Räumlichkeiten (Grid / Badges)
+                        Text(
+                          isDe
+                              ? 'Unsere Räumlichkeiten'
+                              : 'Our Spaces & Capacity',
+                          style: const TextStyle(
+                            color: kWhite,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _buildCapacityBadge(
+                              Icons.restaurant,
+                              isDe ? 'Restaurant' : 'Restaurant',
+                              '80 Plätze',
+                            ),
+                            _buildCapacityBadge(
+                              Icons.meeting_room,
+                              isDe ? 'Saal' : 'Event Hall',
+                              '70 Plätze',
+                            ),
+                            _buildCapacityBadge(
+                              Icons.yard,
+                              isDe ? 'Garten' : 'Garden',
+                              '60 Plätze',
+                            ),
+                            _buildCapacityBadge(
+                              Icons.local_bar,
+                              isDe ? 'Bar / Fumoir' : 'Bar / Lounge',
+                              '20 Plätze',
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Section: Kulinarisches Angebot
+                        _buildInfoCard(
+                          icon: Icons.outdoor_grill,
+                          title: isDe
+                              ? 'Kulinarisches Angebot'
+                              : 'Culinary Delights',
+                          description: isDe
+                              ? 'Schweizer Spezialitäten und hausgemachte Gerichte wie unsere beliebte Pfannen-Rösti sowie feine sri-lankische Spezialitäten mit authentischen Aromen.'
+                              : 'Authentic Swiss specialties such as homemade pan-served Rösti, paired with flavorful Sri Lankan traditional dishes.',
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Section: Pizza & Drinks
+                        _buildInfoCard(
+                          icon: Icons.local_pizza,
+                          title: isDe
+                              ? 'Knusprige Pizza & Hausgemachter Eistee'
+                              : 'Crispy Pizza & Fresh Iced Tea',
+                          description: isDe
+                              ? 'Knuspriger Boden und herzhafter Geschmack frisch aus dem Ofen. Dazu perfekt: Unser hausgemachter, frischer Eistee.'
+                              : 'Oven-baked pizzas with crispy crusts alongside our freshly prepared homemade iced tea.',
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Section: Anlässe & Events
+                        _buildInfoCard(
+                          icon: Icons.celebration,
+                          title: isDe
+                              ? 'Anlässe, Partyservice & Saal'
+                              : 'Events & Catering Service',
+                          description: isDe
+                              ? 'Unser Saal (70 Plätze) eignet sich perfekt für Familienfeiern, Geburtstage und Firmenanlässe. Saalvermietung & Apéros auf Anfrage.'
+                              : 'Our 70-seat hall is ideal for family events, birthdays, and corporate celebrations. Catering and hall rentals available.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCapacityBadge(IconData icon, String title, String capacity) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: kCardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: kPrimary.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: kPrimary, size: 18),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: kWhite,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                capacity,
+                style: const TextStyle(color: kMuted, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kWhite.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: kWhite.withOpacity(0.1)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: kPrimary.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: kPrimary, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: kWhite,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: kMuted.withOpacity(0.9),
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -37,6 +280,7 @@ class _StartPageState extends State<StartPage> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 720;
+    final contentMaxWidth = isWide ? 720.0 : 520.0;
 
     final slides = [
       {
@@ -48,6 +292,11 @@ class _StartPageState extends State<StartPage> {
         'image': 'assets/slide2.png',
         'title': AppLanguage.getText('title_2'),
         'text': AppLanguage.getText('text_2'),
+      },
+      {
+        'image': 'assets/slide3.png',
+        'title': AppLanguage.getText('title_3'),
+        'text': AppLanguage.getText('text_3'),
       },
       {
         'image': 'assets/slide4.png',
@@ -72,7 +321,7 @@ class _StartPageState extends State<StartPage> {
             ),
           ),
 
-          // ── Ambient Background Glows ──
+          // ── Ambient Background Glow ──
           Positioned(
             top: -100,
             right: -50,
@@ -93,65 +342,121 @@ class _StartPageState extends State<StartPage> {
           SafeArea(
             child: Column(
               children: [
-                // ── Top Bar (Language Toggle & Skip) ──
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0,
-                    vertical: 12.0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: kWhite.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: kWhite.withOpacity(0.2)),
-                        ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: _toggleLanguage,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
+                // ── Top Bar (Language Toggle + About Us Pill + Skip) ──
+                Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24.0,
+                        vertical: 12.0,
+                      ),
+                      child: Row(
+                        children: [
+                          // Language Switcher
+                          Container(
+                            decoration: BoxDecoration(
+                              color: kWhite.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: kWhite.withOpacity(0.2),
+                              ),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.language,
-                                  color: kWhite,
-                                  size: 18,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: _toggleLanguage,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 7,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  AppLanguage.getText('lang_toggle'),
-                                  style: const TextStyle(
-                                    color: kWhite,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.language,
+                                      color: kWhite,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      AppLanguage.getText('lang_toggle'),
+                                      style: const TextStyle(
+                                        color: kWhite,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+
+                          // ── "About Us" Pill — a clearly-labeled, tappable
+                          // pill (icon + text) instead of a bare icon, so it
+                          // visibly reads as a button, with ripple feedback.
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: () => _showAboutUsSheet(context),
+                              splashColor: kPrimary.withOpacity(0.3),
+                              highlightColor: kPrimary.withOpacity(0.15),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kPrimary.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: kPrimary.withOpacity(0.6),
                                   ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.info_outline_rounded,
+                                      color: kPrimary,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _aboutLabel(),
+                                      style: const TextStyle(
+                                        color: kWhite,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pushReplacementNamed(
-                          context,
-                          SignInPage.route,
-                        ),
-                        child: Text(
-                          AppLanguage.getText('skip'),
-                          style: const TextStyle(
-                            color: kMuted,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                          const SizedBox(width: 6),
+
+                          // Skip Button
+                          TextButton(
+                            onPressed: () => Navigator.pushReplacementNamed(
+                              context,
+                              SignInPage.route,
+                            ),
+                            child: Text(
+                              AppLanguage.getText('skip'),
+                              style: const TextStyle(
+                                color: kMuted,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
 
@@ -159,7 +464,7 @@ class _StartPageState extends State<StartPage> {
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: isWide ? 720 : 520),
+                      constraints: BoxConstraints(maxWidth: contentMaxWidth),
                       child: PageView.builder(
                         controller: _controller,
                         onPageChanged: (i) => setState(() => _currentIndex = i),
@@ -179,7 +484,7 @@ class _StartPageState extends State<StartPage> {
                                   sigmaY: 12,
                                 ),
                                 child: Container(
-                                  padding: const EdgeInsets.all(32),
+                                  padding: const EdgeInsets.all(28),
                                   decoration: BoxDecoration(
                                     color: kWhite.withOpacity(0.06),
                                     borderRadius: BorderRadius.circular(32),
@@ -204,15 +509,14 @@ class _StartPageState extends State<StartPage> {
                                           fit: BoxFit.contain,
                                         ),
                                       ),
-                                      const SizedBox(height: 32),
+                                      const SizedBox(height: 24),
                                       Text(
                                         slide['title']!,
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(
                                           color: kWhite,
-                                          fontSize: 26,
+                                          fontSize: 24,
                                           fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.5,
                                         ),
                                       ),
                                       const SizedBox(height: 12),
@@ -221,8 +525,8 @@ class _StartPageState extends State<StartPage> {
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: kMuted.withOpacity(0.9),
-                                          fontSize: 16,
-                                          height: 1.5,
+                                          fontSize: 15,
+                                          height: 1.45,
                                         ),
                                       ),
                                     ],
@@ -239,7 +543,7 @@ class _StartPageState extends State<StartPage> {
 
                 // ── Animated Dots Indicator ──
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  padding: const EdgeInsets.symmetric(vertical: 20),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
@@ -247,23 +551,14 @@ class _StartPageState extends State<StartPage> {
                       (i) => AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeOutCubic,
-                        margin: const EdgeInsets.symmetric(horizontal: 6),
-                        height: 8,
-                        width: _currentIndex == i ? 32 : 8,
+                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                        height: 7,
+                        width: _currentIndex == i ? 28 : 7,
                         decoration: BoxDecoration(
                           color: _currentIndex == i
                               ? kPrimary
                               : kWhite.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
-                          boxShadow: _currentIndex == i
-                              ? [
-                                  BoxShadow(
-                                    color: kPrimary.withOpacity(0.5),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ]
-                              : null,
                         ),
                       ),
                     ),
@@ -271,73 +566,96 @@ class _StartPageState extends State<StartPage> {
                 ),
 
                 // ── Bottom Action Buttons ──
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: kPrimary.withOpacity(0.8),
-                              width: 2,
-                            ),
-                            foregroundColor: kWhite,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: kPrimary.withOpacity(0.8),
+                                  width: 2,
+                                ),
+                                foregroundColor: kWhite,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              // Consistent with the "Next → Log in" flow on
+                              // the right: Sign Up first walks the user to
+                              // the last slide (so onboarding is always
+                              // seen), then a second tap goes to Sign Up.
+                              onPressed: () {
+                                if (_currentIndex < slides.length - 1) {
+                                  _controller.animateToPage(
+                                    slides.length - 1,
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                } else {
+                                  Navigator.pushReplacementNamed(
+                                    context,
+                                    SignUpPage.route,
+                                  );
+                                }
+                              },
+                              child: Text(
+                                AppLanguage.getText('sign_up'),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
-                          onPressed: () => Navigator.pushReplacementNamed(
-                            context,
-                            SignUpPage.route,
-                          ),
-                          child: Text(
-                            AppLanguage.getText('sign_up'),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: kPrimary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 4,
+                              ),
+                              onPressed: () {
+                                if (_currentIndex < slides.length - 1) {
+                                  _controller.nextPage(
+                                    duration: const Duration(milliseconds: 350),
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                } else {
+                                  Navigator.pushReplacementNamed(
+                                    context,
+                                    SignInPage.route,
+                                  );
+                                }
+                              },
+                              child: Text(
+                                _currentIndex == slides.length - 1
+                                    ? AppLanguage.getText('log_in')
+                                    : AppLanguage.getText('next'),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: kPrimary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 4,
-                          ),
-                          onPressed: () {
-                            if (_currentIndex < slides.length - 1) {
-                              _controller.nextPage(
-                                duration: const Duration(milliseconds: 350),
-                                curve: Curves.easeOutCubic,
-                              );
-                            } else {
-                              Navigator.pushReplacementNamed(
-                                context,
-                                SignInPage.route,
-                              );
-                            }
-                          },
-                          child: Text(
-                            _currentIndex == slides.length - 1
-                                ? AppLanguage.getText('log_in')
-                                : AppLanguage.getText('next'),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ],

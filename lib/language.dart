@@ -11,15 +11,17 @@ class AppLanguage {
       'sign_up': 'Registrieren',
       'log_in': 'Anmelden',
       'next': 'Weiter',
-      'title_1': 'Bestellen wie ein König',
-      'text_1':
-          'Ohne Anstehen. Bestellen Sie Ihre Lieblingsgerichte mit wenigen Klicks.',
-      'title_2': 'Schnelle Lieferung',
-      'text_2': 'Schnell an Ihren Tisch oder an die Tür geliefert.',
-      'title_3': 'Prämien sammeln',
-      'text_3': 'Punkte sammeln. Exklusive Angebote freischalten.',
-      'title_4': 'Auf dem Laufenden bleiben',
-      'text_4': 'Verfolgen Sie Bestellungen und erhalten Sie Updates.',
+      
+      // German Map - Start Page Slides
+      'title_1': 'Kulinarische Spezialitäten',
+      'text_1': 'Schweizer Spezialitäten wie hausgemachte Rösti in der Pfanne & authentische sri-lankische Gerichte.',
+      'title_2': 'Pizza & Erfrischung',
+      'text_2': 'Knusprige Pizza frisch aus dem Ofen und unser hausgemachter, frisch zubereiteter Eistee.',
+      'title_3': 'Unsere Räumlichkeiten',
+      'text_3': 'Restaurant (80), Saal (70), Garten (60) & Bar/Fumoir (20 Plätze) für jeden Anlass.',
+      'title_4': 'Anlässe & Partyservice',
+      'text_4': 'Ideal für Familienfeiern, Geburtstage, Firmenanlässe, Apéros und Saalvermietung.',
+      
       'lang_toggle': 'EN',
 
       // Sign In & Sign Up Pages
@@ -40,8 +42,7 @@ class AppLanguage {
       'err_enter_phone': 'Telefonnummer mit Ländercode eingeben (z.B. +49...)',
       'err_password_len': 'Das Passwort muss mindestens 6 Zeichen lang sein',
       'err_user_not_found': 'Benutzer nicht gefunden',
-      'err_phone_not_found':
-          'Telefonnummer für die Verifizierung nicht gefunden.',
+      'err_phone_not_found': 'Telefonnummer für die Verifizierung nicht gefunden.',
       'err_reg_failed': 'Registrierung fehlgeschlagen',
 
       'take_away_selected': 'Zum Mitnehmen ausgewählt',
@@ -71,7 +72,7 @@ class AppLanguage {
       'note_optional': 'Notiz (optional)',
       'quantity': 'Menge',
       'total': 'Gesamt:',
-      'add_to_cart': 'In den Warenkorb', // (Add to chat என்பதற்கு பதிலாக)
+      'add_to_cart': 'In den Warenkorb',
       'buy_now': 'Jetzt kaufen',
       'added_to_cart': 'Zum Warenkorb hinzugefügt',
     },
@@ -81,14 +82,17 @@ class AppLanguage {
       'sign_up': 'Sign Up',
       'log_in': 'Log In',
       'next': 'Next',
-      'title_1': 'Order like a King',
-      'text_1': 'Skip the line. Order your favourite meals in a few taps.',
-      'title_2': 'Fast Delivery',
-      'text_2': 'Get it to your table or door quickly.',
-      'title_3': 'Earn Rewards',
-      'text_3': 'Collect points. Unlock exclusive offers.',
-      'title_4': 'Stay Connected',
-      'text_4': 'Track orders and get updates.',
+      
+      // English Map - Start Page Slides
+      'title_1': 'Culinary Specialties',
+      'text_1': 'Swiss specialties like homemade pan-served Rösti & authentic Sri Lankan dishes.',
+      'title_2': 'Fresh Pizza & Drinks',
+      'text_2': 'Crispy stone-baked pizza and our refreshing, freshly brewed homemade iced tea.',
+      'title_3': 'Our Spaces & Seating',
+      'text_3': 'Restaurant (80), Hall (70), Garden (60), and Bar/Lounge (20 seats).',
+      'title_4': 'Events & Catering',
+      'text_4': 'Perfect for private events, company celebrations, apéros, and venue booking.',
+      
       'lang_toggle': 'DE',
 
       // Sign In & Sign Up Pages
@@ -111,6 +115,7 @@ class AppLanguage {
       'err_user_not_found': 'User not found',
       'err_phone_not_found': 'Phone number not found for verification.',
       'err_reg_failed': 'Registration failed',
+      
       'take_away_selected': 'Take Away selected',
       'rewards': 'Rewards',
       'balance': 'Balance',

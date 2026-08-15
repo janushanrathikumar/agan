@@ -1,3 +1,4 @@
+// lib/admin_order.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/pdf.dart';
@@ -498,11 +499,9 @@ class AdminOrderDetailsPage extends StatelessWidget {
         final num serviceCharge = orderData['service_charge'] ?? 0;
         final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
 
-        // 🟢 Extract Username and Role from Firestore Order Data
         final String username = orderData['username'] ?? 'Guest';
         final String role = orderData['role'] ?? 'Customer';
 
-        // 🟢 Extract Table and Chair No
         final String rawTableNo = (orderData['table_no'] ?? 'N/A').toString();
         final String rawChairNo = (orderData['chair_no'] ?? '').toString();
         final String displayTable = rawChairNo.isNotEmpty && rawTableNo != 'N/A'
@@ -553,7 +552,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   orderId,
                   status,
                   deliveryMethod,
-                  displayTable, // 🟢 Passed displayTable instead of raw tableNo
+                  displayTable,
                   subtotal,
                   serviceCharge,
                   serviceChargeRate,
@@ -602,11 +601,9 @@ class AdminOrderDetailsPage extends StatelessWidget {
     final num serviceCharge = orderData['service_charge'] ?? 0;
     final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
 
-    // 🟢 Extract Username and Role for the PDF
     final String username = orderData['username'] ?? 'Guest';
     final String role = orderData['role'] ?? 'Customer';
 
-    // 🟢 Extract and format Table and Chair No for PDF
     final String rawTableNo = (orderData['table_no'] ?? 'N/A').toString();
     final String rawChairNo = (orderData['chair_no'] ?? '').toString();
     final String displayTable = rawChairNo.isNotEmpty && rawTableNo != 'N/A'
@@ -634,7 +631,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
               pw.Text('Order ID: ${orderData['order_id']}'),
               pw.Text('Customer: $username ($role)'),
               pw.Text('Type: ${orderData['delivery_method']}'),
-              // 🟢 Formatted table string shown here
               if (rawTableNo != 'N/A' && rawTableNo.isNotEmpty)
                 pw.Text('Table No: $displayTable'),
               pw.Text('Date: ${DateTime.now().toString().substring(0, 16)}'),
@@ -682,26 +678,72 @@ class AdminOrderDetailsPage extends StatelessWidget {
                 final num price = item['price'] ?? 0;
                 final num lineTotal = price * qty;
 
-                return pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 4),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Expanded(flex: 3, child: pw.Text(name)),
-                      pw.Expanded(
-                        flex: 1,
-                        child: pw.Text('x$qty', textAlign: pw.TextAlign.center),
+                final List<dynamic> addOns = item['additionalOptions'] ?? [];
+
+                // 🟢 Calculate Base Price by subtracting add-on prices from the final DB price
+                num addOnTotal = 0;
+                for (var a in addOns) {
+                  addOnTotal += (a['price'] as num?) ?? 0;
+                }
+                final num basePrice = price - addOnTotal;
+
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(bottom: 4),
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Expanded(flex: 3, child: pw.Text(name)),
+                          pw.Expanded(
+                            flex: 1,
+                            child: pw.Text(
+                              'x$qty',
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Text(
+                              'CHF ${lineTotal.toStringAsFixed(2)}',
+                              textAlign: pw.TextAlign.right,
+                            ),
+                          ),
+                        ],
                       ),
-                      pw.Expanded(
-                        flex: 2,
+                    ),
+                    // 🟢 PDF visually splits Base Price & Additional Options
+                    if (addOns.isNotEmpty) ...[
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
                         child: pw.Text(
-                          'CHF ${lineTotal.toStringAsFixed(2)}',
-                          textAlign: pw.TextAlign.right,
+                          'Base Price: CHF ${basePrice.toStringAsFixed(2)}',
+                          style: const pw.TextStyle(
+                            fontSize: 10,
+                            color: PdfColors.grey,
+                          ),
                         ),
                       ),
+                      ...addOns.map((addon) {
+                        final addonMap = addon as Map<String, dynamic>? ?? {};
+                        final String addonName = (addonMap['name'] ?? '')
+                            .toString();
+                        final num addonPrice = addonMap['price'] ?? 0;
+                        return pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
+                          child: pw.Text(
+                            '+ $addonName (CHF ${addonPrice.toStringAsFixed(2)})',
+                            style: const pw.TextStyle(
+                              fontSize: 10,
+                              color: PdfColors.grey,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ],
-                  ),
+                  ],
                 );
               }).toList(),
 
@@ -719,7 +761,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'Service Charge (${_methodLabel((orderData['delivery_method'] ?? '').toString())} • ${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
+                    'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
                   ),
                   pw.Text('CHF ${serviceCharge.toStringAsFixed(2)}'),
                 ],
@@ -843,7 +885,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
           _buildChargeRow('Subtotal', subtotal),
           const SizedBox(height: 12),
           _buildChargeRow(
-            'Service Charge (${_methodLabel(deliveryMethod)} • ${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
+            'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
             serviceCharge,
           ),
           const Divider(color: kItemBg, thickness: 1, height: 32),
@@ -959,7 +1001,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '$displayName  x$qty',
+                        '$displayName  $qty',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -1003,7 +1045,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4.0),
                     child: Text(
-                      '📏 Portion: $iSize',
+                      '📏 Size/Portion: $iSize',
                       style: const TextStyle(
                         color: kMuted,
                         fontSize: 14,
@@ -1023,6 +1065,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
     );
   }
 
+  // 🟢 No longer fetches random IDs. Displays exactly the choices directly.
   Widget _buildMenuChoices(Map<String, dynamic> item) {
     final Map<String, dynamic> choices = Map<String, dynamic>.from(
       item['menuChoices'] ?? {},
@@ -1031,54 +1074,42 @@ class AdminOrderDetailsPage extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: FutureBuilder<List<DocumentSnapshot>>(
-        future: Future.wait(
-          choices.keys.map(
-            (id) => FirebaseFirestore.instance
-                .collection('menu_choices')
-                .doc(id)
-                .get(),
-          ),
-        ),
-        builder: (context, snap) {
-          final headings = <String, String>{};
-          if (snap.hasData) {
-            for (final doc in snap.data!) {
-              if (doc.exists) {
-                final data = doc.data() as Map<String, dynamic>? ?? {};
-                headings[doc.id] = (data['heading'] as String?) ?? '';
-              }
-            }
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: choices.entries.map((e) {
-              final label = headings[e.key];
-              final display = (label != null && label.isNotEmpty)
-                  ? '$label: ${e.value}'
-                  : '${e.value}';
-              return Text(
-                '• $display',
-                style: const TextStyle(color: kMuted, fontSize: 13),
-              );
-            }).toList(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: choices.entries.map((e) {
+          return Text(
+            '✔️ ${e.key}: ${e.value}',
+            style: const TextStyle(color: kMuted, fontSize: 13),
           );
-        },
+        }).toList(),
       ),
     );
   }
 
+  // 🟢 Math extracts base price explicitly if add-ons exist
   Widget _buildAdditionalOptions(Map<String, dynamic> item) {
     final List<dynamic> additionalOptions = item['additionalOptions'] ?? [];
     if (additionalOptions.isEmpty) return const SizedBox.shrink();
+
+    final num price = item['price'] ?? 0;
+    num addOnTotal = 0;
+    for (var a in additionalOptions) {
+      addOnTotal += (a['price'] as num?) ?? 0;
+    }
+    final num basePrice = price - addOnTotal;
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            'Base Price: CHF ${basePrice.toStringAsFixed(2)}',
+            style: const TextStyle(color: kMuted, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
           const Text(
-            'Add-ons:',
+            '➕ Extras:',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 13,
@@ -1089,12 +1120,8 @@ class AdminOrderDetailsPage extends StatelessWidget {
             final addonMap = addon as Map<String, dynamic>? ?? {};
             final String addonName = (addonMap['name'] ?? '').toString();
             final num addonPrice = addonMap['price'] ?? 0;
-            final String catalog = (addonMap['catalog'] ?? '').toString();
-            final label = catalog.isNotEmpty
-                ? '$addonName ($catalog)'
-                : addonName;
             return Text(
-              '- $label (+CHF ${addonPrice.toStringAsFixed(2)})',
+              '  • $addonName (+CHF ${addonPrice.toStringAsFixed(2)})',
               style: const TextStyle(color: kMuted, fontSize: 13),
             );
           }),
@@ -1106,40 +1133,48 @@ class AdminOrderDetailsPage extends StatelessWidget {
   Widget _buildDrinkDetails(Map<String, dynamic> item) {
     final String type = item['type'] ?? '';
     final String sugar = item['sugar'] ?? '';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (type.isNotEmpty)
-          Text(
-            'Type: $type',
-            style: const TextStyle(color: kMuted, fontSize: 14),
-          ),
-        if (sugar.isNotEmpty)
-          Text(
-            'Sugar: $sugar',
-            style: const TextStyle(color: kMuted, fontSize: 14),
-          ),
-      ],
+    if (type.isEmpty && sugar.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (type.isNotEmpty)
+            Text(
+              '☕ Type: $type',
+              style: const TextStyle(color: kMuted, fontSize: 13),
+            ),
+          if (sugar.isNotEmpty)
+            Text(
+              '🍬 Sugar: $sugar',
+              style: const TextStyle(color: kMuted, fontSize: 13),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _buildFoodDetails(Map<String, dynamic> item) {
     final String note = item['note'] ?? '';
     final String extraNote = item['extraNote'] ?? '';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (note.isNotEmpty)
-          Text(
-            'Note: $note',
-            style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
-          ),
-        if (extraNote.isNotEmpty)
-          Text(
-            'Extra: $extraNote',
-            style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
-          ),
-      ],
+    if (note.isEmpty && extraNote.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (note.isNotEmpty)
+            Text(
+              '📝 Note: $note',
+              style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
+            ),
+          if (extraNote.isNotEmpty)
+            Text(
+              '📝 Extra Note: $extraNote',
+              style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
+            ),
+        ],
+      ),
     );
   }
 

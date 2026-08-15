@@ -200,7 +200,6 @@ class MyOrdersPage extends StatelessWidget {
                           final String rawChairNo = (data['chair_no'] ?? '')
                               .toString();
 
-                          // 🟢 Format display table for UI (e.g. "T5 (Chair 2)")
                           final String displayTable = rawChairNo.isNotEmpty
                               ? '$rawTableNo (Chair $rawChairNo)'
                               : rawTableNo;
@@ -330,7 +329,6 @@ class MyOrdersPage extends StatelessWidget {
                                                 ? 'Take-Away'
                                                 : 'Dine-In',
                                           ),
-                                          // 🟢 Use the formatted string here
                                           if (method.toLowerCase() !=
                                                   'take_away' &&
                                               rawTableNo != 'no')
@@ -465,7 +463,7 @@ class MyOrdersPage extends StatelessWidget {
                                             0.0;
                                         final iKind = itemMap['kind'] ?? '';
                                         final iSize =
-                                            itemMap['size'] as String?;
+                                            itemMap['size']?.toString() ?? '';
                                         final iMenuChoices =
                                             itemMap['menuChoices']
                                                 as Map<String, dynamic>? ??
@@ -524,21 +522,25 @@ class MyOrdersPage extends StatelessWidget {
                                                   ),
                                                 ],
                                               ),
-                                              if (iSize != null &&
-                                                  iSize.isNotEmpty)
+
+                                              // 🟢 SIZE UI
+                                              if (iSize.isNotEmpty &&
+                                                  iSize != 'null')
                                                 Padding(
                                                   padding:
                                                       const EdgeInsets.only(
                                                         top: 4.0,
                                                       ),
                                                   child: Text(
-                                                    '📏 Portion: $iSize',
+                                                    '📏 Size: $iSize',
                                                     style: const TextStyle(
                                                       color: kMuted,
                                                       fontSize: 12,
                                                     ),
                                                   ),
                                                 ),
+
+                                              // 🟢 READABLE CHOICES UI
                                               if (iMenuChoices.isNotEmpty)
                                                 Padding(
                                                   padding:
@@ -546,13 +548,14 @@ class MyOrdersPage extends StatelessWidget {
                                                         top: 4.0,
                                                       ),
                                                   child: Text(
-                                                    '✔️ ${iMenuChoices.values.join(', ')}',
+                                                    '✔️ ${iMenuChoices.entries.map((e) => '${e.key}: ${e.value}').join(', ')}',
                                                     style: const TextStyle(
                                                       color: kMuted,
                                                       fontSize: 12,
                                                     ),
                                                   ),
                                                 ),
+
                                               if (iKind == 'drink' &&
                                                   (iType.isNotEmpty ||
                                                       iSugar.isNotEmpty))
@@ -569,6 +572,7 @@ class MyOrdersPage extends StatelessWidget {
                                                     ),
                                                   ),
                                                 ),
+
                                               if (iExtraNote != null &&
                                                   iExtraNote
                                                       .toString()
@@ -586,6 +590,8 @@ class MyOrdersPage extends StatelessWidget {
                                                     ),
                                                   ),
                                                 ),
+
+                                              // 🟢 ADD-ONS UI WITH PRICES
                                               if (iAddOptions.isNotEmpty)
                                                 Padding(
                                                   padding:
@@ -663,6 +669,53 @@ class MyOrdersPage extends StatelessWidget {
                                           ),
                                         );
                                       }),
+
+                                      const SizedBox(height: 16),
+
+                                      // SizedBox(
+                                      //   width: double.infinity,
+                                      //   child: OutlinedButton.icon(
+                                      //     style: OutlinedButton.styleFrom(
+                                      //       foregroundColor: kWhite,
+                                      //       side: const BorderSide(
+                                      //         color: kPrimary,
+                                      //         width: 1.5,
+                                      //       ),
+                                      //       padding: const EdgeInsets.symmetric(
+                                      //         vertical: 14,
+                                      //       ),
+                                      //       shape: RoundedRectangleBorder(
+                                      //         borderRadius:
+                                      //             BorderRadius.circular(14),
+                                      //       ),
+                                      //     ),
+                                      //     icon: const Icon(
+                                      //       Icons.receipt_long,
+                                      //       color: kPrimary,
+                                      //     ),
+                                      //     label: const Text(
+                                      //       'View Bill',
+                                      //       style: TextStyle(
+                                      //         fontWeight: FontWeight.bold,
+                                      //         fontSize: 15,
+                                      //         letterSpacing: 0.5,
+                                      //       ),
+                                      //     ),
+                                      //     onPressed: () {
+                                      //       ScaffoldMessenger.of(
+                                      //         context,
+                                      //       ).showSnackBar(
+                                      //         SnackBar(
+                                      //           content: const Text(
+                                      //             'Opening bill...',
+                                      //           ),
+                                      //           behavior:
+                                      //               SnackBarBehavior.floating,
+                                      //         ),
+                                      //       );
+                                      //     },
+                                      //   ),
+                                      // ),
                                     ],
                                   ),
                                 ),

@@ -678,9 +678,7 @@ class _CategoryRail extends StatelessWidget {
         if (raw == null) return null;
         final str = raw.toString().trim();
         final match = RegExp(r'\d+(\.\d+)?').firstMatch(str);
-        if (match != null) {
-          return double.tryParse(match.group(0)!);
-        }
+        if (match != null) return double.tryParse(match.group(0)!);
         return null;
       }
 
@@ -1072,9 +1070,7 @@ class _MenuGrid extends StatelessWidget {
             if (raw == null) return null;
             final str = raw.toString().trim();
             final match = RegExp(r'\d+(\.\d+)?').firstMatch(str);
-            if (match != null) {
-              return double.tryParse(match.group(0)!);
-            }
+            if (match != null) return double.tryParse(match.group(0)!);
             return null;
           }
 
@@ -1092,10 +1088,8 @@ class _MenuGrid extends StatelessWidget {
         if (searchQuery.isNotEmpty) {
           docs = docs.where((d) {
             final data = (d.data() as Map<String, dynamic>?) ?? {};
-
             final name = (data['name'] as String?)?.toLowerCase() ?? '';
             final itemNo = (data['itemNo'] as String?)?.toLowerCase() ?? '';
-
             return name.contains(searchQuery) || itemNo.contains(searchQuery);
           }).toList();
         }
@@ -1291,7 +1285,11 @@ void _showItemSheet(
     builder: (ctx) {
       int qty = 1;
       final noteCtrl = TextEditingController();
+
+      // 🟢 We now save BOTH the document ID and the readable heading!
       final Map<String, String?> selectedChoice = {};
+      final Map<String, String> choiceHeadings = {};
+
       final Set<int> selectedAddOns = {};
       String? selectedSizeName = initialSelectedSize;
 
@@ -1385,6 +1383,15 @@ void _showItemSheet(
         final uid = uidHint ?? await _ensureUid();
         if (uid == null) return false;
 
+        // 🟢 Using the headings mapped instead of the document IDs
+        final formattedChoices = <String, String>{};
+        selectedChoice.forEach((key, val) {
+          final heading =
+              choiceHeadings[key] ??
+              key; // defaults to key if heading not found
+          if (val != null) formattedChoices[heading] = val;
+        });
+
         final payload = <String, dynamic>{
           'kind': _itemTypeFor(kind),
           'name': name,
@@ -1392,7 +1399,7 @@ void _showItemSheet(
           'price': computeTotal() / qty,
           'qty': qty,
           'category': category,
-          'menuChoices': selectedChoice,
+          'menuChoices': formattedChoices, // 🟢 NOW SAVES READABLE HEADINGS
           'additionalOptions': selectedAddOns
               .map((i) => additionalOptions[i])
               .toList(),
@@ -1720,8 +1727,10 @@ void _showItemSheet(
                         _MenuChoicesSection(
                           choiceIds: menuChoiceIds,
                           selectedChoice: selectedChoice,
-                          onChanged: (gid, val) =>
-                              setS(() => selectedChoice[gid] = val),
+                          onChanged: (gid, heading, val) => setS(() {
+                            selectedChoice[gid] = val;
+                            choiceHeadings[gid] = heading;
+                          }),
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -1917,7 +1926,8 @@ void _showItemSheet(
 class _MenuChoicesSection extends StatelessWidget {
   final List<String> choiceIds;
   final Map<String, String?> selectedChoice;
-  final void Function(String groupId, String val) onChanged;
+  final void Function(String groupId, String heading, String val)
+  onChanged; // 🟢 UPDATED
   const _MenuChoicesSection({
     required this.choiceIds,
     required this.selectedChoice,
@@ -1954,7 +1964,9 @@ class _MenuChoicesSection extends StatelessWidget {
                 title: (data['heading'] as String?) ?? '',
                 values: List<String>.from(data['options'] ?? []),
                 selected: selectedChoice[doc.id] ?? '',
-                onChanged: (val) => onChanged(doc.id, val),
+                // 🟢 NOW PASSES BACK BOTH DOC.ID AND THE READABLE HEADING
+                onChanged: (val) =>
+                    onChanged(doc.id, data['heading'] ?? doc.id, val),
                 showRequired: true,
               ),
             );
@@ -1985,9 +1997,7 @@ class _AddOnsMultiSelectField extends StatelessWidget {
           builder: (ctx) => _AddOnsMultiSelectDialog(
             options: options,
             initialSelected: selected,
-            onSelectionChanged: (newSel) {
-              onChanged(newSel);
-            },
+            onSelectionChanged: (newSel) => onChanged(newSel),
           ),
         );
       },
@@ -2169,11 +2179,10 @@ class _AddOnsMultiSelectDialogState extends State<_AddOnsMultiSelectDialog> {
                             value: isSelected,
                             onChanged: (val) {
                               setState(() {
-                                if (val == true) {
+                                if (val == true)
                                   _tempSelected.add(originalIndex);
-                                } else {
+                                else
                                   _tempSelected.remove(originalIndex);
-                                }
                               });
                               widget.onSelectionChanged(_tempSelected);
                             },

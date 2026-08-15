@@ -70,7 +70,6 @@ class CheckoutPage extends StatefulWidget {
 }
 
 class _CheckoutPageState extends State<CheckoutPage> {
-  // _tableNo: null = not selected, 'Take-Away' = take-away, other = dine-in
   String? _tableNo;
 
   @override
@@ -402,6 +401,8 @@ class _CartItemTile extends StatelessWidget {
     final String? sugar = m['sugar'] as String?;
     final String? extraNote = m['extraNote'] as String?;
     final String? note = m['note'] as String?;
+    final String? size = m['size'] as String?;
+
     final Map<String, dynamic> choices = Map<String, dynamic>.from(
       m['menuChoices'] ?? {},
     );
@@ -466,10 +467,38 @@ class _CartItemTile extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
-                  if (drinkType != null) _Chip('$drinkType · $sugar sugar'),
-                  ...choices.entries.map((e) => _Chip('${e.key}: ${e.value}')),
-                  if (addOns.isNotEmpty)
-                    _Chip('+${addOns.map((a) => a['name']).join(', ')}'),
+
+                  // 🟢 SHOWING SIZE
+                  if (size != null && size.isNotEmpty && size != 'null')
+                    _Chip('📏 Size: $size'),
+
+                  if (drinkType != null) _Chip('☕ $drinkType · $sugar sugar'),
+
+                  // 🟢 SHOWING READABLE CHOICES
+                  ...choices.entries.map(
+                    (e) => _Chip('✔️ ${e.key}: ${e.value}'),
+                  ),
+
+                  // 🟢 SHOWING ADD-ONS WITH PRICES
+                  if (addOns.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      '➕ Extras:',
+                      style: TextStyle(
+                        color: kMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    ...addOns.map((a) {
+                      final optName = a['name'] ?? '';
+                      final optPrice = (a['price'] as num?)?.toDouble() ?? 0.0;
+                      return _Chip(
+                        '  • $optName (+CHF ${optPrice.toStringAsFixed(2)})',
+                      );
+                    }),
+                  ],
+
                   if (extraNote != null && extraNote.isNotEmpty)
                     _Chip('📝 $extraNote'),
                   if (note != null && note.isNotEmpty) _Chip('📝 $note'),
@@ -735,7 +764,7 @@ class _OrderSummary extends StatelessWidget {
 // ── Table & Chair Picker Sheet ─────────────────────────────────────────────
 class _TablePickerSheet extends StatefulWidget {
   final String uid;
-  final void Function(String tableNo, String chairNo) onConfirm; // 🟢 UPDATED
+  final void Function(String tableNo, String chairNo) onConfirm;
   const _TablePickerSheet({required this.uid, required this.onConfirm});
 
   @override
@@ -767,7 +796,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
 
       if (userDoc.exists) {
         final role = (userDoc.data()?['role'] as String?)?.toLowerCase() ?? '';
-        // Check if Cashier, Admin, or Staff
         if (role == 'cashier' || role == 'admin' || role == 'staff') {
           _isStaffOrAdmin = true;
         }
@@ -805,7 +833,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
       return;
     }
 
-    widget.onConfirm(trimmedTable, trimmedChair); // 🟢 Passes both separately
+    widget.onConfirm(trimmedTable, trimmedChair);
   }
 
   @override
@@ -888,7 +916,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     );
   }
 
-  // 1. Scan QR Code Tab (Both Customer & Staff)
   Widget _buildQrTab() {
     if (kIsWeb) {
       return Center(
@@ -911,7 +938,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
       );
     }
 
-    // Step 2 after scanning: Prompt for Chair Number
     if (_scannedTable != null) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -975,7 +1001,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
       );
     }
 
-    // Step 1: Scanner View
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: MobileScanner(
@@ -989,7 +1014,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     );
   }
 
-  // 2. Manual Type Tab (Strictly for Cashiers, Admins, Staff)
   Widget _buildTypeTab() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -1062,7 +1086,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
     );
   }
 
-  // 3. Take-Away Tab
   Widget _buildTakeAwayTab() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
