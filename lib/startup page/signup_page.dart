@@ -30,6 +30,15 @@ class _SignUpPageState extends State<SignUpPage> {
 
   final _emailRegex = RegExp(r'^[\w\.\-]+@[\w\-]+\.[\w\.\-]+$');
 
+  // --- NEW: Language Toggle Method ---
+  void _toggleLanguage() {
+    setState(() {
+      AppLanguage.currentLanguage = (AppLanguage.currentLanguage == 'de')
+          ? 'en'
+          : 'de';
+    });
+  }
+
   // ── 100% Original Logic Retained ──
   Future<void> _registerWithPhone() async {
     final name = _name.text.trim();
@@ -203,6 +212,45 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
           onPressed: () => Navigator.pushReplacementNamed(context, '/signin'),
         ),
+        //   // --- NEW: Language Toggle Button Added Here ---
+        //   actions: [
+        //     Padding(
+        //       padding: const EdgeInsets.only(right: 16.0),
+        //       child: Center(
+        //         child: Container(
+        //           decoration: BoxDecoration(
+        //             color: kWhite.withOpacity(0.1),
+        //             borderRadius: BorderRadius.circular(20),
+        //             border: Border.all(color: kWhite.withOpacity(0.2)),
+        //           ),
+        //           child: InkWell(
+        //             borderRadius: BorderRadius.circular(20),
+        //             onTap: _toggleLanguage,
+        //             child: Padding(
+        //               padding: const EdgeInsets.symmetric(
+        //                 horizontal: 14,
+        //                 vertical: 7,
+        //               ),
+        //               child: Row(
+        //                 children: [
+        //                   const Icon(Icons.language, color: kWhite, size: 16),
+        //                   const SizedBox(width: 6),
+        //                   Text(
+        //                     AppLanguage.getText('lang_toggle'),
+        //                     style: const TextStyle(
+        //                       color: kWhite,
+        //                       fontWeight: FontWeight.bold,
+        //                       fontSize: 13,
+        //                     ),
+        //                   ),
+        //                 ],
+        //               ),
+        //             ),
+        //           ),
+        //         ),
+        //       ),
+        //     ),
+        //   ],
       ),
       body: Stack(
         fit: StackFit.expand,

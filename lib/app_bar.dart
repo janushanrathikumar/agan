@@ -1,13 +1,13 @@
 // lib/user/app_bar.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:restorant/startup%20page/signin_page.dart';
 
 import 'package:restorant/user/home.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/OrderDetails.dart';
 import 'package:restorant/user/AccountPage.dart';
-import 'package:restorant/startup%20page/signin_page.dart'; // Login page import
 
 import '../language.dart';
 
@@ -70,7 +70,6 @@ class _AppShellState extends State<AppShell> {
               Navigator.pop(ctx);
               await FirebaseAuth.instance.signOut();
               if (context.mounted) {
-                // Navigate to Login Page and remove all previous routes
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const SignInPage()),
                   (route) => false,
@@ -80,6 +79,281 @@ class _AppShellState extends State<AppShell> {
             child: const Text('Logout', style: TextStyle(color: kWhite)),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _deleteAccount(BuildContext context) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final String uid = user.uid;
+
+        // 1. Delete the user document from Firestore collection 'user'
+        await FirebaseFirestore.instance.collection('user').doc(uid).delete();
+
+        // 2. Delete the user from Firebase Auth
+        await user.delete();
+
+        if (context.mounted) {
+          // Navigate to Login Page after successful deletion
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const SignInPage()),
+            (route) => false,
+          );
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This action requires recent authentication. Please log out, log back in, and try again.',
+              ),
+              backgroundColor: kDiscount,
+            ),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting account: ${e.message}'),
+              backgroundColor: kDiscount,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An unexpected error occurred while deleting.'),
+            backgroundColor: kDiscount,
+          ),
+        );
+      }
+    }
+  }
+
+  void _confirmDeleteAccount(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: kDiscount.withOpacity(0.5)),
+        ),
+        title: const Text(
+          'Delete Account',
+          style: TextStyle(color: kDiscount, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Are you sure you want to permanently delete your account? This will erase all your data and cannot be undone.',
+          style: TextStyle(color: kMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: kMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDiscount,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _deleteAccount(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: kWhite)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendPasswordResetEmail(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.email != null && user.email!.isNotEmpty) {
+      try {
+        await FirebaseAuth.instance.sendPasswordResetEmail(email: user.email!);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Password reset link sent to your email!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${e.toString()}'),
+              backgroundColor: kDiscount,
+            ),
+          );
+        }
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No email associated with this account.'),
+            backgroundColor: kDiscount,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showChangePasswordDialog(BuildContext context) {
+    final TextEditingController passwordController = TextEditingController();
+    bool obscure = true;
+    bool isUpdating = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: kBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: kWhite.withOpacity(0.2)),
+            ),
+            title: const Text(
+              'Change Password',
+              style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: passwordController,
+                  obscureText: obscure,
+                  style: const TextStyle(color: kWhite),
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    labelStyle: const TextStyle(color: kMuted),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline_rounded,
+                      color: kMuted,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscure ? Icons.visibility : Icons.visibility_off,
+                        color: kMuted,
+                      ),
+                      onPressed: () => setState(() => obscure = !obscure),
+                    ),
+                    filled: true,
+                    fillColor: kWhite.withOpacity(0.06),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: kWhite.withOpacity(0.15)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isUpdating ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: kMuted)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: isUpdating
+                    ? null
+                    : () async {
+                        final newPassword = passwordController.text.trim();
+                        if (newPassword.length < 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Password must be at least 6 characters.',
+                              ),
+                              backgroundColor: kDiscount,
+                            ),
+                          );
+                          return;
+                        }
+
+                        setState(() => isUpdating = true);
+                        try {
+                          final user = FirebaseAuth.instance.currentUser;
+                          if (user != null) {
+                            await user.updatePassword(newPassword);
+                            if (context.mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Password updated successfully!',
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          }
+                        } on FirebaseAuthException catch (e) {
+                          setState(() => isUpdating = false);
+                          if (e.code == 'requires-recent-login') {
+                            if (context.mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'This action requires recent authentication. Please log out and log back in.',
+                                  ),
+                                  backgroundColor: kDiscount,
+                                ),
+                              );
+                            }
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    e.message ?? 'Error updating password',
+                                  ),
+                                  backgroundColor: kDiscount,
+                                ),
+                              );
+                            }
+                          }
+                        }
+                      },
+                child: isUpdating
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          color: kWhite,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text('Update', style: TextStyle(color: kWhite)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -165,66 +439,132 @@ class _AppShellState extends State<AppShell> {
               ],
             ),
             actions: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: kPrimary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: kPrimary.withOpacity(0.3)),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: _toggleLanguage,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.language, color: kPrimary, size: 16),
-                        const SizedBox(width: 6),
-                        Text(
-                          AppLanguage.getText('lang_toggle').toUpperCase(),
-                          style: const TextStyle(
-                            color: kPrimary,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
+              // --- UPDATED: Glassmorphism Language Toggle (Matches Start Page) ---
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: kWhite.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: kWhite.withOpacity(0.2)),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: _toggleLanguage,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.language, color: kWhite, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            AppLanguage.getText('lang_toggle'),
+                            style: const TextStyle(
+                              color: kWhite,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: kDiscount.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: kDiscount.withOpacity(0.3)),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => _confirmLogout(context),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.person_outline_rounded,
-                          color: kDiscount,
-                          size: 16,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'LOGOUT',
-                          style: TextStyle(
-                            color: kDiscount,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+
+              // --- Settings Menu ---
+              Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: kDiscount.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: kDiscount.withOpacity(0.3)),
+                  ),
+                  child: PopupMenuButton<String>(
+                    color: kBg,
+                    icon: const Icon(
+                      Icons.settings,
+                      color: kDiscount,
+                      size: 20,
                     ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: kWhite.withOpacity(0.2)),
+                    ),
+                    onSelected: (value) {
+                      if (value == 'logout') {
+                        _confirmLogout(context);
+                      } else if (value == 'delete') {
+                        _confirmDeleteAccount(context);
+                      } else if (value == 'change_password') {
+                        _showChangePasswordDialog(context);
+                      } else if (value == 'reset_email') {
+                        _sendPasswordResetEmail(context);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      // const PopupMenuItem(
+                      //   value: 'change_password',
+                      //   child: Row(
+                      //     children: [
+                      //       Icon(Icons.lock_reset, color: kWhite, size: 20),
+                      //       SizedBox(width: 8),
+                      //       Text(
+                      //         'Change Password',
+                      //         style: TextStyle(color: kWhite),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ),
+                      // const PopupMenuItem(
+                      //   value: 'reset_email',
+                      //   child: Row(
+                      //     children: [
+                      //       Icon(
+                      //         Icons.mark_email_read,
+                      //         color: kWhite,
+                      //         size: 20,
+                      //       ),
+                      //       SizedBox(width: 8),
+                      //       Text(
+                      //         'Send Reset Email',
+                      //         style: TextStyle(color: kWhite),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ),
+                      // const PopupMenuDivider(height: 1),
+                      const PopupMenuItem(
+                        value: 'logout',
+                        child: Row(
+                          children: [
+                            Icon(Icons.logout, color: kWhite, size: 20),
+                            SizedBox(width: 8),
+                            Text('Logout', style: TextStyle(color: kWhite)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_forever,
+                              color: kDiscount,
+                              size: 20,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Delete Account',
+                              style: TextStyle(color: kDiscount),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

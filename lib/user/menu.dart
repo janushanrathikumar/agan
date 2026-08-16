@@ -185,9 +185,9 @@ class _MenuPageState extends State<MenuPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'How would you like to order?',
-                  style: TextStyle(
+                Text(
+                  AppLanguage.getText('How would you like to order?'),
+                  style: const TextStyle(
                     color: kWhite,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -206,9 +206,9 @@ class _MenuPageState extends State<MenuPage> {
                           ),
                         ),
                         icon: const Icon(Icons.storefront, color: kWhite),
-                        label: const Text(
-                          'Dine-In',
-                          style: TextStyle(
+                        label: Text(
+                          AppLanguage.getText('dine_in'),
+                          style: const TextStyle(
                             color: kWhite,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -243,9 +243,9 @@ class _MenuPageState extends State<MenuPage> {
                           ),
                         ),
                         icon: const Icon(Icons.takeout_dining, color: kPrimary),
-                        label: const Text(
-                          'Take-Away',
-                          style: TextStyle(
+                        label: Text(
+                          AppLanguage.getText('take_away'),
+                          style: const TextStyle(
                             color: kWhite,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -346,7 +346,7 @@ class _MenuPageState extends State<MenuPage> {
                           ),
                           child: Text(
                             _currentTableNo == 'Take-Away'
-                                ? '🥡 Take-Away'
+                                ? '🥡 ' + AppLanguage.getText('take_away')
                                 : '🍽️ $_currentTableNo',
                             style: const TextStyle(
                               color: kPrimary,
@@ -436,7 +436,9 @@ class _MenuPageState extends State<MenuPage> {
                                             .toLowerCase(),
                                       ),
                                       decoration: InputDecoration(
-                                        hintText: 'Search all items...',
+                                        hintText: AppLanguage.getText(
+                                          'Search all items...',
+                                        ),
                                         hintStyle: const TextStyle(
                                           color: kMuted,
                                         ),
@@ -612,26 +614,26 @@ class _TopSwitch extends StatelessWidget {
               fillColor: kPrimary.withOpacity(0.85),
               borderColor: Colors.transparent,
               selectedBorderColor: Colors.transparent,
-              children: const [
+              children: [
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    'Drinks',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    AppLanguage.getText('Drinks'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    'Foods',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    AppLanguage.getText('Foods'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    'Combos',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    AppLanguage.getText('Combos'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
@@ -752,7 +754,7 @@ class _CategoryRail extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'All',
+                    AppLanguage.getText('All'),
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     style: TextStyle(
@@ -1098,8 +1100,8 @@ class _MenuGrid extends StatelessWidget {
           return Center(
             child: Text(
               searchQuery.isNotEmpty
-                  ? 'No matching items found.'
-                  : 'No items available.',
+                  ? AppLanguage.getText('No matching items found.')
+                  : AppLanguage.getText('No items available.'),
               style: const TextStyle(color: kMuted, fontSize: 16),
             ),
           );
@@ -1286,7 +1288,6 @@ void _showItemSheet(
       int qty = 1;
       final noteCtrl = TextEditingController();
 
-      // 🟢 We now save BOTH the document ID and the readable heading!
       final Map<String, String?> selectedChoice = {};
       final Map<String, String> choiceHeadings = {};
 
@@ -1349,7 +1350,10 @@ void _showItemSheet(
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    'This item is currently not available for $tableNo.',
+                    AppLanguage.getText(
+                          'This item is currently not available for ',
+                        ) +
+                        '$tableNo.',
                   ),
                   backgroundColor: Colors.redAccent,
                 ),
@@ -1359,8 +1363,10 @@ void _showItemSheet(
           if (selectedSizeName == null || selectedSizeName!.isEmpty) {
             if (context.mounted)
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please select a Portion / Size.'),
+                SnackBar(
+                  content: Text(
+                    AppLanguage.getText('Please select a Portion / Size.'),
+                  ),
                   backgroundColor: Colors.redAccent,
                 ),
               );
@@ -1372,8 +1378,10 @@ void _showItemSheet(
               selectedChoice[groupId]!.isEmpty) {
             if (context.mounted)
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please select all required options.'),
+                SnackBar(
+                  content: Text(
+                    AppLanguage.getText('Please select all required options.'),
+                  ),
                   backgroundColor: Colors.redAccent,
                 ),
               );
@@ -1383,12 +1391,9 @@ void _showItemSheet(
         final uid = uidHint ?? await _ensureUid();
         if (uid == null) return false;
 
-        // 🟢 Using the headings mapped instead of the document IDs
         final formattedChoices = <String, String>{};
         selectedChoice.forEach((key, val) {
-          final heading =
-              choiceHeadings[key] ??
-              key; // defaults to key if heading not found
+          final heading = choiceHeadings[key] ?? key;
           if (val != null) formattedChoices[heading] = val;
         });
 
@@ -1399,7 +1404,7 @@ void _showItemSheet(
           'price': computeTotal() / qty,
           'qty': qty,
           'category': category,
-          'menuChoices': formattedChoices, // 🟢 NOW SAVES READABLE HEADINGS
+          'menuChoices': formattedChoices,
           'additionalOptions': selectedAddOns
               .map((i) => additionalOptions[i])
               .toList(),
@@ -1588,7 +1593,7 @@ void _showItemSheet(
                       if (hasMultipleSizes) ...[
                         if (displaySizes.isNotEmpty) ...[
                           _InlineOptionRow(
-                            title: 'Portion / Size',
+                            title: AppLanguage.getText('Portion / Size'),
                             values: displaySizes
                                 .map((s) => s['name'] as String)
                                 .toList(),
@@ -1602,7 +1607,10 @@ void _showItemSheet(
                           Padding(
                             padding: const EdgeInsets.only(bottom: 20),
                             child: Text(
-                              'Currently unavailable for $tableNo.',
+                              AppLanguage.getText(
+                                    'Currently unavailable for ',
+                                  ) +
+                                  '$tableNo.',
                               style: const TextStyle(
                                 color: Colors.redAccent,
                                 fontWeight: FontWeight.bold,
@@ -1613,7 +1621,9 @@ void _showItemSheet(
                       ],
 
                       if (isCombo && comboItemsList.isNotEmpty) ...[
-                        _SectionTitle('This Combo Includes'),
+                        _SectionTitle(
+                          AppLanguage.getText('This Combo Includes'),
+                        ),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -1664,10 +1674,10 @@ void _showItemSheet(
                                 const Divider(color: kMuted, height: 18),
                                 Row(
                                   children: [
-                                    const Expanded(
+                                    Expanded(
                                       child: Text(
-                                        'You Save',
-                                        style: TextStyle(
+                                        AppLanguage.getText('You Save'),
+                                        style: const TextStyle(
                                           color: kWhite,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 13,
@@ -1691,13 +1701,15 @@ void _showItemSheet(
                         const SizedBox(height: 20),
                       ],
 
-                      _SectionTitle('Note (optional)'),
+                      _SectionTitle(AppLanguage.getText('note_optional')),
                       TextField(
                         controller: noteCtrl,
                         maxLines: 2,
                         style: const TextStyle(color: kWhite),
                         decoration: InputDecoration(
-                          hintText: 'Add special instructions...',
+                          hintText: AppLanguage.getText(
+                            'Add special instructions...',
+                          ),
                           hintStyle: const TextStyle(color: kMuted),
                           filled: true,
                           fillColor: kWhite.withOpacity(0.06),
@@ -1738,9 +1750,9 @@ void _showItemSheet(
                       if (additionalOptions.isNotEmpty) ...[
                         Row(
                           children: [
-                            const Text(
-                              'Add-ons',
-                              style: TextStyle(
+                            Text(
+                              AppLanguage.getText('Add-ons'),
+                              style: const TextStyle(
                                 color: kWhite,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -1756,9 +1768,9 @@ void _showItemSheet(
                                 color: kMuted.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: const Text(
-                                'Optional',
-                                style: TextStyle(
+                              child: Text(
+                                AppLanguage.getText('Optional'),
+                                style: const TextStyle(
                                   color: kMuted,
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -1797,7 +1809,7 @@ void _showItemSheet(
                         const SizedBox(height: 24),
                       ],
 
-                      _SectionTitle('Quantity'),
+                      _SectionTitle(AppLanguage.getText('quantity')),
                       Row(
                         children: [
                           _QtyBtn(
@@ -1853,16 +1865,18 @@ void _showItemSheet(
                                 if (success && context.mounted) {
                                   Navigator.pop(ctx);
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Added to cart'),
+                                    SnackBar(
+                                      content: Text(
+                                        AppLanguage.getText('added_to_cart'),
+                                      ),
                                       backgroundColor: kPrimary,
                                     ),
                                   );
                                 }
                               },
-                              child: const Text(
-                                'Add to Cart',
-                                style: TextStyle(
+                              child: Text(
+                                AppLanguage.getText('add_to_cart'),
+                                style: const TextStyle(
                                   color: kWhite,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -1900,9 +1914,9 @@ void _showItemSheet(
                                     );
                                 }
                               },
-                              child: const Text(
-                                'Buy Now',
-                                style: TextStyle(
+                              child: Text(
+                                AppLanguage.getText('buy_now'),
+                                style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                 ),
@@ -1926,8 +1940,7 @@ void _showItemSheet(
 class _MenuChoicesSection extends StatelessWidget {
   final List<String> choiceIds;
   final Map<String, String?> selectedChoice;
-  final void Function(String groupId, String heading, String val)
-  onChanged; // 🟢 UPDATED
+  final void Function(String groupId, String heading, String val) onChanged;
   const _MenuChoicesSection({
     required this.choiceIds,
     required this.selectedChoice,
@@ -1964,7 +1977,6 @@ class _MenuChoicesSection extends StatelessWidget {
                 title: (data['heading'] as String?) ?? '',
                 values: List<String>.from(data['options'] ?? []),
                 selected: selectedChoice[doc.id] ?? '',
-                // 🟢 NOW PASSES BACK BOTH DOC.ID AND THE READABLE HEADING
                 onChanged: (val) =>
                     onChanged(doc.id, data['heading'] ?? doc.id, val),
                 showRequired: true,
@@ -2014,9 +2026,9 @@ class _AddOnsMultiSelectField extends StatelessWidget {
           children: [
             Expanded(
               child: selected.isEmpty
-                  ? const Text(
-                      'Choose add-ons...',
-                      style: TextStyle(color: kMuted),
+                  ? Text(
+                      AppLanguage.getText('Choose add-ons...'),
+                      style: const TextStyle(color: kMuted),
                     )
                   : Wrap(
                       spacing: 8,
@@ -2118,7 +2130,7 @@ class _AddOnsMultiSelectDialogState extends State<_AddOnsMultiSelectDialog> {
             TextField(
               style: const TextStyle(color: kWhite),
               decoration: InputDecoration(
-                hintText: 'Search Add-ons...',
+                hintText: AppLanguage.getText('Search Add-ons...'),
                 hintStyle: const TextStyle(color: kMuted),
                 prefixIcon: const Icon(Icons.search, color: kMuted),
                 filled: true,
@@ -2133,10 +2145,10 @@ class _AddOnsMultiSelectDialogState extends State<_AddOnsMultiSelectDialog> {
             const SizedBox(height: 16),
             Expanded(
               child: filteredOptions.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'No add-ons found',
-                        style: TextStyle(color: kMuted),
+                        AppLanguage.getText('No add-ons found'),
+                        style: const TextStyle(color: kMuted),
                       ),
                     )
                   : RawScrollbar(
@@ -2170,7 +2182,7 @@ class _AddOnsMultiSelectDialogState extends State<_AddOnsMultiSelectDialog> {
                             subtitle: Text(
                               optPrice > 0
                                   ? '+CHF ${optPrice.toStringAsFixed(2)}'
-                                  : 'Free',
+                                  : AppLanguage.getText('Free'),
                               style: const TextStyle(
                                 color: kMuted,
                                 fontSize: 12,
@@ -2203,9 +2215,12 @@ class _AddOnsMultiSelectDialogState extends State<_AddOnsMultiSelectDialog> {
                   ),
                 ),
                 onPressed: () => Navigator.pop(context, _tempSelected),
-                child: const Text(
-                  'Done',
-                  style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+                child: Text(
+                  AppLanguage.getText('Done'),
+                  style: const TextStyle(
+                    color: kWhite,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -2283,7 +2298,7 @@ class _InlineAddOnsSection extends StatelessWidget {
                   Text(
                     optPrice > 0
                         ? '+CHF ${optPrice.toStringAsFixed(2)}'
-                        : 'Free',
+                        : AppLanguage.getText('Free'),
                     style: TextStyle(
                       color: isSelected ? kPrimary : kMuted,
                       fontSize: 14,
@@ -2364,9 +2379,9 @@ class _InlineOptionRow extends StatelessWidget {
                     color: kPrimary.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text(
-                    'Required',
-                    style: TextStyle(
+                  child: Text(
+                    AppLanguage.getText('Required'),
+                    style: const TextStyle(
                       color: kPrimary,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,

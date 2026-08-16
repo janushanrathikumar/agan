@@ -51,7 +51,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleDineIn(BuildContext context) async {
-    // Step 1: Pick Table Number based on Role Rules
     final tableNo = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -61,7 +60,6 @@ class _HomePageState extends State<HomePage> {
 
     if (tableNo == null || !context.mounted) return;
 
-    // Step 2: Prompt for Chair Number (Customer or Cashier)
     final chairNo = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -70,7 +68,6 @@ class _HomePageState extends State<HomePage> {
 
     if (chairNo == null || !context.mounted) return;
 
-    // Step 3: Save Table No and Chair No to Firestore
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await FirebaseFirestore.instance
@@ -85,7 +82,8 @@ class _HomePageState extends State<HomePage> {
     }
 
     if (context.mounted) {
-      final displayTable = 'Table $tableNo (Chair $chairNo)';
+      final displayTable =
+          '${AppLanguage.getText("Table")} $tableNo (${AppLanguage.getText("Chair")} $chairNo)';
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => MenuPage(tableNo: displayTable)),
@@ -109,7 +107,9 @@ class _HomePageState extends State<HomePage> {
     if (!context.mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const MenuPage(tableNo: 'Take-Away')),
+      MaterialPageRoute(
+        builder: (_) => const MenuPage(tableNo: 'Take-Away'),
+      ), // Internal state representation
     );
   }
 
@@ -162,9 +162,9 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Special Offers & Combos',
-                      style: TextStyle(
+                    Text(
+                      AppLanguage.getText('Special Offers & Combos'),
+                      style: const TextStyle(
                         color: kWhite,
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
@@ -173,7 +173,9 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "Today's best deals and combos for you",
+                      AppLanguage.getText(
+                        "Today's best deals and combos for you",
+                      ),
                       style: TextStyle(
                         color: kMuted.withOpacity(0.8),
                         fontSize: 13,
@@ -196,7 +198,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ── Role-Based Table Picker Sheet ───────────────────────────────────────────
 class _TablePickerSheet extends StatefulWidget {
   final String userRole;
   const _TablePickerSheet({required this.userRole});
@@ -211,7 +212,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   final _typeCtrl = TextEditingController();
   String? _scannedValue;
 
-  // True if user is Cashier, Waiter, or Admin
   bool get isStaff =>
       widget.userRole == 'cashier' ||
       widget.userRole == 'admin' ||
@@ -259,9 +259,9 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
-            const Text(
-              'Select Table',
-              style: TextStyle(
+            Text(
+              AppLanguage.getText('Select Table'),
+              style: const TextStyle(
                 color: kWhite,
                 fontWeight: FontWeight.w800,
                 fontSize: 22,
@@ -270,14 +270,15 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             const SizedBox(height: 8),
             Text(
               isStaff
-                  ? 'Scan the table QR code or type table number manually'
-                  : 'Scan the table QR code to proceed',
+                  ? AppLanguage.getText(
+                      'Scan the table QR code or type table number manually',
+                    )
+                  : AppLanguage.getText('Scan the table QR code to proceed'),
               style: const TextStyle(color: kMuted, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
 
-            // Tabs for Cashier/Staff
             if (isStaff) ...[
               Container(
                 decoration: BoxDecoration(
@@ -295,9 +296,9 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
                   unselectedLabelColor: kMuted,
                   dividerColor: Colors.transparent,
                   labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                  tabs: const [
-                    Tab(text: 'Scan QR'),
-                    Tab(text: 'Type No.'),
+                  tabs: [
+                    Tab(text: AppLanguage.getText('Scan QR')),
+                    Tab(text: AppLanguage.getText('Type No.')),
                   ],
                 ),
               ),
@@ -311,7 +312,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
                       controller: _tab,
                       children: [_buildQrTab(), _buildTypeTab()],
                     )
-                  : _buildQrTab(), // Customers are forced to Scan
+                  : _buildQrTab(),
             ),
           ],
         ),
@@ -331,7 +332,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
           ),
           const SizedBox(height: 16),
           Text(
-            'Table: $_scannedValue',
+            '${AppLanguage.getText("Table:")} $_scannedValue',
             style: const TextStyle(
               color: kWhite,
               fontSize: 24,
@@ -350,9 +351,9 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
                 ),
               ),
               onPressed: () => _confirm(_scannedValue!),
-              child: const Text(
-                'Next (Select Chair)',
-                style: TextStyle(
+              child: Text(
+                AppLanguage.getText('Next (Select Chair)'),
+                style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                   color: kWhite,
@@ -362,7 +363,10 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
           ),
           TextButton(
             onPressed: () => setState(() => _scannedValue = null),
-            child: const Text('Scan again', style: TextStyle(color: kMuted)),
+            child: Text(
+              AppLanguage.getText('Scan again'),
+              style: const TextStyle(color: kMuted),
+            ),
           ),
         ],
       );
@@ -392,7 +396,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
           ),
           textAlign: TextAlign.center,
           decoration: InputDecoration(
-            hintText: 'e.g. Table 5 or T5',
+            hintText: AppLanguage.getText('e.g. Table 5 or T5'),
             hintStyle: TextStyle(
               color: kMuted.withOpacity(0.5),
               fontWeight: FontWeight.normal,
@@ -425,9 +429,9 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
               final val = _typeCtrl.text.trim();
               if (val.isNotEmpty) _confirm(val);
             },
-            child: const Text(
-              'Next (Select Chair)',
-              style: TextStyle(
+            child: Text(
+              AppLanguage.getText('Next (Select Chair)'),
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
                 color: kWhite,
@@ -440,8 +444,6 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   }
 }
 
-// ── Role-Based Chair Picker Dialog ──────────────────────────────────────────
-// ── Text-Only Chair Picker Dialog ──────────────────────────────────────────
 class _ChairPickerDialog extends StatefulWidget {
   final String userRole;
   const _ChairPickerDialog({required this.userRole});
@@ -466,18 +468,20 @@ class _ChairPickerDialogState extends State<_ChairPickerDialog> {
     return AlertDialog(
       backgroundColor: kCardBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: const Text(
-        'Select Chair / Seat',
-        style: TextStyle(color: kWhite, fontWeight: FontWeight.bold),
+      title: Text(
+        AppLanguage.getText('Select Chair / Seat'),
+        style: const TextStyle(color: kWhite, fontWeight: FontWeight.bold),
         textAlign: TextAlign.center,
       ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Enter your chair number(s) below (e.g. 1, 2, 3)',
-              style: TextStyle(color: kMuted, fontSize: 13),
+            Text(
+              AppLanguage.getText(
+                'Enter your chair number(s) below (e.g. 1, 2, 3)',
+              ),
+              style: const TextStyle(color: kMuted, fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
@@ -491,7 +495,7 @@ class _ChairPickerDialogState extends State<_ChairPickerDialog> {
               ),
               textAlign: TextAlign.center,
               decoration: InputDecoration(
-                hintText: 'e.g. 1, 2 or 1, 2, 3',
+                hintText: AppLanguage.getText('e.g. 1, 2 or 1, 2, 3'),
                 hintStyle: TextStyle(
                   color: kMuted.withOpacity(0.5),
                   fontWeight: FontWeight.normal,
@@ -524,9 +528,9 @@ class _ChairPickerDialogState extends State<_ChairPickerDialog> {
                   final val = _chairCtrl.text.trim();
                   if (val.isNotEmpty) _confirm(val);
                 },
-                child: const Text(
-                  'Go to Menu',
-                  style: TextStyle(
+                child: Text(
+                  AppLanguage.getText('Go to Menu'),
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                     color: kWhite,
@@ -541,7 +545,6 @@ class _ChairPickerDialogState extends State<_ChairPickerDialog> {
   }
 }
 
-// ── Floating Cart Button ─────────────────────────────────────────────────────
 class _CartFab extends StatelessWidget {
   final void Function(String uid, String? tableNo) onTap;
   const _CartFab({required this.onTap});
@@ -596,7 +599,7 @@ class _CartFab extends StatelessWidget {
                     .get();
                 final tableNo = delivDoc.exists
                     ? (delivDoc.data()?['delivery_method'] == 'Take_Away'
-                          ? 'Take-Away'
+                          ? 'Take-Away' // internally handles take away
                           : delivDoc.data()?['table_no'] as String?)
                     : null;
                 if (context.mounted) onTap(user.uid, tableNo);
@@ -621,9 +624,9 @@ class _CartFab extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const Text(
-                        'View Cart ',
-                        style: TextStyle(
+                      Text(
+                        AppLanguage.getText('View Cart '),
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
                         ),
@@ -647,7 +650,6 @@ class _CartFab extends StatelessWidget {
   }
 }
 
-// ── Promo Carousel & Modals ─────────────────────────────────────────────────
 class _PromoCarousel extends StatefulWidget {
   final VoidCallback onDineIn;
   final VoidCallback onTakeAway;
@@ -704,9 +706,9 @@ class _PromoCarouselState extends State<_PromoCarousel> {
   ) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please login first')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLanguage.getText('Please login first'))),
+      );
       return;
     }
     final hasMethod = await _hasSelectedMethod(context);
@@ -858,9 +860,9 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                               child: Row(
                                 children: [
                                   if (isCombo)
-                                    const _Badge(
-                                      label: 'COMBO',
-                                      color: Color(0xFFFF8C00),
+                                    _Badge(
+                                      label: AppLanguage.getText('Combos'),
+                                      color: const Color(0xFFFF8C00),
                                       icon: Icons.fastfood_rounded,
                                     ),
                                 ],
@@ -1117,9 +1119,9 @@ class _MethodPickerSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
-            const Text(
-              'How would you like to order?',
-              style: TextStyle(
+            Text(
+              AppLanguage.getText('How would you like to order?'),
+              style: const TextStyle(
                 color: kWhite,
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
@@ -1127,7 +1129,7 @@ class _MethodPickerSheet extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Please select before adding to cart',
+              AppLanguage.getText('Please select before adding to cart'),
               style: TextStyle(color: kMuted.withOpacity(0.8), fontSize: 14),
             ),
             const SizedBox(height: 32),
@@ -1135,7 +1137,7 @@ class _MethodPickerSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: _BigActionButton(
-                    label: 'Dine-In',
+                    label: AppLanguage.getText('dine_in'),
                     icon: Icons.storefront_rounded,
                     isPrimary: true,
                     onTap: onDineIn,
@@ -1144,7 +1146,7 @@ class _MethodPickerSheet extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: _BigActionButton(
-                    label: 'Take-Away',
+                    label: AppLanguage.getText('take_away'),
                     icon: Icons.takeout_dining_rounded,
                     isPrimary: false,
                     onTap: onTakeAway,
@@ -1172,23 +1174,27 @@ class _EmptyPromo extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: kPrimary.withOpacity(0.2)),
         ),
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.restaurant_menu_rounded, color: kPrimary, size: 48),
-            SizedBox(height: 16),
+            const Icon(
+              Icons.restaurant_menu_rounded,
+              color: kPrimary,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
             Text(
-              'Welcome to our Restaurant!',
-              style: TextStyle(
+              AppLanguage.getText('Welcome to our Restaurant!'),
+              style: const TextStyle(
                 color: kWhite,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
-              'Check out our menu for delicious meals.',
-              style: TextStyle(color: kMuted, fontSize: 14),
+              AppLanguage.getText('Check out our menu for delicious meals.'),
+              style: const TextStyle(color: kMuted, fontSize: 14),
             ),
           ],
         ),
@@ -1292,17 +1298,17 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Added to cart!'),
+          SnackBar(
+            content: Text(AppLanguage.getText('added_to_cart')),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${AppLanguage.getText("Error:")} $e')),
+        );
       }
     }
   }
@@ -1391,9 +1397,9 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                   ),
                   const SizedBox(height: 24),
                   if (hasMultipleSizes && sizes.isNotEmpty) ...[
-                    const Text(
-                      'Select Portion / Size',
-                      style: TextStyle(
+                    Text(
+                      AppLanguage.getText('Select Portion / Size'),
+                      style: const TextStyle(
                         color: kWhite,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -1434,9 +1440,9 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                     ),
                     const SizedBox(height: 24),
                   ],
-                  const Text(
-                    'Note (optional)',
-                    style: TextStyle(
+                  Text(
+                    AppLanguage.getText('note_optional'),
+                    style: const TextStyle(
                       color: kWhite,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -1447,7 +1453,7 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                     controller: _noteCtrl,
                     style: const TextStyle(color: kWhite),
                     decoration: InputDecoration(
-                      hintText: 'Any special requests...',
+                      hintText: AppLanguage.getText('Any special requests...'),
                       hintStyle: const TextStyle(color: kMuted),
                       filled: true,
                       fillColor: kBg,
@@ -1459,7 +1465,10 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                   ),
                   const SizedBox(height: 24),
                   if (choices.isNotEmpty) ...[
-                    _SectionLabel('Choose Option', required: true),
+                    _SectionLabel(
+                      AppLanguage.getText('Choose Option'),
+                      required: true,
+                    ),
                     const SizedBox(height: 12),
                     Container(
                       decoration: BoxDecoration(
@@ -1489,7 +1498,10 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                     const SizedBox(height: 24),
                   ],
                   if (addons.isNotEmpty) ...[
-                    _SectionLabel('Add-ons', required: false),
+                    _SectionLabel(
+                      AppLanguage.getText('Add-ons'),
+                      required: false,
+                    ),
                     const SizedBox(height: 12),
                     Container(
                       decoration: BoxDecoration(
@@ -1557,9 +1569,9 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Quantity',
-                        style: TextStyle(
+                      Text(
+                        AppLanguage.getText('quantity'),
+                        style: const TextStyle(
                           color: kMuted,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -1613,9 +1625,9 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                               ),
                             ),
                             onPressed: () => _addToCart(),
-                            child: const Text(
-                              'Add to Cart',
-                              style: TextStyle(
+                            child: Text(
+                              AppLanguage.getText('add_to_cart'),
+                              style: const TextStyle(
                                 color: kWhite,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -1636,9 +1648,9 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                               ),
                             ),
                             onPressed: () => _addToCart(goToCheckout: true),
-                            child: const Text(
-                              'Buy Now',
-                              style: TextStyle(
+                            child: Text(
+                              AppLanguage.getText('buy_now'),
+                              style: const TextStyle(
                                 color: kWhite,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -1686,7 +1698,9 @@ class _SectionLabel extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            required ? 'Required' : 'Optional',
+            required
+                ? AppLanguage.getText('Required')
+                : AppLanguage.getText('Optional'),
             style: TextStyle(
               color: required ? kPrimary : kMuted,
               fontSize: 11,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import '../language.dart';
 
 // Web Image CORS error avoidance imports
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -120,7 +121,6 @@ class _PaymentPageState extends State<PaymentPage> {
         debugPrint('Failed to fetch user role/username: $e');
       }
 
-      // 1. Generate Custom ID
       final counterRef = firestore1.collection('AppConfig').doc('OrderCounter');
       int nextIdNumber = 10000;
       await firestore1.runTransaction((transaction) async {
@@ -135,7 +135,6 @@ class _PaymentPageState extends State<PaymentPage> {
 
       String customOrderId = 'A$nextIdNumber';
 
-      // 2. Prepare items list
       final itemsList = cartDocs.map((d) {
         final m = d.data() as Map<String, dynamic>;
         final kind = (m['kind'] as String?) ?? 'food';
@@ -149,7 +148,7 @@ class _PaymentPageState extends State<PaymentPage> {
           'category': m['category'] ?? '',
           'note': m['note'] ?? '',
           'extraNote': m['extraNote'],
-          'size': m['size'] ?? '', // SAVING SIZE TO DB
+          'size': m['size'] ?? '',
           'additionalOptions': m['additionalOptions'] ?? [],
           'menuChoices': m['menuChoices'] ?? {},
           'timestamp': (m['createdAt'] is Timestamp)
@@ -165,7 +164,6 @@ class _PaymentPageState extends State<PaymentPage> {
         return itemMap;
       }).toList();
 
-      // 3. Prepare Secondary DB structure (BillOrder)
       final String orderDeliveryMethod =
           (deliveryData['delivery_method'] as String?) ?? 'Take_Away';
       final double serviceChargeRate = orderDeliveryMethod == 'Take_Away'
@@ -186,7 +184,7 @@ class _PaymentPageState extends State<PaymentPage> {
           'hotelId': 'jKuRDFBYEfDUzLdROtoM',
           'userId': user.uid,
           'options': m['additionalOptions'],
-          'size': m['size'], // SAVING SIZE TO SECONDARY DB
+          'size': m['size'],
         };
       }).toList();
 
@@ -222,7 +220,6 @@ class _PaymentPageState extends State<PaymentPage> {
         },
       };
 
-      // 4. Save to databases
       await Future.wait([
         firestore1.collection('orders').doc(customOrderId).set({
           'order_id': customOrderId,
@@ -243,7 +240,6 @@ class _PaymentPageState extends State<PaymentPage> {
         firestore2.collection('BillOrder').doc(customOrderId).set(orderData2),
       ]);
 
-      // 5. Cleanup
       final batch = firestore1.batch();
       for (final doc in cartDocs) batch.delete(doc.reference);
       batch.delete(firestore1.collection('food_delivery').doc(user.uid));
@@ -274,10 +270,10 @@ class _PaymentPageState extends State<PaymentPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Order Placed Successfully!',
+                Text(
+                  AppLanguage.getText('Order Placed Successfully!'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: kWhite,
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
@@ -294,12 +290,12 @@ class _PaymentPageState extends State<PaymentPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'User: $username ($role)',
+                  '${AppLanguage.getText("User:")} $username ($role)',
                   style: const TextStyle(color: kMuted, fontSize: 13),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Total: CHF ${finalTotal.toStringAsFixed(2)}',
+                  '${AppLanguage.getText("Total:")} CHF ${finalTotal.toStringAsFixed(2)}',
                   style: const TextStyle(color: kMuted, fontSize: 14),
                 ),
               ],
@@ -318,9 +314,9 @@ class _PaymentPageState extends State<PaymentPage> {
                     ),
                   ),
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text(
-                    'Done',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  child: Text(
+                    AppLanguage.getText('Done'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -337,7 +333,7 @@ class _PaymentPageState extends State<PaymentPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Order failed: $e'),
+            content: Text('${AppLanguage.getText("Error:")} $e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -365,9 +361,9 @@ class _PaymentPageState extends State<PaymentPage> {
       appBar: AppBar(
         backgroundColor: kBg,
         foregroundColor: kWhite,
-        title: const Text(
-          'Order Summary',
-          style: TextStyle(
+        title: Text(
+          AppLanguage.getText('Order Summary'),
+          style: const TextStyle(
             color: kWhite,
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -412,7 +408,7 @@ class _PaymentPageState extends State<PaymentPage> {
               final tableNo = delivery['table_no'] ?? 'N/A';
               final chairNo = delivery['chair_no'] ?? '';
               final displayTable = chairNo.toString().isNotEmpty
-                  ? '$tableNo (Chair $chairNo)'
+                  ? '$tableNo (${AppLanguage.getText("Chair")} $chairNo)'
                   : tableNo.toString();
 
               return StreamBuilder<QuerySnapshot>(
@@ -424,10 +420,10 @@ class _PaymentPageState extends State<PaymentPage> {
                     );
                   final docs = snap.data!.docs;
                   if (docs.isEmpty)
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'No items found in cart',
-                        style: TextStyle(color: kMuted, fontSize: 16),
+                        AppLanguage.getText('No items found in cart'),
+                        style: const TextStyle(color: kMuted, fontSize: 16),
                       ),
                     );
 
@@ -463,9 +459,11 @@ class _PaymentPageState extends State<PaymentPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
-                                      'Customer & Dining Details',
-                                      style: TextStyle(
+                                    Text(
+                                      AppLanguage.getText(
+                                        'Customer & Dining Details',
+                                      ),
+                                      style: const TextStyle(
                                         color: kPrimary,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
@@ -474,30 +472,34 @@ class _PaymentPageState extends State<PaymentPage> {
                                     const SizedBox(height: 12),
                                     _infoRow(
                                       Icons.person,
-                                      'Username',
+                                      AppLanguage.getText('Username'),
                                       username,
                                     ),
                                     const SizedBox(height: 8),
                                     _infoRow(
                                       Icons.admin_panel_settings,
-                                      'Role',
+                                      AppLanguage.getText('Role'),
                                       role,
                                     ),
                                     const SizedBox(height: 8),
-                                    _infoRow(Icons.dining, 'Method', method),
+                                    _infoRow(
+                                      Icons.dining,
+                                      AppLanguage.getText('Method'),
+                                      method,
+                                    ),
                                     const SizedBox(height: 8),
                                     _infoRow(
                                       Icons.table_restaurant,
-                                      'Table No',
+                                      AppLanguage.getText('Table No'),
                                       displayTable,
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(height: 24),
-                              const Text(
-                                'Your Items',
-                                style: TextStyle(
+                              Text(
+                                AppLanguage.getText('Your Items'),
+                                style: const TextStyle(
                                   color: kWhite,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
@@ -574,12 +576,11 @@ class _PaymentPageState extends State<PaymentPage> {
                                                 ),
                                               ),
 
-                                              // 🟢 SHOWING SIZE HERE
                                               if (size.isNotEmpty &&
                                                   size != 'null') ...[
                                                 const SizedBox(height: 4),
                                                 Text(
-                                                  '📏 Size: $size',
+                                                  '📏 ${AppLanguage.getText("Size")}: $size',
                                                   style: const TextStyle(
                                                     color: kMuted,
                                                     fontSize: 12,
@@ -587,7 +588,6 @@ class _PaymentPageState extends State<PaymentPage> {
                                                 ),
                                               ],
 
-                                              // 🟢 SHOWING READABLE CHOICES
                                               if (choices.isNotEmpty) ...[
                                                 const SizedBox(height: 4),
                                                 Text(
@@ -599,12 +599,11 @@ class _PaymentPageState extends State<PaymentPage> {
                                                 ),
                                               ],
 
-                                              // 🟢 SHOWING ADD-ONS WITH PRICES
                                               if (addOns.isNotEmpty) ...[
                                                 const SizedBox(height: 4),
-                                                const Text(
-                                                  '➕ Extras:',
-                                                  style: TextStyle(
+                                                Text(
+                                                  '➕ ${AppLanguage.getText("Extras:")}',
+                                                  style: const TextStyle(
                                                     color: kMuted,
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
@@ -636,7 +635,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                               if (note.isNotEmpty) ...[
                                                 const SizedBox(height: 4),
                                                 Text(
-                                                  note,
+                                                  '📝 ${AppLanguage.getText("Note:")} $note',
                                                   style: const TextStyle(
                                                     color: kMuted,
                                                     fontSize: 12,
@@ -698,10 +697,13 @@ class _PaymentPageState extends State<PaymentPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _chargeRow('Subtotal', total),
+                                    _chargeRow(
+                                      AppLanguage.getText('Subtotal'),
+                                      total,
+                                    ),
                                     const SizedBox(height: 6),
                                     _chargeRow(
-                                      'Service Charge ( ${(serviceChargeRatePreview * 100).toStringAsFixed(1)}%)',
+                                      '${AppLanguage.getText("Service Charge")} (${_methodLabel(method)} • ${(serviceChargeRatePreview * 100).toStringAsFixed(1)}%)',
                                       serviceChargePreview,
                                     ),
                                     const Divider(
@@ -710,7 +712,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                       thickness: 0.2,
                                     ),
                                     _chargeRow(
-                                      'Grand Total',
+                                      AppLanguage.getText('Grand Total'),
                                       grandTotalPreview,
                                       isBold: true,
                                     ),
@@ -736,9 +738,12 @@ class _PaymentPageState extends State<PaymentPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text(
-                                  "Total Payment",
-                                  style: TextStyle(color: kMuted, fontSize: 13),
+                                Text(
+                                  AppLanguage.getText("Total Payment"),
+                                  style: const TextStyle(
+                                    color: kMuted,
+                                    fontSize: 13,
+                                  ),
                                 ),
                                 Text(
                                   "CHF ${grandTotalPreview.toStringAsFixed(2)}",
@@ -773,9 +778,9 @@ class _PaymentPageState extends State<PaymentPage> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text(
-                                      "Confirm Order",
-                                      style: TextStyle(
+                                  : Text(
+                                      AppLanguage.getText("Confirm Order"),
+                                      style: const TextStyle(
                                         color: kWhite,
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -816,8 +821,9 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  String _methodLabel(String method) =>
-      method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
+  String _methodLabel(String method) => method == 'Take_Away'
+      ? AppLanguage.getText('Take-Away')
+      : AppLanguage.getText('Dine-In');
 
   Widget _chargeRow(String label, num value, {bool isBold = false}) {
     return Row(

@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../language.dart';
 
 // --- Modern Palette ---
 const kPrimary = Color(0xFFB59410);
@@ -58,8 +59,8 @@ class MyOrdersPage extends StatelessWidget {
             ),
             Center(
               child: Text(
-                'Please login to view orders.',
-                style: TextStyle(
+                AppLanguage.getText('Please login to view orders.'),
+                style: const TextStyle(
                   color: kWhite,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -99,9 +100,9 @@ class MyOrdersPage extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
                   child: Row(
                     children: [
-                      const Text(
-                        'My Orders',
-                        style: TextStyle(
+                      Text(
+                        AppLanguage.getText('My Orders'),
+                        style: const TextStyle(
                           color: kWhite,
                           fontSize: 26,
                           fontWeight: FontWeight.w800,
@@ -125,7 +126,7 @@ class MyOrdersPage extends StatelessWidget {
                       if (snap.hasError) {
                         return Center(
                           child: Text(
-                            'Error: ${snap.error}',
+                            '${AppLanguage.getText("Error:")} ${snap.error}',
                             style: const TextStyle(color: Colors.redAccent),
                           ),
                         );
@@ -164,9 +165,9 @@ class MyOrdersPage extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              const Text(
-                                'No orders found',
-                                style: TextStyle(
+                              Text(
+                                AppLanguage.getText('No orders found'),
+                                style: const TextStyle(
                                   color: kMuted,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
@@ -194,14 +195,13 @@ class MyOrdersPage extends StatelessWidget {
                               (data['total'] as num?)?.toDouble() ?? 0.0;
                           final method = data['delivery_method'] ?? 'Take_Away';
 
-                          // 🟢 Extract table_no and chair_no
                           final String rawTableNo = (data['table_no'] ?? 'N/A')
                               .toString();
                           final String rawChairNo = (data['chair_no'] ?? '')
                               .toString();
 
                           final String displayTable = rawChairNo.isNotEmpty
-                              ? '$rawTableNo (Chair $rawChairNo)'
+                              ? '$rawTableNo (${AppLanguage.getText("Chair")} $rawChairNo)'
                               : rawTableNo;
 
                           final num subtotal =
@@ -219,7 +219,6 @@ class MyOrdersPage extends StatelessWidget {
                           final itemsList =
                               data['items'] as List<dynamic>? ?? [];
 
-                          // ── Glassmorphism Order Card ──
                           return ClipRRect(
                             borderRadius: BorderRadius.circular(24),
                             child: BackdropFilter(
@@ -281,7 +280,9 @@ class MyOrdersPage extends StatelessWidget {
                                             ),
                                           ),
                                           child: Text(
-                                            status.toUpperCase(),
+                                            AppLanguage.getText(
+                                              status,
+                                            ).toUpperCase(),
                                             style: TextStyle(
                                               color: _getStatusColor(status),
                                               fontSize: 11,
@@ -318,29 +319,31 @@ class MyOrdersPage extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 12),
 
-                                      // Delivery & Payment details
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
                                         children: [
                                           _detailColumn(
-                                            'Method',
+                                            AppLanguage.getText('Method'),
                                             method == 'Take_Away'
-                                                ? 'Take-Away'
-                                                : 'Dine-In',
+                                                ? AppLanguage.getText(
+                                                    'Take-Away',
+                                                  )
+                                                : AppLanguage.getText(
+                                                    'Dine-In',
+                                                  ),
                                           ),
                                           if (method.toLowerCase() !=
                                                   'take_away' &&
                                               rawTableNo != 'no')
                                             _detailColumn(
-                                              'Table No',
+                                              AppLanguage.getText('Table No'),
                                               displayTable,
                                             ),
                                         ],
                                       ),
                                       const SizedBox(height: 16),
 
-                                      // Financial Breakdown
                                       Container(
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
@@ -359,9 +362,11 @@ class MyOrdersPage extends StatelessWidget {
                                                   MainAxisAlignment
                                                       .spaceBetween,
                                               children: [
-                                                const Text(
-                                                  'Subtotal',
-                                                  style: TextStyle(
+                                                Text(
+                                                  AppLanguage.getText(
+                                                    'Subtotal',
+                                                  ),
+                                                  style: const TextStyle(
                                                     color: kMuted,
                                                     fontSize: 13,
                                                   ),
@@ -384,7 +389,7 @@ class MyOrdersPage extends StatelessWidget {
                                                         .spaceBetween,
                                                 children: [
                                                   Text(
-                                                    'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
+                                                    '${AppLanguage.getText("Service Charge")} (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
                                                     style: const TextStyle(
                                                       color: kMuted,
                                                       fontSize: 13,
@@ -415,9 +420,9 @@ class MyOrdersPage extends StatelessWidget {
                                                   MainAxisAlignment
                                                       .spaceBetween,
                                               children: [
-                                                const Text(
-                                                  'Total',
-                                                  style: TextStyle(
+                                                Text(
+                                                  AppLanguage.getText('Total'),
+                                                  style: const TextStyle(
                                                     color: kWhite,
                                                     fontSize: 14,
                                                     fontWeight: FontWeight.bold,
@@ -438,11 +443,13 @@ class MyOrdersPage extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 20),
 
-                                      const Align(
+                                      Align(
                                         alignment: Alignment.centerLeft,
                                         child: Text(
-                                          'Items Breakdown',
-                                          style: TextStyle(
+                                          AppLanguage.getText(
+                                            'Items Breakdown',
+                                          ),
+                                          style: const TextStyle(
                                             color: kWhite,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
@@ -451,7 +458,6 @@ class MyOrdersPage extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 12),
 
-                                      // Items List
                                       ...itemsList.map((item) {
                                         final itemMap =
                                             item as Map<String, dynamic>;
@@ -523,7 +529,6 @@ class MyOrdersPage extends StatelessWidget {
                                                 ],
                                               ),
 
-                                              // 🟢 SIZE UI
                                               if (iSize.isNotEmpty &&
                                                   iSize != 'null')
                                                 Padding(
@@ -532,7 +537,7 @@ class MyOrdersPage extends StatelessWidget {
                                                         top: 4.0,
                                                       ),
                                                   child: Text(
-                                                    '📏 Size: $iSize',
+                                                    '📏 ${AppLanguage.getText("Size")}: $iSize',
                                                     style: const TextStyle(
                                                       color: kMuted,
                                                       fontSize: 12,
@@ -540,7 +545,6 @@ class MyOrdersPage extends StatelessWidget {
                                                   ),
                                                 ),
 
-                                              // 🟢 READABLE CHOICES UI
                                               if (iMenuChoices.isNotEmpty)
                                                 Padding(
                                                   padding:
@@ -565,7 +569,7 @@ class MyOrdersPage extends StatelessWidget {
                                                         top: 4.0,
                                                       ),
                                                   child: Text(
-                                                    '☕ $iType • 🍬 Sugar: $iSugar',
+                                                    '☕ $iType • 🍬 ${AppLanguage.getText("sugar").toLowerCase()}: $iSugar',
                                                     style: const TextStyle(
                                                       color: kMuted,
                                                       fontSize: 12,
@@ -583,7 +587,7 @@ class MyOrdersPage extends StatelessWidget {
                                                         top: 4.0,
                                                       ),
                                                   child: Text(
-                                                    '📝 Note: $iExtraNote',
+                                                    '📝 ${AppLanguage.getText("Note:")} $iExtraNote',
                                                     style: const TextStyle(
                                                       color: Colors.amberAccent,
                                                       fontSize: 12,
@@ -591,7 +595,6 @@ class MyOrdersPage extends StatelessWidget {
                                                   ),
                                                 ),
 
-                                              // 🟢 ADD-ONS UI WITH PRICES
                                               if (iAddOptions.isNotEmpty)
                                                 Padding(
                                                   padding:
@@ -603,9 +606,9 @@ class MyOrdersPage extends StatelessWidget {
                                                         CrossAxisAlignment
                                                             .start,
                                                     children: [
-                                                      const Text(
-                                                        '➕ Extras:',
-                                                        style: TextStyle(
+                                                      Text(
+                                                        '➕ ${AppLanguage.getText("Extras:")}',
+                                                        style: const TextStyle(
                                                           color: kMuted,
                                                           fontSize: 11,
                                                           fontWeight:
@@ -669,53 +672,6 @@ class MyOrdersPage extends StatelessWidget {
                                           ),
                                         );
                                       }),
-
-                                      const SizedBox(height: 16),
-
-                                      // SizedBox(
-                                      //   width: double.infinity,
-                                      //   child: OutlinedButton.icon(
-                                      //     style: OutlinedButton.styleFrom(
-                                      //       foregroundColor: kWhite,
-                                      //       side: const BorderSide(
-                                      //         color: kPrimary,
-                                      //         width: 1.5,
-                                      //       ),
-                                      //       padding: const EdgeInsets.symmetric(
-                                      //         vertical: 14,
-                                      //       ),
-                                      //       shape: RoundedRectangleBorder(
-                                      //         borderRadius:
-                                      //             BorderRadius.circular(14),
-                                      //       ),
-                                      //     ),
-                                      //     icon: const Icon(
-                                      //       Icons.receipt_long,
-                                      //       color: kPrimary,
-                                      //     ),
-                                      //     label: const Text(
-                                      //       'View Bill',
-                                      //       style: TextStyle(
-                                      //         fontWeight: FontWeight.bold,
-                                      //         fontSize: 15,
-                                      //         letterSpacing: 0.5,
-                                      //       ),
-                                      //     ),
-                                      //     onPressed: () {
-                                      //       ScaffoldMessenger.of(
-                                      //         context,
-                                      //       ).showSnackBar(
-                                      //         SnackBar(
-                                      //           content: const Text(
-                                      //             'Opening bill...',
-                                      //           ),
-                                      //           behavior:
-                                      //               SnackBarBehavior.floating,
-                                      //         ),
-                                      //       );
-                                      //     },
-                                      //   ),
-                                      // ),
                                     ],
                                   ),
                                 ),
