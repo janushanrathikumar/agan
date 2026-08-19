@@ -1,6 +1,7 @@
 // lib/startup_page/start_page.dart
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart'; // Add this import for the privacy link
 import 'package:restorant/startup page/signin_page.dart';
 import 'package:restorant/startup page/signup_page.dart';
 import '../language.dart';
@@ -29,16 +30,26 @@ class _StartPageState extends State<StartPage> {
     });
   }
 
-  // Small helper so the pill label follows the current language too.
   String _aboutLabel() {
     return AppLanguage.currentLanguage == 'de' ? 'Über uns' : 'About';
+  }
+
+  // Helper method to open the privacy policy link
+  Future<void> _launchPrivacyPolicy() async {
+    // 🔴 REPLACE THIS LINK WITH YOUR ACTUAL PRIVACY POLICY LINK 🔴
+    final Uri url = Uri.parse('https://restaurantkleefeld.ch/privacy');
+    if (!await launchUrl(url)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open Privacy Policy')),
+        );
+      }
+    }
   }
 
   void _showAboutUsSheet(BuildContext context) {
     final isDe = AppLanguage.currentLanguage == 'de';
     final sheetWidth = MediaQuery.of(context).size.width;
-    // Keep the sheet content readable on tablets/web instead of stretching
-    // the text edge-to-edge on very wide screens.
     final contentMaxWidth = sheetWidth >= 720 ? 640.0 : double.infinity;
 
     showModalBottomSheet(
@@ -55,7 +66,6 @@ class _StartPageState extends State<StartPage> {
           ),
           child: Column(
             children: [
-              // Handle Bar
               Container(
                 margin: const EdgeInsets.only(top: 12, bottom: 8),
                 width: 44,
@@ -65,7 +75,6 @@ class _StartPageState extends State<StartPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -75,8 +84,8 @@ class _StartPageState extends State<StartPage> {
                       children: [
                         Text(
                           isDe
-                              ? 'Unser Restaurant & App'
-                              : 'Our Restaurant & App',
+                              ? 'Restaurant Kleefeld App' // 🟢 Inga maathirukken
+                              : 'Restaurant Kleefeld App', // 🟢 Inga maathirukken
                           style: const TextStyle(
                             color: kWhite,
                             fontSize: 24,
@@ -86,8 +95,8 @@ class _StartPageState extends State<StartPage> {
                         const SizedBox(height: 6),
                         Text(
                           isDe
-                              ? 'Informationen & Angebot'
-                              : 'Information & Cuisine',
+                              ? 'Informationen, Angebot & Datenschutz'
+                              : 'Information, Cuisine & Privacy',
                           style: const TextStyle(
                             color: kPrimary,
                             fontSize: 16,
@@ -96,7 +105,7 @@ class _StartPageState extends State<StartPage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // --- NEW SECTION ADDED FOR GOOGLE OAUTH VERIFICATION ---
+                        // --- REQUIRED BY GOOGLE: APP PURPOSE ---
                         _buildInfoCard(
                           icon: Icons.app_shortcut_rounded,
                           title: isDe
@@ -107,9 +116,63 @@ class _StartPageState extends State<StartPage> {
                               : 'Welcome to Restorant. This application allows users to easily browse our menu, order food online, and manage their personal accounts.',
                         ),
                         const SizedBox(height: 12),
-                        // --------------------------------------------------------
 
-                        // Section: Räumlichkeiten (Grid / Badges)
+                        // --- REQUIRED BY GOOGLE: DATA USAGE TRANSPARENCY ---
+                        _buildInfoCard(
+                          icon: Icons.security_rounded,
+                          title: isDe
+                              ? 'Wie wir Ihre Daten nutzen'
+                              : 'How we use your data',
+                          description: isDe
+                              ? 'Wir fordern Ihre E-Mail-Adresse und Telefonnummer an, um Ihr Konto sicher zu authentifizieren, Ihre Essensbestellungen abzuwickeln und Sie über wichtige Updates zu Ihrer Lieferung zu informieren. Wir geben Ihre Daten nicht an Dritte weiter.'
+                              : 'We request your email address and phone number to securely authenticate your account, process your food orders, and contact you regarding important delivery updates. We do not share your data with third parties.',
+                        ),
+                        const SizedBox(height: 12),
+
+                        // --- REQUIRED BY GOOGLE: PRIVACY POLICY LINK ---
+                        InkWell(
+                          onTap: _launchPrivacyPolicy,
+                          borderRadius: BorderRadius.circular(18),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: kPrimary.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: kPrimary.withOpacity(0.5),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.privacy_tip_outlined,
+                                  color: kPrimary,
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Text(
+                                    isDe
+                                        ? 'Unsere Datenschutzerklärung lesen'
+                                        : 'Read our Privacy Policy',
+                                    style: const TextStyle(
+                                      color: kWhite,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.arrow_forward_ios,
+                                  color: kPrimary,
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
                         Text(
                           isDe
                               ? 'Unsere Räumlichkeiten'
@@ -150,7 +213,6 @@ class _StartPageState extends State<StartPage> {
 
                         const SizedBox(height: 24),
 
-                        // Section: Kulinarisches Angebot
                         _buildInfoCard(
                           icon: Icons.outdoor_grill,
                           title: isDe
@@ -163,7 +225,6 @@ class _StartPageState extends State<StartPage> {
 
                         const SizedBox(height: 12),
 
-                        // Section: Pizza & Drinks
                         _buildInfoCard(
                           icon: Icons.local_pizza,
                           title: isDe
@@ -176,7 +237,6 @@ class _StartPageState extends State<StartPage> {
 
                         const SizedBox(height: 12),
 
-                        // Section: Anlässe & Events
                         _buildInfoCard(
                           icon: Icons.celebration,
                           title: isDe
@@ -325,7 +385,6 @@ class _StartPageState extends State<StartPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Premium Background Gradient ──
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -335,8 +394,6 @@ class _StartPageState extends State<StartPage> {
               ),
             ),
           ),
-
-          // ── Ambient Background Glow ──
           Positioned(
             top: -100,
             right: -50,
@@ -353,11 +410,9 @@ class _StartPageState extends State<StartPage> {
               ),
             ),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // ── Top Bar (Language Toggle + About Us Pill + Skip) ──
                 Center(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: contentMaxWidth),
@@ -368,7 +423,6 @@ class _StartPageState extends State<StartPage> {
                       ),
                       child: Row(
                         children: [
-                          // Language Switcher
                           Container(
                             decoration: BoxDecoration(
                               color: kWhite.withOpacity(0.1),
@@ -407,8 +461,6 @@ class _StartPageState extends State<StartPage> {
                             ),
                           ),
                           const Spacer(),
-
-                          // ── "About Us" Pill
                           Material(
                             color: Colors.transparent,
                             child: InkWell(
@@ -451,8 +503,6 @@ class _StartPageState extends State<StartPage> {
                             ),
                           ),
                           const SizedBox(width: 6),
-
-                          // Skip Button
                           TextButton(
                             onPressed: () => Navigator.pushReplacementNamed(
                               context,
@@ -472,8 +522,6 @@ class _StartPageState extends State<StartPage> {
                     ),
                   ),
                 ),
-
-                // ── Slides Carousel (Glassmorphism Cards) ──
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
@@ -553,8 +601,6 @@ class _StartPageState extends State<StartPage> {
                     ),
                   ),
                 ),
-
-                // ── Animated Dots Indicator ──
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 20),
                   child: Row(
@@ -577,8 +623,6 @@ class _StartPageState extends State<StartPage> {
                     ),
                   ),
                 ),
-
-                // ── Bottom Action Buttons ──
                 Center(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: contentMaxWidth),
