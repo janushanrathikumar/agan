@@ -5,10 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'checkout.dart';
 import '../language.dart';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
+import 'package:restorant/platform_image/platform_image.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
@@ -74,43 +71,25 @@ class _WebSafeImage extends StatelessWidget {
   final String imageUrl;
   final double? width;
   final double? height;
+  final BoxFit fit;
   final Widget fallback;
 
   const _WebSafeImage({
     required this.imageUrl,
     this.width,
     this.height,
+    this.fit = BoxFit.cover,
     required this.fallback,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl.isEmpty) return fallback;
-    if (kIsWeb) {
-      final String viewId =
-          'menu-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int _) => html.ImageElement()
-          ..src = imageUrl
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover'
-          ..style.borderRadius = '12px',
-      );
-      return SizedBox(
-        width: width,
-        height: height,
-        child: IgnorePointer(child: HtmlElementView(viewType: viewId)),
-      );
-    }
-    return Image.network(
-      imageUrl,
+    return buildUniversalImage(
+      imageUrl: imageUrl,
       width: width,
       height: height,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => fallback,
+      fit: fit,
+      fallback: fallback,
     );
   }
 }
@@ -1060,7 +1039,27 @@ class _MenuGrid extends StatelessWidget {
         if (tableNo == 'Take-Away') {
           docs = docs.where((d) {
             final data = (d.data() as Map<String, dynamic>?) ?? {};
-            return data['canTakeAway'] != false;
+
+            // 1. Check if the admin explicitly disabled Take Away
+            if (data['canTakeAway'] == false) return false;
+
+            // 2. Check if the item has multiple sizes, but NONE of the sizes have a Take Away price
+            bool hasMultipleSizes = data['hasMultipleSizes'] == true;
+            if (hasMultipleSizes) {
+              List<dynamic> sizes = data['sizes'] ?? [];
+              bool hasAnyTakeAwayPrice = sizes.any((s) {
+                if (s is Map) {
+                  return s.containsKey('takeAwayPrice') &&
+                      s['takeAwayPrice'] != null &&
+                      s['takeAwayPrice'].toString().isNotEmpty;
+                }
+                return false;
+              });
+
+              if (!hasAnyTakeAwayPrice) return false; // Hide completely
+            }
+
+            return true;
           }).toList();
         }
 
@@ -1087,6 +1086,7 @@ class _MenuGrid extends StatelessWidget {
           final nameB = (dataB['name'] as String?)?.toLowerCase() ?? '';
           return nameA.compareTo(nameB);
         });
+
         if (searchQuery.isNotEmpty) {
           docs = docs.where((d) {
             final data = (d.data() as Map<String, dynamic>?) ?? {};

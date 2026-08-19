@@ -5,10 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
-// வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க இந்த இம்போர்ட்டுகள் தேவை
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
+// Your universal image importer! This handles both Web and Mobile automatically.
+import 'package:restorant/platform_image/platform_image.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -89,50 +87,6 @@ class _EditDeleteFoodsMenuPageState extends State<EditDeleteFoodsMenuPage> {
     }
   }
 
-  // வெப் பிளாட்ஃபார்மில் CORS எர்ரர் இல்லாமல் இமேஜ் காட்ட உதவும் பொதுவான விட்ஜெட்
-  Widget _buildWebSafeImage({
-    required String url,
-    required double size,
-    required Widget fallback,
-  }) {
-    if (url.isEmpty) return fallback;
-
-    if (kIsWeb) {
-      final String viewId =
-          'img-${url.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int viewId) => html.ImageElement()
-          ..src = url
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover',
-      );
-
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(
-          height: size,
-          width: size,
-          child: HtmlElementView(viewType: viewId),
-        ),
-      );
-    } else {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          url,
-          height: size,
-          width: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => fallback,
-        ),
-      );
-    }
-  }
-
   Future<void> _editFood(DocumentSnapshot doc, Map<String, String> cats) async {
     final data = (doc.data() as Map<String, dynamic>?) ?? {};
     final nameCtrl = TextEditingController(text: data['name'] as String? ?? '');
@@ -164,7 +118,7 @@ class _EditDeleteFoodsMenuPageState extends State<EditDeleteFoodsMenuPage> {
               imageQuality: 90,
             );
             if (x == null) return;
-            // async-க்கு வெளியே பிராக்கெட்டை மாற்றியுள்ளேன், இது எர்ரரைத் தவிர்க்கும்
+
             final bytes = await x.readAsBytes();
             setS(() {
               newImgBytes = bytes;
@@ -284,12 +238,16 @@ class _EditDeleteFoodsMenuPageState extends State<EditDeleteFoodsMenuPage> {
                                 fit: BoxFit.cover,
                               ),
                             )
-                          : _buildWebSafeImage(
-                              url: imageUrl ?? '',
-                              size: 64,
-                              fallback: const Icon(
-                                Icons.image_not_supported,
-                                color: kWhite,
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: buildUniversalImage(
+                                imageUrl: imageUrl ?? '',
+                                width: 64,
+                                height: 64,
+                                fallback: const Icon(
+                                  Icons.image_not_supported,
+                                  color: kWhite,
+                                ),
                               ),
                             ),
                     ),
@@ -460,11 +418,14 @@ class _EditDeleteFoodsMenuPageState extends State<EditDeleteFoodsMenuPage> {
                       side: const BorderSide(color: kMuted),
                     ),
                     child: ListTile(
-                      // திருத்தப்பட்ட பகுதி: பிரதான லிஸ்டில் வெப் இமேஜ் பயன்படுத்தப்பட்டுள்ளது
-                      leading: _buildWebSafeImage(
-                        url: imageUrl,
-                        size: 48,
-                        fallback: const Icon(Icons.restaurant, color: kWhite),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: buildUniversalImage(
+                          imageUrl: imageUrl,
+                          width: 48,
+                          height: 48,
+                          fallback: const Icon(Icons.restaurant, color: kWhite),
+                        ),
                       ),
                       title: Text(
                         '$name • RM $price',
@@ -535,7 +496,7 @@ class _EditDeleteFoodsMenuPageState extends State<EditDeleteFoodsMenuPage> {
   }
 }
 
-// திருத்தப்பட்ட பகுதி: கேட்டகிரி ஐகானும் வெப் இமேஜாக மாற்றப்பட்டுள்ளது
+// Cleaned up _CategoryIcon using our universal image setup
 class _CategoryIcon extends StatelessWidget {
   final String? iconUrl;
   const _CategoryIcon({this.iconUrl});
@@ -543,44 +504,19 @@ class _CategoryIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = iconUrl ?? '';
-    if (url.isEmpty) {
-      return const Icon(Icons.image_not_supported, color: kMuted, size: 18);
-    }
 
-    if (kIsWeb) {
-      final String viewId =
-          'cat-img-${url.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int viewId) => html.ImageElement()
-          ..src = url
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover',
-      );
-
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-          height: 40,
-          width: 40,
-          child: HtmlElementView(viewType: viewId), // ❌ தவறு
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: buildUniversalImage(
+        imageUrl: url,
+        width: 20,
+        height: 20,
+        fallback: const Icon(
+          Icons.image_not_supported,
+          color: kMuted,
+          size: 18,
         ),
-      );
-    } else {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Image.network(
-          url,
-          height: 20,
-          width: 20,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.broken_image, color: kMuted, size: 18),
-        ),
-      );
-    }
+      ),
+    );
   }
 }

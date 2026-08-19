@@ -1,7 +1,7 @@
 // lib/startup_page/signin_page.dart
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // ── Autofill-க்காக இது தேவை ──
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:restorant/startup page/signupverify.dart';
@@ -29,6 +29,14 @@ class _SignInPageState extends State<SignInPage> {
   String? _err;
   bool _obscure = true;
 
+  // --- Country Code State & Data ---
+  String _selectedCountryCode = '+41';
+  final List<Map<String, String>> _countryCodes = [
+    {'code': '+41', 'flag': '🇨🇭'},
+    {'code': '+94', 'flag': '🇱🇰'},
+    {'code': '+49', 'flag': '🇩🇪'},
+  ];
+
   Future<void> _loginUser() async {
     setState(() {
       _busy = true;
@@ -39,7 +47,10 @@ class _SignInPageState extends State<SignInPage> {
 
     try {
       if (!input.contains('@')) {
-        final queryPhone = input.startsWith('+') ? input : '+$input';
+        // --- Use dynamic country code ---
+        final queryPhone = input.startsWith('+')
+            ? input
+            : '$_selectedCountryCode$input';
         final userQuery = await FirebaseFirestore.instance
             .collection('user')
             .where('phone', isEqualTo: queryPhone)
@@ -79,7 +90,10 @@ class _SignInPageState extends State<SignInPage> {
         }
 
         await FirebaseAuth.instance.verifyPhoneNumber(
-          phoneNumber: phone.startsWith('+') ? phone : '+$phone',
+          // --- Use dynamic country code if fallback is needed ---
+          phoneNumber: phone.startsWith('+')
+              ? phone
+              : '$_selectedCountryCode$phone',
           verificationCompleted: (phoneAuthCredential) {},
           verificationFailed: (e) {
             if (!mounted) return;
@@ -115,10 +129,7 @@ class _SignInPageState extends State<SignInPage> {
       final role =
           (data['role'] as String?)?.toLowerCase().trim() ?? 'customer';
 
-      // ── Autofill Save Trigger ──
-      // வெற்றிகரமாக Login ஆனதும் OS-ஐ Password Save செய்யக் கேட்க சொல்கிறோம்
       TextInput.finishAutofillContext();
-      // ───────────────────────────
 
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil(
@@ -162,22 +173,57 @@ class _SignInPageState extends State<SignInPage> {
     super.dispose();
   }
 
-  InputDecoration _dec(String label, {IconData? icon}) => InputDecoration(
-    labelText: label,
-    labelStyle: const TextStyle(color: kMuted),
-    prefixIcon: icon != null ? Icon(icon, color: kMuted) : null,
-    filled: true,
-    fillColor: kWhite.withOpacity(0.06),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: const BorderSide(color: kPrimary, width: 1.5),
-    ),
-  );
+  // --- Dropdown Builder Method ---
+  Widget _buildCountryDropdown() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16.0, right: 8.0),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedCountryCode,
+          dropdownColor: kBg,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: kMuted),
+          items: _countryCodes.map((country) {
+            return DropdownMenuItem(
+              value: country['code'],
+              child: Text(
+                '${country['flag']} ${country['code']}',
+                style: const TextStyle(color: kWhite, fontSize: 15),
+              ),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() => _selectedCountryCode = val);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  // --- Input Decoration with prefixIconConstraints added to fix overflow ---
+  InputDecoration _dec(String label, {IconData? icon, Widget? prefixWidget}) =>
+      InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: kMuted),
+        prefixIcon:
+            prefixWidget ?? (icon != null ? Icon(icon, color: kMuted) : null),
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        filled: true,
+        fillColor: kWhite.withOpacity(0.06),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 18,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: kPrimary, width: 1.5),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -240,8 +286,6 @@ class _SignInPageState extends State<SignInPage> {
                             borderRadius: BorderRadius.circular(28),
                             border: Border.all(color: kWhite.withOpacity(0.2)),
                           ),
-
-                          // ── இங்கிருந்து தான் AutofillGroup ஆரம்பமாகிறது ──
                           child: AutofillGroup(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -270,16 +314,27 @@ class _SignInPageState extends State<SignInPage> {
                                   controller: _emailOrPhone,
                                   keyboardType: TextInputType.emailAddress,
                                   style: const TextStyle(color: kWhite),
-
-                                  // ── Username/Email Autofill Hint ──
                                   autofillHints: const [
                                     AutofillHints.email,
                                     AutofillHints.telephoneNumber,
                                   ],
-
+                                  // --- IntrinsicWidth removed to fix overflow ---
                                   decoration: _dec(
                                     AppLanguage.getText('email_or_phone'),
-                                    icon: Icons.mail_outline,
+                                    prefixWidget: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _buildCountryDropdown(),
+                                        Container(
+                                          height: 24,
+                                          width: 1,
+                                          color: kMuted.withOpacity(0.5),
+                                          margin: const EdgeInsets.only(
+                                            right: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 16),
@@ -287,10 +342,7 @@ class _SignInPageState extends State<SignInPage> {
                                   controller: _password,
                                   obscureText: _obscure,
                                   style: const TextStyle(color: kWhite),
-
-                                  // ── Password Autofill Hint ──
                                   autofillHints: const [AutofillHints.password],
-
                                   decoration:
                                       _dec(
                                         AppLanguage.getText('password'),

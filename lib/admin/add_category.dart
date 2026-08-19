@@ -7,8 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 // வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
+import 'package:restorant/platform_image/platform_image.dart';
 
 // 🟢 FULL DARK THEME COLORS
 const kPrimary = Color(0xFFB59410); // Gold/Yellow
@@ -231,52 +230,25 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     }
   }
 
-  // 🟢 CORS Fix: Web-Safe Image Builder
+  // 🟢 Universal Image Builder
   Widget _buildWebSafeImage(
     String iconUrl, {
     double height = 150,
     double width = 150,
   }) {
-    if (iconUrl.isEmpty) {
-      return Icon(Icons.image_not_supported, size: height / 2, color: kMuted);
-    }
-
-    if (kIsWeb) {
-      final String viewId =
-          'img-${iconUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int viewId) => html.ImageElement()
-          ..src = iconUrl
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover'
-          ..style.borderRadius = '12px',
-      );
-
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          height: height,
-          width: width,
-          child: HtmlElementView(viewType: viewId),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: buildUniversalImage(
+        imageUrl: iconUrl,
+        width: width,
+        height: height,
+        fallback: Icon(
+          Icons.image_not_supported,
+          size: height / 2,
+          color: kMuted,
         ),
-      );
-    } else {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          iconUrl,
-          height: height,
-          width: width,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              Icon(Icons.broken_image, size: height / 2, color: kMuted),
-        ),
-      );
-    }
+      ),
+    );
   }
 
   // 🟢 Show Add / Edit Dialog Form

@@ -5,10 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'choice_dialog.dart';
-
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -28,30 +25,19 @@ class _WebSafeImage extends StatelessWidget {
       return const Icon(Icons.broken_image, color: kMuted, size: 40);
     }
 
+    String finalUrl = imageUrl;
     if (kIsWeb) {
-      final String viewId =
-          'img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int viewId) => html.ImageElement()
-          ..src = imageUrl
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover',
-      );
-      return SizedBox(
-        height: height,
-        child: HtmlElementView(viewType: viewId),
-      );
-    } else {
-      return Image.network(
-        imageUrl,
-        height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-            const Icon(Icons.broken_image, color: kMuted),
-      );
+      finalUrl =
+          'https://api.allorigins.win/raw?url=${Uri.encodeComponent(imageUrl)}';
     }
+
+    return Image.network(
+      finalUrl,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) =>
+          const Icon(Icons.broken_image, color: kMuted),
+    );
   }
 }
 
@@ -110,13 +96,9 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
   List<Map<String, dynamic>> _selectedMenuChoices = [];
   String? _dropdownChoiceValue;
 
-  // 🟢 NEW: Menu item availability status[cite: 2]
   bool _isAvailable = true;
-
-  // 🟢 NEW: Take Away availability (e.g. drinks that can't be packed)
   bool _canTakeAway = true;
 
-  // 🟢 NEW: Combo item selection (search & add existing menu items)
   List<Map<String, dynamic>> _allComboCandidates = [];
   List<Map<String, dynamic>> _selectedComboItems = [];
 
@@ -136,7 +118,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     _existingImageUrl = widget.itemData['imageUrl'];
     _existingImageFileName = widget.itemData['imageFileName'];
 
-    // 🟢 NEW: Initialize status value[cite: 2]
     _isAvailable = (widget.itemData['status'] ?? 'on') == 'on';
 
     _hasMultipleSizes = widget.itemData['hasMultipleSizes'] ?? false;
@@ -228,7 +209,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
     }
   }
 
-  // 🟢 NEW: Fetch existing food/drink items that can be bundled into a combo
   Future<void> _fetchComboCandidates() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -386,7 +366,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
       String imageFileName = _existingImageFileName ?? '';
 
       if (_imgBytes != null) {
-        // 🟢 A custom image was picked (works for food/drink AND combo now).
         if (_existingImageFileName != null &&
             _existingImageFileName!.isNotEmpty) {
           try {
@@ -405,8 +384,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
         await imgRef.putData(_imgBytes!);
         imageUrl = await imgRef.getDownloadURL();
       } else if (_itemType == 'combo' && imageUrl.isEmpty) {
-        // 🟢 No custom image was ever set for this combo — fall back to
-        // the first selected combo item's photo automatically.
         imageUrl = (_selectedComboItems.first['imageUrl'] as String?) ?? '';
         imageFileName = '';
       }
@@ -438,7 +415,7 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             'imageFileName': imageFileName,
             'menuChoices': _selectedMenuChoices.map((c) => c['id']).toList(),
             'additionalOptions': optionsData,
-            'status': _isAvailable ? 'on' : 'off', // 🟢 UPDATED[cite: 2]
+            'status': _isAvailable ? 'on' : 'off',
             'itemType': _itemType,
             'hasDiscount': _hasDiscount,
             'discountType': _hasDiscount ? _discountType : null,
@@ -536,9 +513,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             ),
           ),
           const SizedBox(height: 20),
-          // 🟢 Combo items can now ALSO have their image edited manually.
-          // If no custom image was ever picked, it falls back to the first
-          // combo item's photo automatically.
           Builder(
             builder: (context) {
               final String comboFallbackUrl = _selectedComboItems.isNotEmpty
@@ -684,7 +658,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                 _input(label: 'Item Name', controller: _name),
                 const SizedBox(height: 16),
 
-                // 🟢 NEW: Availability toggle[cite: 2]
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   activeColor: kPrimary,
@@ -738,7 +711,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                   const SizedBox(height: 8),
                 ],
 
-                // 🟢 NEW: Take Away availability toggle
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   activeColor: kPrimary,
@@ -1077,7 +1049,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             ),
           const SizedBox(height: 24),
 
-          // 🟢 NEW Multi-Select Design For Additional Options
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1122,7 +1093,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
           ),
           const SizedBox(height: 24),
 
-          // 🟢 NEW: Combo Items — search & add existing menu items
           if (_itemType == 'combo') ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1328,7 +1298,6 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
   }
 }
 
-// 🟢 NEW: Custom Multi-Select Field Widget
 class _MultiSelectOptionsField extends StatefulWidget {
   final String hint;
   final List<Map<String, dynamic>> availableOptions;
@@ -1368,7 +1337,6 @@ class _MultiSelectOptionsFieldState extends State<_MultiSelectOptionsField> {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: double.infinity,
-        //minHeight: 52,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: kFieldBg,
@@ -1414,7 +1382,6 @@ class _MultiSelectOptionsFieldState extends State<_MultiSelectOptionsField> {
   }
 }
 
-// 🟢 NEW: Dialog containing Search & Checkboxes
 class _MultiSelectDialog extends StatefulWidget {
   final List<Map<String, dynamic>> availableOptions;
   final List<Map<String, dynamic>> initialSelectedOptions;
@@ -1556,7 +1523,6 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
   }
 }
 
-// 🟢 NEW: Combo Items field — shows selected items as chips with thumbnails
 class _ComboItemsField extends StatefulWidget {
   final String hint;
   final List<Map<String, dynamic>> availableItems;
@@ -1661,7 +1627,6 @@ class _ComboItemsFieldState extends State<_ComboItemsField> {
   }
 }
 
-// 🟢 NEW: Search & checkbox dialog for combo item selection
 class _ComboItemsDialog extends StatefulWidget {
   final List<Map<String, dynamic>> availableItems;
   final List<Map<String, dynamic>> initialSelectedItems;

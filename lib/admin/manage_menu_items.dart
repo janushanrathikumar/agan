@@ -6,8 +6,7 @@ import 'package:restorant/admin/add_food_menu.dart';
 import 'edit_menu_item.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
+import 'package:restorant/platform_image/platform_image.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -29,15 +28,13 @@ class _WebSafeImage extends StatelessWidget {
     if (kIsWeb) {
       final String viewId =
           'manage-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int _) => html.ImageElement()
-          ..src = imageUrl
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover',
+      return buildUniversalImage(
+        imageUrl: imageUrl, // Pass your actual image URL variable here
+        width: 100, // Adjust width as needed
+        height: 100, // Adjust height as needed
+        fallback: const Icon(Icons.image_not_supported),
       );
+
       return SizedBox(
         width: double.infinity,
         height: double.infinity,
@@ -66,15 +63,19 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
   String _selectedCategory = 'All';
 
   Future<void> _deleteItem(
-      BuildContext context, String docId, String? imageFileName) async {
+    BuildContext context,
+    String docId,
+    String? imageFileName,
+  ) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: kFieldBg,
         title: const Text('Delete Item?', style: TextStyle(color: kWhite)),
         content: const Text(
-            'Are you sure you want to permanently delete this menu item?',
-            style: TextStyle(color: kMuted)),
+          'Are you sure you want to permanently delete this menu item?',
+          style: TextStyle(color: kMuted),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -82,8 +83,10 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child:
-                const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -109,16 +112,18 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Item deleted successfully'),
-                backgroundColor: kPrimary),
+              content: Text('Item deleted successfully'),
+              backgroundColor: kPrimary,
+            ),
           );
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('Failed to delete: $e'),
-                backgroundColor: Colors.redAccent),
+              content: Text('Failed to delete: $e'),
+              backgroundColor: Colors.redAccent,
+            ),
           );
         }
       }
@@ -149,8 +154,10 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
       appBar: AppBar(
         backgroundColor: kBg,
         foregroundColor: kWhite,
-        title: const Text('Menu Overview',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Menu Overview',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         elevation: 0,
         actions: [
           Padding(
@@ -164,12 +171,16 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                 ),
               ),
               onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const AddMenuPage())),
+                context,
+                MaterialPageRoute(builder: (_) => const AddMenuPage()),
+              ),
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add Menu',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Add Menu',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
-          )
+          ),
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -177,13 +188,16 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
-                child: CircularProgressIndicator(color: kPrimary));
+              child: CircularProgressIndicator(color: kPrimary),
+            );
           }
 
           if (!snap.hasData || snap.data!.docs.isEmpty) {
             return const Center(
-              child: Text('No menu items found.',
-                  style: TextStyle(color: kMuted)),
+              child: Text(
+                'No menu items found.',
+                style: TextStyle(color: kMuted),
+              ),
             );
           }
 
@@ -246,7 +260,10 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
             children: [
               // ── Top Bar: Type Filters (Food, Drink, Combo) ──
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     _buildTypePill('All', Icons.restaurant_menu),
@@ -284,14 +301,18 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                             color: isSelected ? kWhite : kFieldBg,
                             borderRadius: BorderRadius.circular(25),
                             border: Border.all(
-                              color: isSelected ? kWhite : kMuted.withOpacity(0.2),
+                              color: isSelected
+                                  ? kWhite
+                                  : kMuted.withOpacity(0.2),
                             ),
                           ),
                           child: Text(
                             cat,
                             style: TextStyle(
                               color: isSelected ? kBg : kWhite,
-                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                              fontWeight: isSelected
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
                             ),
                           ),
                         ),
@@ -304,16 +325,21 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
               Expanded(
                 child: finalDocs.isEmpty
                     ? const Center(
-                        child: Text('No items found.', style: TextStyle(color: kMuted)),
+                        child: Text(
+                          'No items found.',
+                          style: TextStyle(color: kMuted),
+                        ),
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 250, // Card width
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 0.68, // Taller card to fit everything
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 250, // Card width
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 16,
+                              childAspectRatio:
+                                  0.68, // Taller card to fit everything
+                            ),
                         itemCount: finalDocs.length,
                         itemBuilder: (context, index) {
                           final doc = finalDocs[index];
@@ -331,7 +357,9 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                             decoration: BoxDecoration(
                               color: kWhite.withOpacity(0.04),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: kMuted.withOpacity(0.1)),
+                              border: Border.all(
+                                color: kMuted.withOpacity(0.1),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,16 +370,20 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                   child: Stack(
                                     children: [
                                       ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(
-                                          top: Radius.circular(16),
-                                        ),
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(16),
+                                            ),
                                         child: _WebSafeImage(
                                           imageUrl: imageUrl,
                                           fallback: Container(
                                             color: kFieldBg,
                                             child: const Center(
-                                              child: Icon(Icons.fastfood,
-                                                  color: kMuted, size: 40),
+                                              child: Icon(
+                                                Icons.fastfood,
+                                                color: kMuted,
+                                                size: 40,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -363,7 +395,9 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                           left: 8,
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 4),
+                                              horizontal: 6,
+                                              vertical: 4,
+                                            ),
                                             decoration: BoxDecoration(
                                               color: kPrimary,
                                               borderRadius:
@@ -436,8 +470,9 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                                       MaterialPageRoute(
                                                         builder: (_) =>
                                                             EditMenuItemPage(
-                                                                docId: doc.id,
-                                                                itemData: data),
+                                                              docId: doc.id,
+                                                              itemData: data,
+                                                            ),
                                                       ),
                                                     );
                                                   },
@@ -450,17 +485,19 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                                       shape: BoxShape.circle,
                                                     ),
                                                     child: const Icon(
-                                                        Icons.edit,
-                                                        color: Colors.blueAccent,
-                                                        size: 16),
+                                                      Icons.edit,
+                                                      color: Colors.blueAccent,
+                                                      size: 16,
+                                                    ),
                                                   ),
                                                 ),
                                                 const SizedBox(width: 6),
                                                 GestureDetector(
                                                   onTap: () => _deleteItem(
-                                                      context,
-                                                      doc.id,
-                                                      imageFileName),
+                                                    context,
+                                                    doc.id,
+                                                    imageFileName,
+                                                  ),
                                                   child: Container(
                                                     padding:
                                                         const EdgeInsets.all(6),
@@ -470,9 +507,10 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                                       shape: BoxShape.circle,
                                                     ),
                                                     child: const Icon(
-                                                        Icons.delete,
-                                                        color: kDiscount,
-                                                        size: 16),
+                                                      Icons.delete,
+                                                      color: kDiscount,
+                                                      size: 16,
+                                                    ),
                                                   ),
                                                 ),
                                               ],

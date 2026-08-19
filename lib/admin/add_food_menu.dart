@@ -9,14 +9,50 @@ import 'choice_dialog.dart';
 import 'manage_menu_items.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
+import 'package:restorant/platform_image/platform_image.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
 const kWhite = Color(0xFFFFFFFF);
 const kMuted = Color(0xFFB7B7B6);
 const kFieldBg = Color(0xFF383735);
+
+// 🟢 NEW: Standardized Web-Safe Image Widget to prevent CORS errors on Web
+class _WebSafeImage extends StatelessWidget {
+  final String imageUrl;
+  final double? width;
+  final double? height;
+  final Widget fallback;
+
+  const _WebSafeImage({
+    required this.imageUrl,
+    this.width,
+    this.height,
+    required this.fallback,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) return fallback;
+    if (kIsWeb) {
+      final String viewId =
+          'add-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
+      return buildUniversalImage(
+        imageUrl: imageUrl, // Pass your actual image URL variable here
+        width: 100, // Adjust width as needed
+        height: 100, // Adjust height as needed
+        fallback: const Icon(Icons.image_not_supported),
+      );
+    }
+    return Image.network(
+      imageUrl,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
+  }
+}
 
 class SizeOptionField {
   final TextEditingController name = TextEditingController();
@@ -65,13 +101,9 @@ class _AddMenuPageState extends State<AddMenuPage> {
   List<Map<String, dynamic>> _allAvailableOptions = [];
   final List<Map<String, dynamic>> _selectedOptions = [];
 
-  // 🟢 NEW: Menu item availability status[cite: 1]
   bool _isAvailable = true;
-
-  // 🟢 NEW: Take Away availability (e.g. drinks that can't be packed)
   bool _canTakeAway = true;
 
-  // 🟢 NEW: Combo item selection (search & add existing menu items)
   List<Map<String, dynamic>> _allComboCandidates = [];
   final List<Map<String, dynamic>> _selectedComboItems = [];
 
@@ -140,7 +172,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
     }
   }
 
-  // 🟢 NEW: Fetch existing food/drink items that can be bundled into a combo
   Future<void> _fetchComboCandidates() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -222,13 +253,11 @@ class _AddMenuPageState extends State<AddMenuPage> {
       List<Map<String, dynamic>> sizesData = [];
 
       if (_hasMultipleSizes) {
-        if (_sizeOptions.isEmpty) {
+        if (_sizeOptions.isEmpty)
           throw Exception('Please add at least one size variant.');
-        }
         for (var size in _sizeOptions) {
           final sName = size.name.text.trim();
           final dPrice = double.tryParse(size.dineInPrice.text.trim());
-
           final tPriceText = size.takeAwayPrice.text.trim();
           final tPrice = tPriceText.isEmpty
               ? null
@@ -245,11 +274,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
             'price': dPrice,
             'dineInPrice': dPrice,
           };
-
-          if (tPrice != null) {
-            sizeMap['takeAwayPrice'] = tPrice;
-          }
-
+          if (tPrice != null) sizeMap['takeAwayPrice'] = tPrice;
           sizesData.add(sizeMap);
         }
         basePrice = sizesData
@@ -257,17 +282,14 @@ class _AddMenuPageState extends State<AddMenuPage> {
             .reduce((a, b) => a < b ? a : b);
       } else {
         basePrice = double.tryParse(_price.text.trim());
-        if (basePrice == null) {
+        if (basePrice == null)
           throw Exception('A valid standard price is required.');
-        }
       }
 
       double discountValue = 0;
       if (_hasDiscount) {
         discountValue = double.tryParse(_discountValue.text.trim()) ?? 0;
-        if (discountValue <= 0) {
-          throw Exception('Enter a valid discount value');
-        }
+        if (discountValue <= 0) throw Exception('Enter a valid discount value');
         if (_discountType == 'percent' && discountValue > 100) {
           throw Exception('Discount percent cannot exceed 100');
         }
@@ -287,8 +309,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
       String fileName = '';
 
       if (_itemType == 'combo') {
-        // 🟢 Combo items don't need their own image — reuse the first
-        // selected menu item's image automatically.
         imageUrl = (_selectedComboItems.first['imageUrl'] as String?) ?? '';
       } else {
         final safeBase = (_imgFileName ?? name).replaceAll(
@@ -333,7 +353,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
         'imageFileName': fileName,
         'menuChoices': choiceIds,
         'additionalOptions': optionsData,
-        'status': _isAvailable ? 'on' : 'off', // 🟢 UPDATED[cite: 1]
+        'status': _isAvailable ? 'on' : 'off',
         'itemType': _itemType,
         'hasDiscount': _hasDiscount,
         'discountType': _hasDiscount ? _discountType : null,
@@ -368,12 +388,10 @@ class _AddMenuPageState extends State<AddMenuPage> {
         _discountValue.clear();
         _hasMultipleSizes = false;
         _canTakeAway = true;
-        _isAvailable = true; // 🟢 UPDATED[cite: 1]
+        _isAvailable = true;
         _selectedComboItems.clear();
 
-        for (var opt in _sizeOptions) {
-          opt.dispose();
-        }
+        for (var opt in _sizeOptions) opt.dispose();
         _sizeOptions.clear();
       });
       _fetchComboCandidates();
@@ -427,7 +445,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
                 Expanded(
                   child: RadioListTile<String>(
                     dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: const Text(
                       'Food',
                       style: TextStyle(
@@ -446,7 +463,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
                 Expanded(
                   child: RadioListTile<String>(
                     dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: const Text(
                       'Drink',
                       style: TextStyle(
@@ -465,7 +481,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
                 Expanded(
                   child: RadioListTile<String>(
                     dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: const Text(
                       'Combo',
                       style: TextStyle(
@@ -501,8 +516,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
                 const SizedBox(height: 16),
                 _input(label: 'Item Name', controller: _name),
                 const SizedBox(height: 16),
-
-                // 🟢 NEW: Availability toggle[cite: 1]
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   activeColor: kPrimary,
@@ -542,12 +555,10 @@ class _AddMenuPageState extends State<AddMenuPage> {
                       setState(() {
                         _hasMultipleSizes = val;
                         if (val && _sizeOptions.isEmpty) {
-                          final opt1 = SizeOptionField();
-                          opt1.name.text = 'Kleine Portion';
+                          final opt1 = SizeOptionField()
+                            ..name.text = 'Kleine Portion';
                           _sizeOptions.add(opt1);
-
-                          final opt2 = SizeOptionField();
-                          opt2.name.text = 'Portion';
+                          final opt2 = SizeOptionField()..name.text = 'Portion';
                           _sizeOptions.add(opt2);
                         }
                       });
@@ -555,8 +566,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
                   ),
                   const SizedBox(height: 8),
                 ],
-
-                // 🟢 NEW: Take Away availability toggle
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   activeColor: kPrimary,
@@ -690,6 +699,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 20),
 
+          // Discount Section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -768,6 +778,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
           ),
           const SizedBox(height: 20),
 
+          // Menu Choices Section
           const Text(
             'Menu Choices',
             style: TextStyle(
@@ -786,11 +797,12 @@ class _AddMenuPageState extends State<AddMenuPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Builder(
               builder: (context) {
-                final matchingChoices = _allAvailableChoices.where((choice) {
-                  final choiceType = (choice['type'] as String?) ?? 'food';
-                  return choiceType == _itemType;
-                }).toList();
-
+                final matchingChoices = _allAvailableChoices
+                    .where(
+                      (choice) =>
+                          (choice['type'] as String? ?? 'food') == _itemType,
+                    )
+                    .toList();
                 return DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: _dropdownChoiceValue,
@@ -833,7 +845,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ),
           ),
           const SizedBox(height: 12),
-
           if (_selectedMenuChoices.isNotEmpty)
             ListView.builder(
               shrinkWrap: true,
@@ -841,9 +852,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
               itemCount: _selectedMenuChoices.length,
               itemBuilder: (context, index) {
                 final choice = _selectedMenuChoices[index];
-                final String optionsPreview = (choice['options'] ?? []).join(
-                  ', ',
-                );
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
@@ -859,7 +867,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
                       ),
                     ),
                     subtitle: Text(
-                      optionsPreview,
+                      (choice['options'] ?? []).join(', '),
                       style: const TextStyle(color: kMuted),
                       maxLines: 1,
                     ),
@@ -888,7 +896,7 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ),
           const SizedBox(height: 24),
 
-          // 🟢 NEW Multi-Select Design For Additional Options
+          // Additional Options Section
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -908,32 +916,29 @@ class _AddMenuPageState extends State<AddMenuPage> {
             ],
           ),
           const SizedBox(height: 12),
-
           Builder(
             builder: (context) {
-              final matchingOptions = _allAvailableOptions.where((opt) {
-                final optType = (opt['type'] as String?) ?? 'food';
-                return optType == _itemType;
-              }).toList();
-
+              final matchingOptions = _allAvailableOptions
+                  .where(
+                    (opt) => (opt['type'] as String? ?? 'food') == _itemType,
+                  )
+                  .toList();
               return _MultiSelectOptionsField(
                 hint: matchingOptions.isEmpty
                     ? 'No ${_typeLabel(_itemType)} additional options yet'
                     : 'Choose additional options...',
                 availableOptions: matchingOptions,
                 selectedOptions: _selectedOptions,
-                onChanged: (newSelection) {
-                  setState(() {
-                    _selectedOptions.clear();
-                    _selectedOptions.addAll(newSelection);
-                  });
-                },
+                onChanged: (newSelection) => setState(() {
+                  _selectedOptions.clear();
+                  _selectedOptions.addAll(newSelection);
+                }),
               );
             },
           ),
           const SizedBox(height: 24),
 
-          // 🟢 NEW: Combo Items — search & add existing menu items
+          // Combo Items Section
           if (_itemType == 'combo') ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -960,17 +965,16 @@ class _AddMenuPageState extends State<AddMenuPage> {
                   : 'Search & add items to this combo...',
               availableItems: _allComboCandidates,
               selectedItems: _selectedComboItems,
-              onChanged: (newSelection) {
-                setState(() {
-                  _selectedComboItems
-                    ..clear()
-                    ..addAll(newSelection);
-                });
-              },
+              onChanged: (newSelection) => setState(() {
+                _selectedComboItems
+                  ..clear()
+                  ..addAll(newSelection);
+              }),
             ),
             const SizedBox(height: 24),
           ],
 
+          // Item Details Section
           const Text(
             'Item Details',
             style: TextStyle(
@@ -1009,17 +1013,20 @@ class _AddMenuPageState extends State<AddMenuPage> {
                         .snapshots(),
                     builder: (context, snap) {
                       if (!snap.hasData) return const LinearProgressIndicator();
-                      final allDocs = snap.data!.docs;
-                      final matchingDocs = allDocs.where((d) {
-                        final data = d.data() as Map<String, dynamic>? ?? {};
-                        final catType = (data['type'] as String?) ?? 'food';
-                        return catType == _itemType;
-                      }).toList();
+                      final matchingDocs = snap.data!.docs
+                          .where(
+                            (d) =>
+                                ((d.data() as Map<String, dynamic>?)?['type']
+                                        as String? ??
+                                    'food') ==
+                                _itemType,
+                          )
+                          .toList();
                       final names = matchingDocs.map((d) => d.id).toList();
-                      final String? safeValue =
-                          names.contains(_selectedCategory)
+                      final safeValue = names.contains(_selectedCategory)
                           ? _selectedCategory
                           : null;
+
                       if (names.isEmpty) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1053,12 +1060,12 @@ class _AddMenuPageState extends State<AddMenuPage> {
                             final match = matchingDocs.firstWhere(
                               (d) => d.id == v,
                             );
-                            final matchData =
-                                match.data() as Map<String, dynamic>? ?? {};
                             setState(() {
                               _selectedCategory = v;
                               _selectedCategoryIconUrl =
-                                  matchData['iconUrl'] as String?;
+                                  (match.data()
+                                          as Map<String, dynamic>?)?['iconUrl']
+                                      as String?;
                             });
                           },
                         ),
@@ -1078,14 +1085,12 @@ class _AddMenuPageState extends State<AddMenuPage> {
                     alignment: Alignment.center,
                     clipBehavior: Clip.hardEdge,
                     child: _selectedComboItems.isNotEmpty
-                        ? Image.network(
-                            (_selectedComboItems.first['imageUrl']
+                        ? _WebSafeImage(
+                            imageUrl:
+                                (_selectedComboItems.first['imageUrl']
                                     as String?) ??
                                 '',
-                            height: 150,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
+                            fallback: const Icon(
                               Icons.broken_image,
                               color: kMuted,
                               size: 40,
@@ -1236,7 +1241,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
   }
 }
 
-// 🟢 NEW: Custom Multi-Select Field Widget
 class _MultiSelectOptionsField extends StatefulWidget {
   final String hint;
   final List<Map<String, dynamic>> availableOptions;
@@ -1259,13 +1263,11 @@ class _MultiSelectOptionsFieldState extends State<_MultiSelectOptionsField> {
   void _showSelectionDialog() {
     showDialog(
       context: context,
-      builder: (ctx) {
-        return _MultiSelectDialog(
-          availableOptions: widget.availableOptions,
-          initialSelectedOptions: widget.selectedOptions,
-          onSelectionChanged: widget.onChanged,
-        );
-      },
+      builder: (ctx) => _MultiSelectDialog(
+        availableOptions: widget.availableOptions,
+        initialSelectedOptions: widget.selectedOptions,
+        onSelectionChanged: widget.onChanged,
+      ),
     );
   }
 
@@ -1291,26 +1293,28 @@ class _MultiSelectOptionsFieldState extends State<_MultiSelectOptionsField> {
                   : Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: widget.selectedOptions.map((opt) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: kPrimary.withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            opt['name'] ?? '',
-                            style: const TextStyle(
-                              color: kWhite,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                      children: widget.selectedOptions
+                          .map(
+                            (opt) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: kPrimary.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                opt['name'] ?? '',
+                                style: const TextStyle(
+                                  color: kWhite,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
-                          ),
-                        );
-                      }).toList(),
+                          )
+                          .toList(),
                     ),
             ),
             const SizedBox(width: 8),
@@ -1322,7 +1326,6 @@ class _MultiSelectOptionsFieldState extends State<_MultiSelectOptionsField> {
   }
 }
 
-// 🟢 NEW: Dialog containing Search & Checkboxes
 class _MultiSelectDialog extends StatefulWidget {
   final List<Map<String, dynamic>> availableOptions;
   final List<Map<String, dynamic>> initialSelectedOptions;
@@ -1350,19 +1353,23 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredOptions = widget.availableOptions.where((opt) {
-      final name = (opt['name'] as String?)?.toLowerCase() ?? '';
-      return name.contains(_searchQuery.toLowerCase());
-    }).toList();
-
+    final filteredOptions = widget.availableOptions
+        .where(
+          (opt) =>
+              (opt['name'] as String?)?.toLowerCase().contains(
+                _searchQuery.toLowerCase(),
+              ) ??
+              false,
+        )
+        .toList();
     filteredOptions.sort((a, b) {
       final aSelected = _tempSelected.any((o) => o['name'] == a['name']);
       final bSelected = _tempSelected.any((o) => o['name'] == b['name']);
       if (aSelected && !bSelected) return -1;
       if (!aSelected && bSelected) return 1;
-      final nameA = (a['name'] as String?) ?? '';
-      final nameB = (b['name'] as String?) ?? '';
-      return nameA.compareTo(nameB);
+      return ((a['name'] as String?) ?? '').compareTo(
+        (b['name'] as String?) ?? '',
+      );
     });
 
     return Dialog(
@@ -1429,13 +1436,12 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
                             value: isSelected,
                             onChanged: (val) {
                               setState(() {
-                                if (val == true) {
+                                if (val == true)
                                   _tempSelected.add(opt);
-                                } else {
+                                else
                                   _tempSelected.removeWhere(
                                     (o) => o['name'] == opt['name'],
                                   );
-                                }
                               });
                               widget.onSelectionChanged(_tempSelected);
                             },
@@ -1464,7 +1470,6 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
   }
 }
 
-// 🟢 NEW: Combo Items field — shows selected items as chips with thumbnails
 class _ComboItemsField extends StatefulWidget {
   final String hint;
   final List<Map<String, dynamic>> availableItems;
@@ -1486,13 +1491,11 @@ class _ComboItemsFieldState extends State<_ComboItemsField> {
   void _showSelectionDialog() {
     showDialog(
       context: context,
-      builder: (ctx) {
-        return _ComboItemsDialog(
-          availableItems: widget.availableItems,
-          initialSelectedItems: widget.selectedItems,
-          onSelectionChanged: widget.onChanged,
-        );
-      },
+      builder: (ctx) => _ComboItemsDialog(
+        availableItems: widget.availableItems,
+        initialSelectedItems: widget.selectedItems,
+        onSelectionChanged: widget.onChanged,
+      ),
     );
   }
 
@@ -1536,13 +1539,14 @@ class _ComboItemsFieldState extends State<_ComboItemsField> {
                               if (imgUrl.isNotEmpty)
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(10),
-                                  child: Image.network(
-                                    imgUrl,
+                                  child: _WebSafeImage(
+                                    imageUrl: imgUrl,
                                     width: 18,
                                     height: 18,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
-                                        const SizedBox(width: 18, height: 18),
+                                    fallback: const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                    ),
                                   ),
                                 ),
                               if (imgUrl.isNotEmpty) const SizedBox(width: 6),
@@ -1569,7 +1573,6 @@ class _ComboItemsFieldState extends State<_ComboItemsField> {
   }
 }
 
-// 🟢 NEW: Search & checkbox dialog for combo item selection
 class _ComboItemsDialog extends StatefulWidget {
   final List<Map<String, dynamic>> availableItems;
   final List<Map<String, dynamic>> initialSelectedItems;
@@ -1597,19 +1600,23 @@ class _ComboItemsDialogState extends State<_ComboItemsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredItems = widget.availableItems.where((item) {
-      final name = (item['name'] as String?)?.toLowerCase() ?? '';
-      return name.contains(_searchQuery.toLowerCase());
-    }).toList();
-
+    final filteredItems = widget.availableItems
+        .where(
+          (item) =>
+              (item['name'] as String?)?.toLowerCase().contains(
+                _searchQuery.toLowerCase(),
+              ) ??
+              false,
+        )
+        .toList();
     filteredItems.sort((a, b) {
       final aSelected = _tempSelected.any((o) => o['id'] == a['id']);
       final bSelected = _tempSelected.any((o) => o['id'] == b['id']);
       if (aSelected && !bSelected) return -1;
       if (!aSelected && bSelected) return 1;
-      final nameA = (a['name'] as String?) ?? '';
-      final nameB = (b['name'] as String?) ?? '';
-      return nameA.compareTo(nameB);
+      return ((a['name'] as String?) ?? '').compareTo(
+        (b['name'] as String?) ?? '',
+      );
     });
 
     return Dialog(
@@ -1672,12 +1679,11 @@ class _ComboItemsDialogState extends State<_ComboItemsDialog> {
                             secondary: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: imgUrl.isNotEmpty
-                                  ? Image.network(
-                                      imgUrl,
+                                  ? _WebSafeImage(
+                                      imageUrl: imgUrl,
                                       width: 40,
                                       height: 40,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
+                                      fallback: Container(
                                         width: 40,
                                         height: 40,
                                         color: kFieldBg,
@@ -1716,13 +1722,12 @@ class _ComboItemsDialogState extends State<_ComboItemsDialog> {
                             value: isSelected,
                             onChanged: (val) {
                               setState(() {
-                                if (val == true) {
+                                if (val == true)
                                   _tempSelected.add(item);
-                                } else {
+                                else
                                   _tempSelected.removeWhere(
                                     (o) => o['id'] == item['id'],
                                   );
-                                }
                               });
                               widget.onSelectionChanged(_tempSelected);
                             },

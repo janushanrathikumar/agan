@@ -7,8 +7,7 @@ import '../language.dart';
 
 // Web Image CORS error avoidance imports
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 // --- Palette ---
 const kPrimary = Color(0xFFB59410);
@@ -34,35 +33,14 @@ class _WebSafeImage extends StatelessWidget {
   Widget build(BuildContext context) {
     if (imageUrl.isEmpty) return fallback;
 
-    if (kIsWeb) {
-      final String viewId =
-          'checkout-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int viewId) => html.ImageElement()
-          ..src = imageUrl
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover'
-          ..style.borderRadius = '8px',
-      );
-
-      return SizedBox(
-        width: width,
-        height: height,
-        child: HtmlElementView(viewType: viewId),
-      );
-    } else {
-      return Image.network(
-        imageUrl,
-        width: width,
-        height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => fallback,
-      );
-    }
+    // Only the standard mobile Image.network remains!
+    return Image.network(
+      imageUrl,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
   }
 }
 

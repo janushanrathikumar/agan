@@ -74,7 +74,9 @@ class _StartPageState extends State<StartPage> {
                       padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
                       children: [
                         Text(
-                          isDe ? 'Unser Restaurant' : 'Our Restaurant',
+                          isDe
+                              ? 'Unser Restaurant & App'
+                              : 'Our Restaurant & App',
                           style: const TextStyle(
                             color: kWhite,
                             fontSize: 24,
@@ -84,8 +86,8 @@ class _StartPageState extends State<StartPage> {
                         const SizedBox(height: 6),
                         Text(
                           isDe
-                              ? 'Angebot & Räumlichkeiten'
-                              : 'Cuisine & Spaces',
+                              ? 'Informationen & Angebot'
+                              : 'Information & Cuisine',
                           style: const TextStyle(
                             color: kPrimary,
                             fontSize: 16,
@@ -93,6 +95,19 @@ class _StartPageState extends State<StartPage> {
                           ),
                         ),
                         const SizedBox(height: 24),
+
+                        // --- NEW SECTION ADDED FOR GOOGLE OAUTH VERIFICATION ---
+                        _buildInfoCard(
+                          icon: Icons.app_shortcut_rounded,
+                          title: isDe
+                              ? 'Zweck dieser App'
+                              : 'Purpose of this App',
+                          description: isDe
+                              ? 'Willkommen bei Restorant. Mit dieser App können Sie ganz einfach unsere Speisekarte durchsuchen, Essen online bestellen und Ihr Benutzerkonto verwalten.'
+                              : 'Welcome to Restorant. This application allows users to easily browse our menu, order food online, and manage their personal accounts.',
+                        ),
+                        const SizedBox(height: 12),
+                        // --------------------------------------------------------
 
                         // Section: Räumlichkeiten (Grid / Badges)
                         Text(
@@ -393,9 +408,7 @@ class _StartPageState extends State<StartPage> {
                           ),
                           const Spacer(),
 
-                          // ── "About Us" Pill — a clearly-labeled, tappable
-                          // pill (icon + text) instead of a bare icon, so it
-                          // visibly reads as a button, with ripple feedback.
+                          // ── "About Us" Pill
                           Material(
                             color: Colors.transparent,
                             child: InkWell(
@@ -588,10 +601,6 @@ class _StartPageState extends State<StartPage> {
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
-                              // Consistent with the "Next → Log in" flow on
-                              // the right: Sign Up first walks the user to
-                              // the last slide (so onboarding is always
-                              // seen), then a second tap goes to Sign Up.
                               onPressed: () {
                                 if (_currentIndex < slides.length - 1) {
                                   _controller.animateToPage(

@@ -5,8 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'payment_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui_web' as ui_web;
-import 'dart:html' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -31,24 +30,8 @@ class _WebSafeImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (imageUrl.isEmpty) return fallback;
-    if (kIsWeb) {
-      final viewId =
-          'co-img-${imageUrl.hashCode}_${DateTime.now().microsecondsSinceEpoch}';
-      ui_web.platformViewRegistry.registerViewFactory(
-        viewId,
-        (int _) => html.ImageElement()
-          ..src = imageUrl
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.objectFit = 'cover'
-          ..style.borderRadius = '10px',
-      );
-      return SizedBox(
-        width: width,
-        height: height,
-        child: HtmlElementView(viewType: viewId),
-      );
-    }
+
+    // Only the standard mobile Image.network remains!
     return Image.network(
       imageUrl,
       width: width,

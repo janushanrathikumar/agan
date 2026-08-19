@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'package:restorant/startup page/signin_page.dart';
+import 'package:restorant/startup page/privacy_policy_page.dart';
 import 'package:restorant/startup page/start_page.dart';
 import 'package:restorant/startup%20page/signup_page.dart';
 import 'package:restorant/startup%20page/signupverify.dart';
@@ -19,11 +20,12 @@ const kSplashSpinner = Color(0xFFE49024);
 // 🟢 Central place for every named route string, so nothing typos '/uesr'
 // somewhere and silently 404s.
 class AppRoutes {
-  static const start = '/start';
+  static const start = '/';
   static const signIn = '/signin';
   static const signUp = '/signup';
   static const user = '/user';
   static const admin = '/admin';
+  static const privacy = '/privacy';
 }
 
 Future<void> main() async {
@@ -68,6 +70,7 @@ class MyApp extends StatelessWidget {
         AppRoutes.signUp: (_) => const SignUpPage(),
         AppRoutes.user: (_) => const AppShell(),
         AppRoutes.admin: (_) => const AdminHome(),
+        AppRoutes.privacy: (_) => const PrivacyPolicyPage(),
       },
     );
   }

@@ -28,9 +28,16 @@ class _SignUpPageState extends State<SignUpPage> {
   String? _err;
   bool _obscure = true;
 
+  // --- Country Code State & Data ---
+  String _selectedCountryCode = '+41';
+  final List<Map<String, String>> _countryCodes = [
+    {'code': '+41', 'flag': '🇨🇭'},
+    {'code': '+94', 'flag': '🇱🇰'},
+    {'code': '+49', 'flag': '🇩🇪'},
+  ];
+
   final _emailRegex = RegExp(r'^[\w\.\-]+@[\w\-]+\.[\w\.\-]+$');
 
-  // --- NEW: Language Toggle Method ---
   void _toggleLanguage() {
     setState(() {
       AppLanguage.currentLanguage = (AppLanguage.currentLanguage == 'de')
@@ -39,7 +46,6 @@ class _SignUpPageState extends State<SignUpPage> {
     });
   }
 
-  // ── 100% Original Logic Retained ──
   Future<void> _registerWithPhone() async {
     final name = _name.text.trim();
     final email = _email.text.trim();
@@ -58,9 +64,12 @@ class _SignUpPageState extends State<SignUpPage> {
       setState(() => _err = AppLanguage.getText('err_enter_phone'));
       return;
     }
+
+    // --- Use the dynamically selected country code ---
     if (!phone.startsWith('+')) {
-      phone = '+$phone';
+      phone = '$_selectedCountryCode$phone';
     }
+
     if (password.length < 6) {
       setState(() => _err = AppLanguage.getText('err_password_len'));
       return;
@@ -172,23 +181,57 @@ class _SignUpPageState extends State<SignUpPage> {
     super.dispose();
   }
 
-  // ── Neat Input Decoration ──
-  InputDecoration _dec(String label, {IconData? icon}) => InputDecoration(
-    labelText: label,
-    labelStyle: const TextStyle(color: kMuted),
-    prefixIcon: icon != null ? Icon(icon, color: kMuted) : null,
-    filled: true,
-    fillColor: kWhite.withOpacity(0.06),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: const BorderSide(color: kPrimary, width: 1.5),
-    ),
-  );
+  // --- Dropdown Builder Method ---
+  Widget _buildCountryDropdown() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16.0, right: 8.0),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedCountryCode,
+          dropdownColor: kBg,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: kMuted),
+          items: _countryCodes.map((country) {
+            return DropdownMenuItem(
+              value: country['code'],
+              child: Text(
+                '${country['flag']} ${country['code']}',
+                style: const TextStyle(color: kWhite, fontSize: 15),
+              ),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() => _selectedCountryCode = val);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  // --- Input Decoration with prefixIconConstraints added to fix overflow ---
+  InputDecoration _dec(String label, {IconData? icon, Widget? prefixWidget}) =>
+      InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: kMuted),
+        prefixIcon:
+            prefixWidget ?? (icon != null ? Icon(icon, color: kMuted) : null),
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        filled: true,
+        fillColor: kWhite.withOpacity(0.06),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 18,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: kWhite.withOpacity(0.15), width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: kPrimary, width: 1.5),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -212,45 +255,6 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
           onPressed: () => Navigator.pushReplacementNamed(context, '/signin'),
         ),
-        //   // --- NEW: Language Toggle Button Added Here ---
-        //   actions: [
-        //     Padding(
-        //       padding: const EdgeInsets.only(right: 16.0),
-        //       child: Center(
-        //         child: Container(
-        //           decoration: BoxDecoration(
-        //             color: kWhite.withOpacity(0.1),
-        //             borderRadius: BorderRadius.circular(20),
-        //             border: Border.all(color: kWhite.withOpacity(0.2)),
-        //           ),
-        //           child: InkWell(
-        //             borderRadius: BorderRadius.circular(20),
-        //             onTap: _toggleLanguage,
-        //             child: Padding(
-        //               padding: const EdgeInsets.symmetric(
-        //                 horizontal: 14,
-        //                 vertical: 7,
-        //               ),
-        //               child: Row(
-        //                 children: [
-        //                   const Icon(Icons.language, color: kWhite, size: 16),
-        //                   const SizedBox(width: 6),
-        //                   Text(
-        //                     AppLanguage.getText('lang_toggle'),
-        //                     style: const TextStyle(
-        //                       color: kWhite,
-        //                       fontWeight: FontWeight.bold,
-        //                       fontSize: 13,
-        //                     ),
-        //                   ),
-        //                 ],
-        //               ),
-        //             ),
-        //           ),
-        //         ),
-        //       ),
-        //     ),
-        //   ],
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -330,9 +334,21 @@ class _SignUpPageState extends State<SignUpPage> {
                               controller: _phone,
                               keyboardType: TextInputType.phone,
                               style: const TextStyle(color: kWhite),
+                              // --- IntrinsicWidth removed to fix overflow ---
                               decoration: _dec(
                                 AppLanguage.getText('phone_hint'),
-                                icon: Icons.phone_android_rounded,
+                                prefixWidget: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildCountryDropdown(),
+                                    Container(
+                                      height: 24,
+                                      width: 1,
+                                      color: kMuted.withOpacity(0.5),
+                                      margin: const EdgeInsets.only(right: 12),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -433,7 +449,6 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 }
 
-// ── 100% Original Helper Logic Retained ──
 Future<void> finalizeSignup({
   required PhoneAuthCredential phoneCredential,
   required String phone,
