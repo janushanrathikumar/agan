@@ -1,7 +1,10 @@
 // lib/startup_page/start_page.dart
+
 import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // Add this import for the privacy link
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:restorant/startup page/signin_page.dart';
 import 'package:restorant/startup page/signup_page.dart';
 import '../language.dart';
@@ -14,17 +17,19 @@ const kWhite = Color(0xFFF7F7F2);
 
 class StartPage extends StatefulWidget {
   const StartPage({super.key});
+
   @override
   State<StartPage> createState() => _StartPageState();
 }
 
 class _StartPageState extends State<StartPage> {
   final PageController _controller = PageController();
+
   int _currentIndex = 0;
 
   void _toggleLanguage() {
     setState(() {
-      AppLanguage.currentLanguage = (AppLanguage.currentLanguage == 'de')
+      AppLanguage.currentLanguage = AppLanguage.currentLanguage == 'de'
           ? 'en'
           : 'de';
     });
@@ -34,11 +39,21 @@ class _StartPageState extends State<StartPage> {
     return AppLanguage.currentLanguage == 'de' ? 'Über uns' : 'About';
   }
 
-  // Helper method to open the privacy policy link
   Future<void> _launchPrivacyPolicy() async {
-    // 🔴 REPLACE THIS LINK WITH YOUR ACTUAL PRIVACY POLICY LINK 🔴
     final Uri url = Uri.parse('https://restaurantkleefeld.ch/privacy');
-    if (!await launchUrl(url)) {
+
+    try {
+      final bool launched = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open Privacy Policy')),
+        );
+      }
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open Privacy Policy')),
@@ -47,10 +62,16 @@ class _StartPageState extends State<StartPage> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // ABOUT US
+  // ---------------------------------------------------------------------------
+
   void _showAboutUsSheet(BuildContext context) {
-    final isDe = AppLanguage.currentLanguage == 'de';
-    final sheetWidth = MediaQuery.of(context).size.width;
-    final contentMaxWidth = sheetWidth >= 720 ? 640.0 : double.infinity;
+    final bool isDe = AppLanguage.currentLanguage == 'de';
+
+    final double sheetWidth = MediaQuery.of(context).size.width;
+
+    final double contentMaxWidth = sheetWidth >= 720 ? 640.0 : double.infinity;
 
     showModalBottomSheet(
       context: context,
@@ -66,6 +87,7 @@ class _StartPageState extends State<StartPage> {
           ),
           child: Column(
             children: [
+              // Handle
               Container(
                 margin: const EdgeInsets.only(top: 12, bottom: 8),
                 width: 44,
@@ -75,6 +97,7 @@ class _StartPageState extends State<StartPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -82,54 +105,141 @@ class _StartPageState extends State<StartPage> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
                       children: [
-                        Text(
-                          isDe
-                              ? 'Restaurant Kleefeld App' // 🟢 Inga maathirukken
-                              : 'Restaurant Kleefeld App', // 🟢 Inga maathirukken
-                          style: const TextStyle(
+                        // -----------------------------------------------------
+                        // APP NAME
+                        // -----------------------------------------------------
+                        const Text(
+                          'Restaurant Kleefeld',
+                          style: TextStyle(
                             color: kWhite,
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+
                         const SizedBox(height: 6),
+
                         Text(
                           isDe
-                              ? 'Informationen, Angebot & Datenschutz'
-                              : 'Information, Cuisine & Privacy',
+                              ? 'Online bestellen, Kundenkonto & Restaurantinformationen'
+                              : 'Online food ordering, customer account & restaurant information',
                           style: const TextStyle(
                             color: kPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+
                         const SizedBox(height: 24),
 
-                        // --- REQUIRED BY GOOGLE: APP PURPOSE ---
+                        // -----------------------------------------------------
+                        // PURPOSE
+                        // -----------------------------------------------------
                         _buildInfoCard(
-                          icon: Icons.app_shortcut_rounded,
+                          icon: Icons.restaurant_menu,
                           title: isDe
-                              ? 'Zweck dieser App'
-                              : 'Purpose of this App',
+                              ? 'Was ist Restaurant Kleefeld?'
+                              : 'What is Restaurant Kleefeld?',
                           description: isDe
-                              ? 'Willkommen bei Restorant. Mit dieser App können Sie ganz einfach unsere Speisekarte durchsuchen, Essen online bestellen und Ihr Benutzerkonto verwalten.'
-                              : 'Welcome to Restorant. This application allows users to easily browse our menu, order food online, and manage their personal accounts.',
+                              ? 'Restaurant Kleefeld ist unsere Online-Plattform für Gäste. Sie können unsere Speisekarte entdecken, Essen online bestellen, Ihre Bestellungen verwalten und Ihr persönliches Kundenkonto nutzen.'
+                              : 'Restaurant Kleefeld is our online platform for guests. Discover our menu, order food online, manage your orders, and use your personal customer account.',
                         ),
+
                         const SizedBox(height: 12),
 
-                        // --- REQUIRED BY GOOGLE: DATA USAGE TRANSPARENCY ---
-                        _buildInfoCard(
-                          icon: Icons.security_rounded,
-                          title: isDe
-                              ? 'Wie wir Ihre Daten nutzen'
-                              : 'How we use your data',
-                          description: isDe
-                              ? 'Wir fordern Ihre E-Mail-Adresse und Telefonnummer an, um Ihr Konto sicher zu authentifizieren, Ihre Essensbestellungen abzuwickeln und Sie über wichtige Updates zu Ihrer Lieferung zu informieren. Wir geben Ihre Daten nicht an Dritte weiter.'
-                              : 'We request your email address and phone number to securely authenticate your account, process your food orders, and contact you regarding important delivery updates. We do not share your data with third parties.',
+                        // -----------------------------------------------------
+                        // SPACES
+                        // -----------------------------------------------------
+                        Text(
+                          isDe
+                              ? 'Unsere Räumlichkeiten'
+                              : 'Our Spaces & Capacity',
+                          style: const TextStyle(
+                            color: kWhite,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
+
                         const SizedBox(height: 12),
 
-                        // --- REQUIRED BY GOOGLE: PRIVACY POLICY LINK ---
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _buildCapacityBadge(
+                              Icons.restaurant,
+                              'Restaurant',
+                              isDe ? '80 Plätze' : '80 seats',
+                            ),
+                            _buildCapacityBadge(
+                              Icons.meeting_room,
+                              isDe ? 'Saal' : 'Event Hall',
+                              isDe ? '70 Plätze' : '70 seats',
+                            ),
+                            _buildCapacityBadge(
+                              Icons.yard,
+                              isDe ? 'Garten' : 'Garden',
+                              isDe ? '60 Plätze' : '60 seats',
+                            ),
+                            _buildCapacityBadge(
+                              Icons.local_bar,
+                              isDe ? 'Bar / Fumoir' : 'Bar / Lounge',
+                              isDe ? '20 Plätze' : '20 seats',
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // -----------------------------------------------------
+                        // SWISS FOOD
+                        // -----------------------------------------------------
+                        _buildInfoCard(
+                          icon: Icons.outdoor_grill,
+                          title: isDe
+                              ? 'Kulinarisches Angebot'
+                              : 'Culinary Delights',
+                          description: isDe
+                              ? 'Schweizer Spezialitäten und hausgemachte Gerichte wie unsere beliebte Pfannen-Rösti sowie feine sri-lankische Spezialitäten mit authentischen Aromen.'
+                              : 'Enjoy Swiss specialties and homemade dishes such as our popular pan-served Rösti together with flavorful Sri Lankan specialties.',
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // -----------------------------------------------------
+                        // PIZZA
+                        // -----------------------------------------------------
+                        _buildInfoCard(
+                          icon: Icons.local_pizza,
+                          title: isDe
+                              ? 'Knusprige Pizza & hausgemachter Eistee'
+                              : 'Crispy Pizza & Homemade Iced Tea',
+                          description: isDe
+                              ? 'Knuspriger Boden und herzhafter Geschmack frisch aus dem Ofen. Dazu unser hausgemachter, frischer Eistee.'
+                              : 'Fresh oven-baked pizzas with a crispy crust, served alongside our homemade iced tea.',
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // -----------------------------------------------------
+                        // EVENTS
+                        // -----------------------------------------------------
+                        _buildInfoCard(
+                          icon: Icons.celebration,
+                          title: isDe
+                              ? 'Anlässe, Partyservice & Saal'
+                              : 'Events & Catering Service',
+                          description: isDe
+                              ? 'Unser Saal mit 70 Plätzen eignet sich für Familienfeiern, Geburtstage und Firmenanlässe. Saalvermietung und Apéros auf Anfrage.'
+                              : 'Our 70-seat event hall is suitable for family celebrations, birthdays and corporate events. Hall rental and catering are available on request.',
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // -----------------------------------------------------
+                        // PRIVACY POLICY
+                        // -----------------------------------------------------
                         InkWell(
                           onTap: _launchPrivacyPolicy,
                           borderRadius: BorderRadius.circular(18),
@@ -171,81 +281,6 @@ class _StartPageState extends State<StartPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 24),
-
-                        Text(
-                          isDe
-                              ? 'Unsere Räumlichkeiten'
-                              : 'Our Spaces & Capacity',
-                          style: const TextStyle(
-                            color: kWhite,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            _buildCapacityBadge(
-                              Icons.restaurant,
-                              isDe ? 'Restaurant' : 'Restaurant',
-                              '80 Plätze',
-                            ),
-                            _buildCapacityBadge(
-                              Icons.meeting_room,
-                              isDe ? 'Saal' : 'Event Hall',
-                              '70 Plätze',
-                            ),
-                            _buildCapacityBadge(
-                              Icons.yard,
-                              isDe ? 'Garten' : 'Garden',
-                              '60 Plätze',
-                            ),
-                            _buildCapacityBadge(
-                              Icons.local_bar,
-                              isDe ? 'Bar / Fumoir' : 'Bar / Lounge',
-                              '20 Plätze',
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        _buildInfoCard(
-                          icon: Icons.outdoor_grill,
-                          title: isDe
-                              ? 'Kulinarisches Angebot'
-                              : 'Culinary Delights',
-                          description: isDe
-                              ? 'Schweizer Spezialitäten und hausgemachte Gerichte wie unsere beliebte Pfannen-Rösti sowie feine sri-lankische Spezialitäten mit authentischen Aromen.'
-                              : 'Authentic Swiss specialties such as homemade pan-served Rösti, paired with flavorful Sri Lankan traditional dishes.',
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        _buildInfoCard(
-                          icon: Icons.local_pizza,
-                          title: isDe
-                              ? 'Knusprige Pizza & Hausgemachter Eistee'
-                              : 'Crispy Pizza & Fresh Iced Tea',
-                          description: isDe
-                              ? 'Knuspriger Boden und herzhafter Geschmack frisch aus dem Ofen. Dazu perfekt: Unser hausgemachter, frischer Eistee.'
-                              : 'Oven-baked pizzas with crispy crusts alongside our freshly prepared homemade iced tea.',
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        _buildInfoCard(
-                          icon: Icons.celebration,
-                          title: isDe
-                              ? 'Anlässe, Partyservice & Saal'
-                              : 'Events & Catering Service',
-                          description: isDe
-                              ? 'Unser Saal (70 Plätze) eignet sich perfekt für Familienfeiern, Geburtstage und Firmenanlässe. Saalvermietung & Apéros auf Anfrage.'
-                              : 'Our 70-seat hall is ideal for family events, birthdays, and corporate celebrations. Catering and hall rentals available.',
-                        ),
                       ],
                     ),
                   ),
@@ -257,6 +292,10 @@ class _StartPageState extends State<StartPage> {
       },
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // CAPACITY BADGE
+  // ---------------------------------------------------------------------------
 
   Widget _buildCapacityBadge(IconData icon, String title, String capacity) {
     return Container(
@@ -293,6 +332,10 @@ class _StartPageState extends State<StartPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // INFORMATION CARD
+  // ---------------------------------------------------------------------------
+
   Widget _buildInfoCard({
     required IconData icon,
     required String title,
@@ -316,7 +359,9 @@ class _StartPageState extends State<StartPage> {
             ),
             child: Icon(icon, color: kPrimary, size: 22),
           ),
+
           const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,7 +374,9 @@ class _StartPageState extends State<StartPage> {
                     fontSize: 15,
                   ),
                 ),
+
                 const SizedBox(height: 4),
+
                 Text(
                   description,
                   style: TextStyle(
@@ -346,18 +393,33 @@ class _StartPageState extends State<StartPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // DISPOSE
+  // ---------------------------------------------------------------------------
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 720;
-    final contentMaxWidth = isWide ? 720.0 : 520.0;
+    final bool isDe = AppLanguage.currentLanguage == 'de';
 
-    final slides = [
+    final bool isWide = MediaQuery.of(context).size.width >= 720;
+
+    final double contentMaxWidth = isWide ? 720.0 : 520.0;
+
+    // -------------------------------------------------------------------------
+    // SLIDES
+    // -------------------------------------------------------------------------
+
+    final List<Map<String, String>> slides = [
       {
         'image': 'assets/slide1.png',
         'title': AppLanguage.getText('title_1'),
@@ -380,11 +442,18 @@ class _StartPageState extends State<StartPage> {
       },
     ];
 
+    // -------------------------------------------------------------------------
+    // PAGE
+    // -------------------------------------------------------------------------
+
     return Scaffold(
       backgroundColor: kBg,
       body: Stack(
         fit: StackFit.expand,
         children: [
+          // -------------------------------------------------------------------
+          // BACKGROUND
+          // -------------------------------------------------------------------
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -394,35 +463,29 @@ class _StartPageState extends State<StartPage> {
               ),
             ),
           ),
-          Positioned(
-            top: -100,
-            right: -50,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: kPrimary.withOpacity(0.15),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-                child: const SizedBox(),
-              ),
-            ),
-          ),
+
+          // -------------------------------------------------------------------
+          // SAFE AREA
+          // -------------------------------------------------------------------
           SafeArea(
-            child: Column(
-              children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                    child: Padding(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: Column(
+                  children: [
+                    // =========================================================
+                    // TOP BAR
+                    // =========================================================
+                    Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 24.0,
-                        vertical: 12.0,
+                        horizontal: 24,
+                        vertical: 12,
                       ),
                       child: Row(
                         children: [
+                          // ---------------------------------------------------
+                          // LANGUAGE
+                          // ---------------------------------------------------
                           Container(
                             decoration: BoxDecoration(
                               color: kWhite.withOpacity(0.1),
@@ -460,7 +523,12 @@ class _StartPageState extends State<StartPage> {
                               ),
                             ),
                           ),
+
                           const Spacer(),
+
+                          // ---------------------------------------------------
+                          // ABOUT
+                          // ---------------------------------------------------
                           Material(
                             color: Colors.transparent,
                             child: InkWell(
@@ -502,7 +570,12 @@ class _StartPageState extends State<StartPage> {
                               ),
                             ),
                           ),
+
                           const SizedBox(width: 6),
+
+                          // ---------------------------------------------------
+                          // SKIP
+                          // ---------------------------------------------------
                           TextButton(
                             onPressed: () => Navigator.pushReplacementNamed(
                               context,
@@ -520,22 +593,65 @@ class _StartPageState extends State<StartPage> {
                         ],
                       ),
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: contentMaxWidth),
+
+                    // =========================================================
+                    // APP NAME
+                    // =========================================================
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        'Restaurant Kleefeld',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: kWhite,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    // =========================================================
+                    // APP PURPOSE
+                    // =========================================================
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: Text(
+                        isDe
+                            ? 'Ihre Online-Plattform für Restaurant Kleefeld: Speisekarte entdecken, Essen online bestellen und Kundenkonto verwalten.'
+                            : 'Your online platform for Restaurant Kleefeld: discover our menu, order food online, and manage your customer account.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: kMuted.withOpacity(0.95),
+                          fontSize: 13,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // =========================================================
+                    // SLIDESHOW
+                    // =========================================================
+                    Expanded(
                       child: PageView.builder(
                         controller: _controller,
-                        onPageChanged: (i) => setState(() => _currentIndex = i),
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentIndex = index;
+                          });
+                        },
                         itemCount: slides.length,
-                        itemBuilder: (_, i) {
-                          final slide = slides[i];
+                        itemBuilder: (_, index) {
+                          final Map<String, String> slide = slides[index];
+
                           return Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 24,
-                              vertical: 16,
+                              vertical: 8,
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(32),
@@ -545,7 +661,7 @@ class _StartPageState extends State<StartPage> {
                                   sigmaY: 12,
                                 ),
                                 child: Container(
-                                  padding: const EdgeInsets.all(28),
+                                  padding: const EdgeInsets.all(24),
                                   decoration: BoxDecoration(
                                     color: kWhite.withOpacity(0.06),
                                     borderRadius: BorderRadius.circular(32),
@@ -553,41 +669,41 @@ class _StartPageState extends State<StartPage> {
                                       color: kWhite.withOpacity(0.15),
                                       width: 1.5,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
-                                        blurRadius: 30,
-                                        offset: const Offset(0, 10),
-                                      ),
-                                    ],
                                   ),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
+                                      // IMAGE
                                       Expanded(
                                         child: Image.asset(
                                           slide['image']!,
                                           fit: BoxFit.contain,
                                         ),
                                       ),
-                                      const SizedBox(height: 24),
+
+                                      const SizedBox(height: 16),
+
+                                      // TITLE
                                       Text(
                                         slide['title']!,
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(
                                           color: kWhite,
-                                          fontSize: 24,
+                                          fontSize: 22,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      const SizedBox(height: 12),
+
+                                      const SizedBox(height: 8),
+
+                                      // DESCRIPTION
                                       Text(
                                         slide['text']!,
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: kMuted.withOpacity(0.9),
-                                          fontSize: 15,
-                                          height: 1.45,
+                                          fontSize: 14,
+                                          height: 1.4,
                                         ),
                                       ),
                                     ],
@@ -599,37 +715,79 @@ class _StartPageState extends State<StartPage> {
                         },
                       ),
                     ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      slides.length,
-                      (i) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutCubic,
-                        margin: const EdgeInsets.symmetric(horizontal: 5),
-                        height: 7,
-                        width: _currentIndex == i ? 28 : 7,
-                        decoration: BoxDecoration(
-                          color: _currentIndex == i
-                              ? kPrimary
-                              : kWhite.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
+
+                    // =========================================================
+                    // DOT INDICATORS
+                    // =========================================================
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(slides.length, (index) {
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutCubic,
+                            margin: const EdgeInsets.symmetric(horizontal: 5),
+                            height: 7,
+                            width: _currentIndex == index ? 28 : 7,
+                            decoration: BoxDecoration(
+                              color: _currentIndex == index
+                                  ? kPrimary
+                                  : kWhite.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+
+                    // =========================================================
+                    // PRIVACY POLICY
+                    // =========================================================
+                    InkWell(
+                      onTap: _launchPrivacyPolicy,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.privacy_tip_outlined,
+                              color: kPrimary,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isDe
+                                  ? 'Datenschutzerklärung lesen'
+                                  : 'Read our Privacy Policy',
+                              style: const TextStyle(
+                                color: kPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                                decorationColor: kPrimary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ),
-                ),
-                Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                    child: Padding(
+
+                    // =========================================================
+                    // BUTTONS
+                    // =========================================================
+                    Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
                       child: Row(
                         children: [
+                          // ---------------------------------------------------
+                          // SIGN UP
+                          // ---------------------------------------------------
                           Expanded(
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
@@ -668,7 +826,12 @@ class _StartPageState extends State<StartPage> {
                               ),
                             ),
                           ),
+
                           const SizedBox(width: 16),
+
+                          // ---------------------------------------------------
+                          // NEXT / LOGIN
+                          // ---------------------------------------------------
                           Expanded(
                             child: FilledButton(
                               style: FilledButton.styleFrom(
@@ -709,9 +872,9 @@ class _StartPageState extends State<StartPage> {
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ],

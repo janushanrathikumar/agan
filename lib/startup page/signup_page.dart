@@ -1,9 +1,10 @@
 // lib/startup_page/signup_page.dart
 import 'dart:ui' show ImageFilter;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:restorant/startup%20page/signupverify.dart';
+import 'package:restorant/startup page/signupverify.dart';
 import '../language.dart';
 
 const kPrimary = Color(0xFFB59410);
@@ -28,7 +29,6 @@ class _SignUpPageState extends State<SignUpPage> {
   String? _err;
   bool _obscure = true;
 
-  // --- Country Code State & Data ---
   String _selectedCountryCode = '+41';
   final List<Map<String, String>> _countryCodes = [
     {'code': '+41', 'flag': '🇨🇭'},
@@ -37,19 +37,12 @@ class _SignUpPageState extends State<SignUpPage> {
   ];
 
   final _emailRegex = RegExp(r'^[\w\.\-]+@[\w\-]+\.[\w\.\-]+$');
-
-  void _toggleLanguage() {
-    setState(() {
-      AppLanguage.currentLanguage = (AppLanguage.currentLanguage == 'de')
-          ? 'en'
-          : 'de';
-    });
-  }
+  final _phoneRegex = RegExp(r'^\+?[1-9]\d{6,14}$');
 
   Future<void> _registerWithPhone() async {
     final name = _name.text.trim();
     final email = _email.text.trim();
-    var phone = _phone.text.trim();
+    var phone = _phone.text.trim().replaceAll(RegExp(r'[\s\-]'), '');
     final password = _password.text.trim();
 
     if (name.isEmpty) {
@@ -65,9 +58,13 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
-    // --- Use the dynamically selected country code ---
     if (!phone.startsWith('+')) {
       phone = '$_selectedCountryCode$phone';
+    }
+
+    if (!_phoneRegex.hasMatch(phone)) {
+      setState(() => _err = 'Please enter a valid phone number.');
+      return;
     }
 
     if (password.length < 6) {
@@ -105,68 +102,86 @@ class _SignUpPageState extends State<SignUpPage> {
         );
       }
 
-      await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: phone,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          try {
-            await finalizeSignup(
-              phoneCredential: credential,
-              phone: phone,
-              name: name,
+      if (kIsWeb) {
+        ConfirmationResult confirmationResult = await FirebaseAuth.instance
+            .signInWithPhoneNumber(phone);
+
+        if (!mounted) return;
+        setState(() => _busy = false);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SignUpVerifyPage(
+              verificationId: null,
+              confirmationResult: confirmationResult,
+              phoneNumber: phone,
+              userName: name,
               email: email,
               password: password,
-            );
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Account verified automatically! Please sign in.',
-                ),
-                backgroundColor: Colors.green,
-              ),
-            );
-            Navigator.pushReplacementNamed(context, '/signin');
-          } catch (e) {
-            if (!mounted) return;
-            setState(() {
-              _err = e.toString();
-              _busy = false;
-            });
-          }
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          if (!mounted) return;
-          setState(() {
-            _err = e.message;
-            _busy = false;
-          });
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          if (!mounted) return;
-          setState(() => _busy = false);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SignUpVerifyPage(
-                verificationId: verificationId,
-                phoneNumber: phone,
-                userName: name,
+            ),
+          ),
+        );
+      } else {
+        await FirebaseAuth.instance.verifyPhoneNumber(
+          phoneNumber: phone,
+          verificationCompleted: (PhoneAuthCredential credential) async {
+            try {
+              await finalizeSignupMobile(
+                phoneCredential: credential,
+                phone: phone,
+                name: name,
                 email: email,
                 password: password,
+              );
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Account verified automatically! Please sign in.',
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              Navigator.pushReplacementNamed(context, '/signin');
+            } catch (e) {
+              if (!mounted) return;
+              setState(() {
+                _err = e.toString();
+                _busy = false;
+              });
+            }
+          },
+          verificationFailed: (FirebaseAuthException e) {
+            if (!mounted) return;
+            setState(() {
+              _err =
+                  e.message ?? 'Verification failed. Please check the number.';
+              _busy = false;
+            });
+          },
+          codeSent: (String verificationId, int? resendToken) {
+            if (!mounted) return;
+            setState(() => _busy = false);
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SignUpVerifyPage(
+                  verificationId: verificationId,
+                  confirmationResult: null,
+                  phoneNumber: phone,
+                  userName: name,
+                  email: email,
+                  password: password,
+                ),
               ),
-            ),
-          );
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {},
-      );
-    } on FirebaseAuthException catch (e) {
-      setState(() {
-        _err = e.message;
-        _busy = false;
-      });
+            );
+          },
+          codeAutoRetrievalTimeout: (String verificationId) {},
+        );
+      }
     } catch (e) {
       setState(() {
-        _err = e.toString();
+        _err = e.toString().replaceAll('Exception: ', '');
         _busy = false;
       });
     }
@@ -181,7 +196,6 @@ class _SignUpPageState extends State<SignUpPage> {
     super.dispose();
   }
 
-  // --- Dropdown Builder Method ---
   Widget _buildCountryDropdown() {
     return Padding(
       padding: const EdgeInsets.only(left: 16.0, right: 8.0),
@@ -209,7 +223,6 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  // --- Input Decoration with prefixIconConstraints added to fix overflow ---
   InputDecoration _dec(String label, {IconData? icon, Widget? prefixWidget}) =>
       InputDecoration(
         labelText: label,
@@ -291,26 +304,30 @@ class _SignUpPageState extends State<SignUpPage> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.restaurant_rounded,
-                                  color: kPrimary,
-                                  size: 30,
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  AppLanguage.getText('create_account'),
-                                  style: const TextStyle(
-                                    color: kWhite,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            const Icon(
+                              Icons.restaurant_rounded,
+                              color: kPrimary,
+                              size: 30,
                             ),
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Restaurant Kleefeld',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: kWhite,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              AppLanguage.getText('create_account'),
+                              style: const TextStyle(
+                                color: kMuted,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 28),
                             TextField(
                               controller: _name,
                               style: const TextStyle(color: kWhite),
@@ -334,7 +351,6 @@ class _SignUpPageState extends State<SignUpPage> {
                               controller: _phone,
                               keyboardType: TextInputType.phone,
                               style: const TextStyle(color: kWhite),
-                              // --- IntrinsicWidth removed to fix overflow ---
                               decoration: _dec(
                                 AppLanguage.getText('phone_hint'),
                                 prefixWidget: Row(
@@ -449,7 +465,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 }
 
-Future<void> finalizeSignup({
+Future<void> finalizeSignupMobile({
   required PhoneAuthCredential phoneCredential,
   required String phone,
   required String name,
@@ -464,6 +480,38 @@ Future<void> finalizeSignup({
     throw Exception('Could not create account. Please try again.');
   }
 
+  await finalizeSignupCore(
+    user: user,
+    phone: phone,
+    name: name,
+    email: email,
+    password: password,
+  );
+}
+
+Future<void> finalizeSignupWeb({
+  required User user,
+  required String phone,
+  required String name,
+  required String email,
+  required String password,
+}) async {
+  await finalizeSignupCore(
+    user: user,
+    phone: phone,
+    name: name,
+    email: email,
+    password: password,
+  );
+}
+
+Future<void> finalizeSignupCore({
+  required User user,
+  required String phone,
+  required String name,
+  required String email,
+  required String password,
+}) async {
   await user.updateDisplayName(name);
 
   final emailCredential = EmailAuthProvider.credential(

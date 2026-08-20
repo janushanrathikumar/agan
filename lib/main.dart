@@ -1,3 +1,5 @@
+// lib/main.dart
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,10 +19,9 @@ import 'secondary_firebase_options.dart';
 const kSplashBg = Color(0xFF112A18);
 const kSplashSpinner = Color(0xFFE49024);
 
-// 🟢 Central place for every named route string, so nothing typos '/uesr'
-// somewhere and silently 404s.
+// 🟢 Central place for every named route string
 class AppRoutes {
-  static const start = '/';
+  static const start = '/start'; // Changed from '/' to prevent conflict with AuthGate
   static const signIn = '/signin';
   static const signUp = '/signup';
   static const user = '/user';
@@ -31,9 +32,7 @@ class AppRoutes {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🟢 Removes the '#' from web URLs, so the address bar shows
-  // e.g. localhost:3000/user or localhost:3000/admin instead of
-  // localhost:3000/#/user. No-op on mobile/desktop.
+  // 🟢 Removes the '#' from web URLs
   usePathUrlStrategy();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -58,10 +57,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFFE49024),
       ),
-      // 🟢 '/' is the entry point every time the app is opened/refreshed.
-      // AuthGate figures out signed-in state + role, then REPLACES itself
-      // with the correct named route so the URL bar actually updates to
-      // /user or /admin (instead of just swapping the widget in place).
+      // 🟢 '/' is the entry point (AuthGate). It will redirect to '/start', '/user', or '/admin'
       initialRoute: '/',
       routes: {
         '/': (_) => const AuthGate(),
@@ -78,9 +74,7 @@ class MyApp extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────
 // AuthGate: sits at '/'. Listens to auth state + Firestore role, then
-// pushReplacementNamed's to wherever the user actually belongs. This runs
-// on: first launch, every full page refresh (F5) on web, and after
-// sign-out redirects back to '/'.
+// pushReplacementNamed's to wherever the user actually belongs.
 // ─────────────────────────────────────────────────────────────────────────
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -122,9 +116,7 @@ class _AuthGateState extends State<AuthGate> {
       final String role =
           (data['role'] as String?)?.toLowerCase().trim() ?? 'customer';
 
-      // 🟢 Unverified account (OTP started but never finished) — resend
-      // the code and drop them back into the verify screen instead of
-      // routing them to a home page they shouldn't see yet.
+      // 🟢 Unverified account (OTP started but never finished)
       if (!verified) {
         final phone = data['phone'] as String? ?? '';
         final userName = data['userName'] as String? ?? 'Guest';
@@ -135,29 +127,58 @@ class _AuthGateState extends State<AuthGate> {
           return;
         }
 
-        await FirebaseAuth.instance.verifyPhoneNumber(
-          phoneNumber: phone.startsWith('+') ? phone : '+$phone',
-          verificationCompleted: (_) {},
-          verificationFailed: (_) {
-            if (!mounted) return;
-            Navigator.of(context).pushReplacementNamed(AppRoutes.start);
-          },
-          codeSent: (String verificationId, int? resendToken) {
+        final formattedPhone = phone.startsWith('+') ? phone : '+$phone';
+
+        // --- PLATFORM SPECIFIC AUTH FLOW FOR UNVERIFIED USERS ---
+        if (kIsWeb) {
+          try {
+            ConfirmationResult confirmationResult = await FirebaseAuth.instance
+                .signInWithPhoneNumber(formattedPhone);
+
             if (!mounted) return;
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (_) => SignUpVerifyPage(
-                  verificationId: verificationId,
-                  phoneNumber: phone,
+                  verificationId: null, // Null for Web
+                  confirmationResult: confirmationResult, // Passed for Web
+                  phoneNumber: formattedPhone,
                   userName: userName,
                   email: email,
                   password: '',
                 ),
               ),
             );
-          },
-          codeAutoRetrievalTimeout: (_) {},
-        );
+          } catch (_) {
+            if (!mounted) return;
+            Navigator.of(context).pushReplacementNamed(AppRoutes.start);
+          }
+        } else {
+          // Mobile Flow
+          await FirebaseAuth.instance.verifyPhoneNumber(
+            phoneNumber: formattedPhone,
+            verificationCompleted: (_) {},
+            verificationFailed: (_) {
+              if (!mounted) return;
+              Navigator.of(context).pushReplacementNamed(AppRoutes.start);
+            },
+            codeSent: (String verificationId, int? resendToken) {
+              if (!mounted) return;
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => SignUpVerifyPage(
+                    verificationId: verificationId, // Passed for Mobile
+                    confirmationResult: null, // Null for Mobile
+                    phoneNumber: formattedPhone,
+                    userName: userName,
+                    email: email,
+                    password: '',
+                  ),
+                ),
+              );
+            },
+            codeAutoRetrievalTimeout: (_) {},
+          );
+        }
         return;
       }
 

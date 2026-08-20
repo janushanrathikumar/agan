@@ -1,5 +1,6 @@
 // lib/startup_page/signin_page.dart
 import 'dart:ui' show ImageFilter;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -29,7 +30,6 @@ class _SignInPageState extends State<SignInPage> {
   String? _err;
   bool _obscure = true;
 
-  // --- Country Code State & Data ---
   String _selectedCountryCode = '+41';
   final List<Map<String, String>> _countryCodes = [
     {'code': '+41', 'flag': '🇨🇭'},
@@ -42,12 +42,11 @@ class _SignInPageState extends State<SignInPage> {
       _busy = true;
       _err = null;
     });
-    String input = _emailOrPhone.text.trim();
+    String input = _emailOrPhone.text.trim().replaceAll(RegExp(r'[\s\-]'), '');
     String loginEmail = input;
 
     try {
       if (!input.contains('@')) {
-        // --- Use dynamic country code ---
         final queryPhone = input.startsWith('+')
             ? input
             : '$_selectedCountryCode$input';
@@ -89,36 +88,58 @@ class _SignInPageState extends State<SignInPage> {
           throw Exception(AppLanguage.getText('err_phone_not_found'));
         }
 
-        await FirebaseAuth.instance.verifyPhoneNumber(
-          // --- Use dynamic country code if fallback is needed ---
-          phoneNumber: phone.startsWith('+')
-              ? phone
-              : '$_selectedCountryCode$phone',
-          verificationCompleted: (phoneAuthCredential) {},
-          verificationFailed: (e) {
-            if (!mounted) return;
-            setState(() {
-              _err = e.message;
-              _busy = false;
-            });
-          },
-          codeSent: (String verificationId, int? resendToken) {
-            if (!mounted) return;
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SignUpVerifyPage(
-                  verificationId: verificationId,
-                  phoneNumber: phone,
-                  userName: userName,
-                  email: user.email ?? loginEmail,
-                  password: _password.text,
-                ),
+        final formattedPhone = phone.startsWith('+')
+            ? phone
+            : '$_selectedCountryCode$phone';
+
+        if (kIsWeb) {
+          ConfirmationResult confirmationResult = await FirebaseAuth.instance
+              .signInWithPhoneNumber(formattedPhone);
+
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SignUpVerifyPage(
+                verificationId: null,
+                confirmationResult: confirmationResult,
+                phoneNumber: formattedPhone,
+                userName: userName,
+                email: user.email ?? loginEmail,
+                password: _password.text,
               ),
-            );
-          },
-          codeAutoRetrievalTimeout: (verificationId) {},
-        );
+            ),
+          );
+        } else {
+          await FirebaseAuth.instance.verifyPhoneNumber(
+            phoneNumber: formattedPhone,
+            verificationCompleted: (phoneAuthCredential) {},
+            verificationFailed: (e) {
+              if (!mounted) return;
+              setState(() {
+                _err = e.message;
+                _busy = false;
+              });
+            },
+            codeSent: (String verificationId, int? resendToken) {
+              if (!mounted) return;
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SignUpVerifyPage(
+                    verificationId: verificationId,
+                    confirmationResult: null,
+                    phoneNumber: formattedPhone,
+                    userName: userName,
+                    email: user.email ?? loginEmail,
+                    password: _password.text,
+                  ),
+                ),
+              );
+            },
+            codeAutoRetrievalTimeout: (verificationId) {},
+          );
+        }
         return;
       }
 
@@ -139,7 +160,7 @@ class _SignInPageState extends State<SignInPage> {
     } on FirebaseAuthException catch (e) {
       setState(() => _err = _friendlyAuthError(e));
     } catch (e) {
-      setState(() => _err = e.toString());
+      setState(() => _err = e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -173,7 +194,6 @@ class _SignInPageState extends State<SignInPage> {
     super.dispose();
   }
 
-  // --- Dropdown Builder Method ---
   Widget _buildCountryDropdown() {
     return Padding(
       padding: const EdgeInsets.only(left: 16.0, right: 8.0),
@@ -201,7 +221,6 @@ class _SignInPageState extends State<SignInPage> {
     );
   }
 
-  // --- Input Decoration with prefixIconConstraints added to fix overflow ---
   InputDecoration _dec(String label, {IconData? icon, Widget? prefixWidget}) =>
       InputDecoration(
         labelText: label,
@@ -290,26 +309,30 @@ class _SignInPageState extends State<SignInPage> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.restaurant_rounded,
-                                      color: kPrimary,
-                                      size: 32,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      AppLanguage.getText('welcome_back'),
-                                      style: const TextStyle(
-                                        color: kWhite,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                                const Icon(
+                                  Icons.restaurant_rounded,
+                                  color: kPrimary,
+                                  size: 32,
                                 ),
-                                const SizedBox(height: 32),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Restaurant Kleefeld',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: kWhite,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  AppLanguage.getText('welcome_back'),
+                                  style: const TextStyle(
+                                    color: kMuted,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
                                 TextField(
                                   controller: _emailOrPhone,
                                   keyboardType: TextInputType.emailAddress,
@@ -318,7 +341,6 @@ class _SignInPageState extends State<SignInPage> {
                                     AutofillHints.email,
                                     AutofillHints.telephoneNumber,
                                   ],
-                                  // --- IntrinsicWidth removed to fix overflow ---
                                   decoration: _dec(
                                     AppLanguage.getText('email_or_phone'),
                                     prefixWidget: Row(
@@ -343,23 +365,22 @@ class _SignInPageState extends State<SignInPage> {
                                   obscureText: _obscure,
                                   style: const TextStyle(color: kWhite),
                                   autofillHints: const [AutofillHints.password],
-                                  decoration:
-                                      _dec(
-                                        AppLanguage.getText('password'),
-                                        icon: Icons.lock_outline_rounded,
-                                      ).copyWith(
-                                        suffixIcon: IconButton(
-                                          onPressed: () => setState(
-                                            () => _obscure = !_obscure,
-                                          ),
-                                          icon: Icon(
-                                            _obscure
-                                                ? Icons.visibility
-                                                : Icons.visibility_off,
-                                            color: kMuted,
-                                          ),
-                                        ),
+                                  decoration: _dec(
+                                    AppLanguage.getText('password'),
+                                    icon: Icons.lock_outline_rounded,
+                                  ).copyWith(
+                                    suffixIcon: IconButton(
+                                      onPressed: () => setState(
+                                        () => _obscure = !_obscure,
                                       ),
+                                      icon: Icon(
+                                        _obscure
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
+                                        color: kMuted,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                                 if (_err != null) ...[
                                   const SizedBox(height: 12),

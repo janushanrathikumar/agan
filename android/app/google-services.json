@@ -12,7 +12,12 @@
           "package_name": "com.example.restorant"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "382479866723-llued4ds4bgm2glm9kiumil8acgraphe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyA20KbaJiIdbeciPSgXhEyD1x9EZ24Kz18"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "382479866723-llued4ds4bgm2glm9kiumil8acgraphe.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "382479866723-5osmi25fmhn64kqsfgkj97mv86f5oi6j.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.restorant"
+              }
+            }
+          ]
         }
       }
     }

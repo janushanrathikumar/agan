@@ -1,12 +1,22 @@
 // lib/startup_page/signupverify.dart
 import 'dart:ui' show ImageFilter;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:restorant/startup%20page/signup_page.dart'; // Needed for finalizeSignup
+import 'package:restorant/startup%20page/signup_page.dart'; // Needed for finalizeSignup logic
 import '../language.dart';
 
+// Define the color constants so the page compiles correctly
+const kPrimary = Color(0xFFB59410);
+const kBg = Color(0xFF112A18);
+const kMuted = Color(0xFFA1B3A1);
+const kWhite = Color(0xFFF7F7F2);
+
 class SignUpVerifyPage extends StatefulWidget {
-  final String verificationId;
+  // Mobile uses verificationId, Web uses confirmationResult
+  final String? verificationId;
+  final ConfirmationResult? confirmationResult;
+
   final String phoneNumber;
   final String userName;
   final String email;
@@ -15,6 +25,7 @@ class SignUpVerifyPage extends StatefulWidget {
   const SignUpVerifyPage({
     super.key,
     required this.verificationId,
+    required this.confirmationResult,
     required this.phoneNumber,
     required this.userName,
     required this.email,
@@ -43,20 +54,39 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
     });
 
     try {
-      // 1. Create a credential from the code the user typed
-      PhoneAuthCredential credential = PhoneAuthProvider.credential(
-        verificationId: widget.verificationId,
-        smsCode: otp,
-      );
+      if (kIsWeb) {
+        // --- 1. Web Flow Verification ---
+        if (widget.confirmationResult == null) {
+          throw Exception("Confirmation setup failed.");
+        }
+        UserCredential userCredential = await widget.confirmationResult!
+            .confirm(otp);
 
-      // 2. Pass it to the finalizeSignup method we wrote in signup_page.dart
-      await finalizeSignup(
-        phoneCredential: credential,
-        phone: widget.phoneNumber,
-        name: widget.userName,
-        email: widget.email,
-        password: widget.password,
-      );
+        await finalizeSignupWeb(
+          user: userCredential.user!,
+          phone: widget.phoneNumber,
+          name: widget.userName,
+          email: widget.email,
+          password: widget.password,
+        );
+      } else {
+        // --- 2. Mobile Flow Verification ---
+        if (widget.verificationId == null) {
+          throw Exception("Verification ID is missing.");
+        }
+        PhoneAuthCredential credential = PhoneAuthProvider.credential(
+          verificationId: widget.verificationId!,
+          smsCode: otp,
+        );
+
+        await finalizeSignupMobile(
+          phoneCredential: credential,
+          phone: widget.phoneNumber,
+          name: widget.userName,
+          email: widget.email,
+          password: widget.password,
+        );
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +105,7 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
       });
     } catch (e) {
       setState(() {
-        _err = e.toString();
+        _err = e.toString().replaceAll('Exception: ', '');
         _busy = false;
       });
     }
@@ -92,7 +122,7 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
     final isWide = MediaQuery.of(context).size.width >= 720;
 
     return Scaffold(
-      backgroundColor: kBg, // From your signup_page.dart
+      backgroundColor: kBg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
