@@ -24,7 +24,6 @@ class StartPage extends StatefulWidget {
 
 class _StartPageState extends State<StartPage> {
   final PageController _controller = PageController();
-
   int _currentIndex = 0;
 
   void _toggleLanguage() {
@@ -41,13 +40,11 @@ class _StartPageState extends State<StartPage> {
 
   Future<void> _launchPrivacyPolicy() async {
     final Uri url = Uri.parse('https://restaurantkleefeld.ch/privacy');
-
     try {
       final bool launched = await launchUrl(
         url,
         mode: LaunchMode.externalApplication,
       );
-
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open Privacy Policy')),
@@ -62,15 +59,38 @@ class _StartPageState extends State<StartPage> {
     }
   }
 
+  Future<void> _launchTerms() async {
+    final Uri url = Uri.parse('https://restaurantkleefeld.ch/terms');
+    try {
+      final bool launched = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open Terms of Service (AGB)'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open Terms of Service (AGB)'),
+          ),
+        );
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // ABOUT US
   // ---------------------------------------------------------------------------
 
   void _showAboutUsSheet(BuildContext context) {
     final bool isDe = AppLanguage.currentLanguage == 'de';
-
     final double sheetWidth = MediaQuery.of(context).size.width;
-
     final double contentMaxWidth = sheetWidth >= 720 ? 640.0 : double.infinity;
 
     showModalBottomSheet(
@@ -79,7 +99,7 @@ class _StartPageState extends State<StartPage> {
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return Container(
-          height: MediaQuery.of(context).size.height * 0.82,
+          height: MediaQuery.of(context).size.height * 0.85,
           decoration: BoxDecoration(
             color: const Color(0xFF0F2615),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -105,9 +125,6 @@ class _StartPageState extends State<StartPage> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
                       children: [
-                        // -----------------------------------------------------
-                        // APP NAME
-                        // -----------------------------------------------------
                         const Text(
                           'Restaurant Kleefeld',
                           style: TextStyle(
@@ -116,40 +133,33 @@ class _StartPageState extends State<StartPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-
                         const SizedBox(height: 6),
-
                         Text(
                           isDe
-                              ? 'Online bestellen, Kundenkonto & Restaurantinformationen'
-                              : 'Online food ordering, customer account & restaurant information',
+                              ? 'Restaurant · Saal · Garten · Bar'
+                              : 'Restaurant · Event Hall · Garden · Bar',
                           style: const TextStyle(
                             color: kPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
                           ),
                         ),
-
                         const SizedBox(height: 24),
 
-                        // -----------------------------------------------------
                         // PURPOSE
-                        // -----------------------------------------------------
                         _buildInfoCard(
                           icon: Icons.restaurant_menu,
                           title: isDe
-                              ? 'Was ist Restaurant Kleefeld?'
+                              ? 'Was Restaurant Kleefeld ist'
                               : 'What is Restaurant Kleefeld?',
                           description: isDe
-                              ? 'Restaurant Kleefeld ist unsere Online-Plattform für Gäste. Sie können unsere Speisekarte entdecken, Essen online bestellen, Ihre Bestellungen verwalten und Ihr persönliches Kundenkonto nutzen.'
-                              : 'Restaurant Kleefeld is our online platform for guests. Discover our menu, order food online, manage your orders, and use your personal customer account.',
+                              ? 'Restaurant Kleefeld ist ein Gastronomiebetrieb mit eigenem Restaurant, Eventsaal, Garten und Bar. Unsere App dient dazu, Gästen Informationen über unser Angebot zu geben und ihnen eine einfache Anmeldung für Reservierungen und Saalanfragen zu ermöglichen.'
+                              : 'Restaurant Kleefeld is a catering establishment with its own restaurant, event hall, garden, and bar. Our app provides guests with information about our offers and allows for easy reservations and hall inquiries.',
                         ),
-
                         const SizedBox(height: 12),
 
-                        // -----------------------------------------------------
                         // SPACES
-                        // -----------------------------------------------------
                         Text(
                           isDe
                               ? 'Unsere Räumlichkeiten'
@@ -160,9 +170,7 @@ class _StartPageState extends State<StartPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-
                         const SizedBox(height: 12),
-
                         Wrap(
                           spacing: 10,
                           runSpacing: 10,
@@ -189,12 +197,9 @@ class _StartPageState extends State<StartPage> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 24),
 
-                        // -----------------------------------------------------
                         // SWISS FOOD
-                        // -----------------------------------------------------
                         _buildInfoCard(
                           icon: Icons.outdoor_grill,
                           title: isDe
@@ -204,82 +209,93 @@ class _StartPageState extends State<StartPage> {
                               ? 'Schweizer Spezialitäten und hausgemachte Gerichte wie unsere beliebte Pfannen-Rösti sowie feine sri-lankische Spezialitäten mit authentischen Aromen.'
                               : 'Enjoy Swiss specialties and homemade dishes such as our popular pan-served Rösti together with flavorful Sri Lankan specialties.',
                         ),
-
                         const SizedBox(height: 12),
 
-                        // -----------------------------------------------------
                         // PIZZA
-                        // -----------------------------------------------------
                         _buildInfoCard(
                           icon: Icons.local_pizza,
                           title: isDe
-                              ? 'Knusprige Pizza & hausgemachter Eistee'
-                              : 'Crispy Pizza & Homemade Iced Tea',
+                              ? 'Pizza & Eistee'
+                              : 'Crispy Pizza & Iced Tea',
                           description: isDe
                               ? 'Knuspriger Boden und herzhafter Geschmack frisch aus dem Ofen. Dazu unser hausgemachter, frischer Eistee.'
                               : 'Fresh oven-baked pizzas with a crispy crust, served alongside our homemade iced tea.',
                         ),
-
                         const SizedBox(height: 12),
 
-                        // -----------------------------------------------------
                         // EVENTS
-                        // -----------------------------------------------------
                         _buildInfoCard(
                           icon: Icons.celebration,
                           title: isDe
-                              ? 'Anlässe, Partyservice & Saal'
+                              ? 'Anlässe & Partyservice'
                               : 'Events & Catering Service',
                           description: isDe
-                              ? 'Unser Saal mit 70 Plätzen eignet sich für Familienfeiern, Geburtstage und Firmenanlässe. Saalvermietung und Apéros auf Anfrage.'
+                              ? 'Unser Saal mit 70 Plätzen eignet sich perfekt für Familienfeiern, Geburtstage und Firmenanlässe. Saalvermietung und Apéros auf Anfrage.'
                               : 'Our 70-seat event hall is suitable for family celebrations, birthdays and corporate events. Hall rental and catering are available on request.',
                         ),
-
                         const SizedBox(height: 24),
 
-                        // -----------------------------------------------------
-                        // PRIVACY POLICY
-                        // -----------------------------------------------------
-                        InkWell(
-                          onTap: _launchPrivacyPolicy,
-                          borderRadius: BorderRadius.circular(18),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: kPrimary.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                color: kPrimary.withOpacity(0.5),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.privacy_tip_outlined,
-                                  color: kPrimary,
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
+                        // PRIVACY & TERMS LINKS
+                        Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                onTap: _launchPrivacyPolicy,
+                                borderRadius: BorderRadius.circular(18),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: kPrimary.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: kPrimary.withOpacity(0.5),
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
                                   child: Text(
-                                    isDe
-                                        ? 'Unsere Datenschutzerklärung lesen'
-                                        : 'Read our Privacy Policy',
+                                    isDe ? 'Datenschutz' : 'Privacy Policy',
                                     style: const TextStyle(
                                       color: kWhite,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 15,
+                                      fontSize: 14,
                                       decoration: TextDecoration.underline,
                                     ),
                                   ),
                                 ),
-                                const Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: kPrimary,
-                                  size: 16,
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: InkWell(
+                                onTap: _launchTerms,
+                                borderRadius: BorderRadius.circular(18),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: kPrimary.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: kPrimary.withOpacity(0.5),
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    isDe ? 'AGB' : 'Terms (AGB)',
+                                    style: const TextStyle(
+                                      color: kWhite,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -292,10 +308,6 @@ class _StartPageState extends State<StartPage> {
       },
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // CAPACITY BADGE
-  // ---------------------------------------------------------------------------
 
   Widget _buildCapacityBadge(IconData icon, String title, String capacity) {
     return Container(
@@ -332,10 +344,6 @@ class _StartPageState extends State<StartPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // INFORMATION CARD
-  // ---------------------------------------------------------------------------
-
   Widget _buildInfoCard({
     required IconData icon,
     required String title,
@@ -359,9 +367,7 @@ class _StartPageState extends State<StartPage> {
             ),
             child: Icon(icon, color: kPrimary, size: 22),
           ),
-
           const SizedBox(width: 14),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,9 +380,7 @@ class _StartPageState extends State<StartPage> {
                     fontSize: 15,
                   ),
                 ),
-
                 const SizedBox(height: 4),
-
                 Text(
                   description,
                   style: TextStyle(
@@ -393,31 +397,17 @@ class _StartPageState extends State<StartPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // DISPOSE
-  // ---------------------------------------------------------------------------
-
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
-  // ---------------------------------------------------------------------------
-  // BUILD
-  // ---------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final bool isDe = AppLanguage.currentLanguage == 'de';
-
     final bool isWide = MediaQuery.of(context).size.width >= 720;
-
     final double contentMaxWidth = isWide ? 720.0 : 520.0;
-
-    // -------------------------------------------------------------------------
-    // SLIDES
-    // -------------------------------------------------------------------------
 
     final List<Map<String, String>> slides = [
       {
@@ -442,18 +432,11 @@ class _StartPageState extends State<StartPage> {
       },
     ];
 
-    // -------------------------------------------------------------------------
-    // PAGE
-    // -------------------------------------------------------------------------
-
     return Scaffold(
       backgroundColor: kBg,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // -------------------------------------------------------------------
-          // BACKGROUND
-          // -------------------------------------------------------------------
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -463,19 +446,13 @@ class _StartPageState extends State<StartPage> {
               ),
             ),
           ),
-
-          // -------------------------------------------------------------------
-          // SAFE AREA
-          // -------------------------------------------------------------------
           SafeArea(
             child: Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: contentMaxWidth),
                 child: Column(
                   children: [
-                    // =========================================================
                     // TOP BAR
-                    // =========================================================
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
@@ -483,9 +460,6 @@ class _StartPageState extends State<StartPage> {
                       ),
                       child: Row(
                         children: [
-                          // ---------------------------------------------------
-                          // LANGUAGE
-                          // ---------------------------------------------------
                           Container(
                             decoration: BoxDecoration(
                               color: kWhite.withOpacity(0.1),
@@ -523,12 +497,7 @@ class _StartPageState extends State<StartPage> {
                               ),
                             ),
                           ),
-
                           const Spacer(),
-
-                          // ---------------------------------------------------
-                          // ABOUT
-                          // ---------------------------------------------------
                           Material(
                             color: Colors.transparent,
                             child: InkWell(
@@ -570,12 +539,7 @@ class _StartPageState extends State<StartPage> {
                               ),
                             ),
                           ),
-
                           const SizedBox(width: 6),
-
-                          // ---------------------------------------------------
-                          // SKIP
-                          // ---------------------------------------------------
                           TextButton(
                             onPressed: () => Navigator.pushReplacementNamed(
                               context,
@@ -594,9 +558,7 @@ class _StartPageState extends State<StartPage> {
                       ),
                     ),
 
-                    // =========================================================
                     // APP NAME
-                    // =========================================================
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Text(
@@ -610,18 +572,15 @@ class _StartPageState extends State<StartPage> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 6),
 
-                    // =========================================================
                     // APP PURPOSE
-                    // =========================================================
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 28),
                       child: Text(
                         isDe
-                            ? 'Ihre Online-Plattform für Restaurant Kleefeld: Speisekarte entdecken, Essen online bestellen und Kundenkonto verwalten.'
-                            : 'Your online platform for Restaurant Kleefeld: discover our menu, order food online, and manage your customer account.',
+                            ? 'Restaurant, Saal, Garten & Bar. Tischreservierungen und Saalanfragen.'
+                            : 'Restaurant, Event Hall, Garden & Bar. Table reservations and hall inquiries.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: kMuted.withOpacity(0.95),
@@ -630,12 +589,9 @@ class _StartPageState extends State<StartPage> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 16),
 
-                    // =========================================================
                     // SLIDESHOW
-                    // =========================================================
                     Expanded(
                       child: PageView.builder(
                         controller: _controller,
@@ -647,7 +603,6 @@ class _StartPageState extends State<StartPage> {
                         itemCount: slides.length,
                         itemBuilder: (_, index) {
                           final Map<String, String> slide = slides[index];
-
                           return Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 24,
@@ -673,17 +628,13 @@ class _StartPageState extends State<StartPage> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      // IMAGE
                                       Expanded(
                                         child: Image.asset(
                                           slide['image']!,
                                           fit: BoxFit.contain,
                                         ),
                                       ),
-
                                       const SizedBox(height: 16),
-
-                                      // TITLE
                                       Text(
                                         slide['title']!,
                                         textAlign: TextAlign.center,
@@ -693,10 +644,7 @@ class _StartPageState extends State<StartPage> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-
                                       const SizedBox(height: 8),
-
-                                      // DESCRIPTION
                                       Text(
                                         slide['text']!,
                                         textAlign: TextAlign.center,
@@ -716,9 +664,7 @@ class _StartPageState extends State<StartPage> {
                       ),
                     ),
 
-                    // =========================================================
                     // DOT INDICATORS
-                    // =========================================================
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: Row(
@@ -741,30 +687,20 @@ class _StartPageState extends State<StartPage> {
                       ),
                     ),
 
-                    // =========================================================
-                    // PRIVACY POLICY
-                    // =========================================================
-                    InkWell(
-                      onTap: _launchPrivacyPolicy,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.privacy_tip_outlined,
-                              color: kPrimary,
-                              size: 16,
+                    // PRIVACY & TERMS LINKS ON MAIN PAGE
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        InkWell(
+                          onTap: _launchPrivacyPolicy,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              isDe
-                                  ? 'Datenschutzerklärung lesen'
-                                  : 'Read our Privacy Policy',
+                            child: Text(
+                              isDe ? 'Datenschutz' : 'Privacy Policy',
                               style: const TextStyle(
                                 color: kPrimary,
                                 fontWeight: FontWeight.bold,
@@ -773,21 +709,41 @@ class _StartPageState extends State<StartPage> {
                                 decorationColor: kPrimary,
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                        Container(
+                          width: 1,
+                          height: 12,
+                          color: kPrimary.withOpacity(0.5),
+                        ),
+                        InkWell(
+                          onTap: _launchTerms,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Text(
+                              isDe ? 'AGB' : 'Terms (AGB)',
+                              style: const TextStyle(
+                                color: kPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                                decorationColor: kPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
-                    // =========================================================
                     // BUTTONS
-                    // =========================================================
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
                       child: Row(
                         children: [
-                          // ---------------------------------------------------
-                          // SIGN UP
-                          // ---------------------------------------------------
                           Expanded(
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
@@ -826,12 +782,7 @@ class _StartPageState extends State<StartPage> {
                               ),
                             ),
                           ),
-
                           const SizedBox(width: 16),
-
-                          // ---------------------------------------------------
-                          // NEXT / LOGIN
-                          // ---------------------------------------------------
                           Expanded(
                             child: FilledButton(
                               style: FilledButton.styleFrom(
