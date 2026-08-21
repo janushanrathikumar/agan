@@ -22,7 +22,6 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   final _name = TextEditingController();
-  final _email = TextEditingController();
   final _phone = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
@@ -36,21 +35,33 @@ class _SignUpPageState extends State<SignUpPage> {
     {'code': '+49', 'flag': '🇩🇪'},
   ];
 
-  final _emailRegex = RegExp(r'^[\w\.\-]+@[\w\-]+\.[\w\.\-]+$');
   final _phoneRegex = RegExp(r'^\+?[1-9]\d{6,14}$');
+
+  String _friendlyAuthError(dynamic e) {
+    if (e is FirebaseAuthException) {
+      switch (e.code) {
+        case 'too-many-requests':
+          return 'Too many attempts. Please try again later.';
+        case 'invalid-phone-number':
+          return 'The phone number is invalid. Please check and try again.';
+        case 'captcha-check-failed':
+          return 'Security verification failed. Please try again.';
+        case 'operation-not-allowed':
+          return 'Phone sign-up is currently disabled.';
+        default:
+          return e.message ?? 'An error occurred during verification.';
+      }
+    }
+    return e.toString().replaceAll('Exception: ', '');
+  }
 
   Future<void> _registerWithPhone() async {
     final name = _name.text.trim();
-    final email = _email.text.trim();
     var phone = _phone.text.trim().replaceAll(RegExp(r'[\s\-]'), '');
     final password = _password.text.trim();
 
     if (name.isEmpty) {
       setState(() => _err = AppLanguage.getText('err_enter_name'));
-      return;
-    }
-    if (email.isEmpty || !_emailRegex.hasMatch(email)) {
-      setState(() => _err = 'Please enter a valid email address.');
       return;
     }
     if (phone.isEmpty) {
@@ -90,18 +101,6 @@ class _SignUpPageState extends State<SignUpPage> {
         );
       }
 
-      final emailMatch = await FirebaseFirestore.instance
-          .collection('user')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (emailMatch.docs.isNotEmpty &&
-          emailMatch.docs.first.data()['verified'] == true) {
-        throw Exception(
-          'This email is already registered. Please sign in instead.',
-        );
-      }
-
       if (kIsWeb) {
         ConfirmationResult confirmationResult = await FirebaseAuth.instance
             .signInWithPhoneNumber(phone);
@@ -116,7 +115,6 @@ class _SignUpPageState extends State<SignUpPage> {
               confirmationResult: confirmationResult,
               phoneNumber: phone,
               userName: name,
-              email: email,
               password: password,
             ),
           ),
@@ -130,7 +128,6 @@ class _SignUpPageState extends State<SignUpPage> {
                 phoneCredential: credential,
                 phone: phone,
                 name: name,
-                email: email,
                 password: password,
               );
               if (!mounted) return;
@@ -146,7 +143,7 @@ class _SignUpPageState extends State<SignUpPage> {
             } catch (e) {
               if (!mounted) return;
               setState(() {
-                _err = e.toString();
+                _err = _friendlyAuthError(e);
                 _busy = false;
               });
             }
@@ -154,8 +151,7 @@ class _SignUpPageState extends State<SignUpPage> {
           verificationFailed: (FirebaseAuthException e) {
             if (!mounted) return;
             setState(() {
-              _err =
-                  e.message ?? 'Verification failed. Please check the number.';
+              _err = _friendlyAuthError(e);
               _busy = false;
             });
           },
@@ -170,7 +166,6 @@ class _SignUpPageState extends State<SignUpPage> {
                   confirmationResult: null,
                   phoneNumber: phone,
                   userName: name,
-                  email: email,
                   password: password,
                 ),
               ),
@@ -181,7 +176,7 @@ class _SignUpPageState extends State<SignUpPage> {
       }
     } catch (e) {
       setState(() {
-        _err = e.toString().replaceAll('Exception: ', '');
+        _err = _friendlyAuthError(e);
         _busy = false;
       });
     }
@@ -190,7 +185,6 @@ class _SignUpPageState extends State<SignUpPage> {
   @override
   void dispose() {
     _name.dispose();
-    _email.dispose();
     _phone.dispose();
     _password.dispose();
     super.dispose();
@@ -338,16 +332,6 @@ class _SignUpPageState extends State<SignUpPage> {
                             ),
                             const SizedBox(height: 16),
                             TextField(
-                              controller: _email,
-                              keyboardType: TextInputType.emailAddress,
-                              style: const TextStyle(color: kWhite),
-                              decoration: _dec(
-                                'Email',
-                                icon: Icons.mail_outline,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
                               controller: _phone,
                               keyboardType: TextInputType.phone,
                               style: const TextStyle(color: kWhite),
@@ -469,7 +453,6 @@ Future<void> finalizeSignupMobile({
   required PhoneAuthCredential phoneCredential,
   required String phone,
   required String name,
-  required String email,
   required String password,
 }) async {
   final phoneSignIn = await FirebaseAuth.instance.signInWithCredential(
@@ -484,7 +467,6 @@ Future<void> finalizeSignupMobile({
     user: user,
     phone: phone,
     name: name,
-    email: email,
     password: password,
   );
 }
@@ -493,14 +475,12 @@ Future<void> finalizeSignupWeb({
   required User user,
   required String phone,
   required String name,
-  required String email,
   required String password,
 }) async {
   await finalizeSignupCore(
     user: user,
     phone: phone,
     name: name,
-    email: email,
     password: password,
   );
 }
@@ -509,31 +489,12 @@ Future<void> finalizeSignupCore({
   required User user,
   required String phone,
   required String name,
-  required String email,
   required String password,
 }) async {
   await user.updateDisplayName(name);
 
-  final emailCredential = EmailAuthProvider.credential(
-    email: email,
-    password: password,
-  );
-  try {
-    await user.linkWithCredential(emailCredential);
-  } on FirebaseAuthException catch (e) {
-    if (e.code == 'provider-already-linked') {
-    } else if (e.code == 'email-already-in-use') {
-      throw Exception(
-        'This email is already used by another account. Please sign in or use a different email.',
-      );
-    } else {
-      rethrow;
-    }
-  }
-
   await FirebaseFirestore.instance.collection('user').doc(user.uid).set({
     'uid': user.uid,
-    'email': email,
     'phone': phone,
     'userName': name,
     'role': 'customer',

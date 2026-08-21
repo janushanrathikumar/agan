@@ -694,55 +694,63 @@ class _CategoryRail extends StatelessWidget {
         if (i == 0) {
           final isSel = selected == null;
 
-          return GestureDetector(
-            onTap: () => onSelect(null),
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-              decoration: BoxDecoration(
-                color: isSel ? kWhite.withOpacity(0.12) : Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isSel ? kWhite.withOpacity(0.3) : Colors.transparent,
-                ),
-                boxShadow: isSel
-                    ? [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 8,
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onSelect(null),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSel
+                        ? kWhite.withOpacity(0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSel
+                          ? kWhite.withOpacity(0.3)
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: AbsorbPointer(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: kWhite.withOpacity(0.05),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.grid_view_rounded,
+                            color: isSel ? kWhite : kMuted,
+                            size: 18,
+                          ),
                         ),
-                      ]
-                    : null,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: kWhite.withOpacity(0.05),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.grid_view_rounded,
-                      color: isSel ? kWhite : kMuted,
-                      size: 18,
+                        const SizedBox(height: 6),
+                        Text(
+                          AppLanguage.getText('All'),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: isSel ? kWhite : kMuted,
+                            fontSize: 11,
+                            fontWeight: isSel
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    AppLanguage.getText('All'),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: isSel ? kWhite : kMuted,
-                      fontSize: 11,
-                      fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           );
@@ -754,55 +762,58 @@ class _CategoryRail extends StatelessWidget {
         final iconUrl = (data['iconUrl'] as String?) ?? '';
         final isSel = selected == name;
 
-        return GestureDetector(
-          onTap: () => onSelect(name),
-          behavior: HitTestBehavior.opaque,
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 10),
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-            decoration: BoxDecoration(
-              color: isSel ? kWhite.withOpacity(0.12) : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isSel ? kWhite.withOpacity(0.3) : Colors.transparent,
-              ),
-              boxShadow: isSel
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelect(name),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: isSel ? kWhite.withOpacity(0.15) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSel ? kWhite.withOpacity(0.3) : Colors.transparent,
+                  ),
+                ),
+                child: AbsorbPointer(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _WebSafeImage(
+                          imageUrl: iconUrl,
+                          width: 48,
+                          height: 48,
+                          fallback: Icon(
+                            Icons.fastfood,
+                            color: isSel ? kWhite : kMuted,
+                            size: 30,
+                          ),
+                        ),
                       ),
-                    ]
-                  : null,
-            ),
-            child: Column(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: _WebSafeImage(
-                    imageUrl: iconUrl,
-                    width: 48,
-                    height: 48,
-                    fallback: Icon(
-                      Icons.fastfood,
-                      color: isSel ? kWhite : kMuted,
-                      size: 30,
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isSel ? kWhite : kMuted,
+                          fontSize: 11,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  name,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: isSel ? kWhite : kMuted,
-                    fontSize: 11,
-                    fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -874,141 +885,146 @@ class _MenuGrid extends StatelessWidget {
     return GestureDetector(
       onTap: () => onTapItem(m, actualKind),
       behavior: HitTestBehavior.opaque,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            height: 110,
-            decoration: BoxDecoration(
-              color: kWhite.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: discounted
-                    ? badgeColor.withOpacity(0.5)
-                    : kWhite.withOpacity(0.1),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+      child: AbsorbPointer(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              height: 110,
+              decoration: BoxDecoration(
+                color: kWhite.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: discounted
+                      ? badgeColor.withOpacity(0.5)
+                      : kWhite.withOpacity(0.1),
+                  width: 1,
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(18),
-                      ),
-                      child: SizedBox(
-                        width: 110,
-                        height: 110,
-                        child: _WebSafeImage(
-                          imageUrl: imageUrl,
-                          fallback: Container(
-                            color: kWhite.withOpacity(0.05),
-                            child: const Icon(
-                              Icons.fastfood,
-                              color: kMuted,
-                              size: 30,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(18),
+                        ),
+                        child: SizedBox(
+                          width: 110,
+                          height: 110,
+                          child: _WebSafeImage(
+                            imageUrl: imageUrl,
+                            fallback: Container(
+                              color: kWhite.withOpacity(0.05),
+                              child: const Icon(
+                                Icons.fastfood,
+                                color: kMuted,
+                                size: 30,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    if (discounted)
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
+                      if (discounted)
+                        Positioned(
+                          top: 6,
+                          left: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: badgeColor,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              badgeText ?? _discountBadgeText(m),
+                              style: const TextStyle(
+                                color: kWhite,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                          decoration: BoxDecoration(
-                            color: badgeColor,
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            badgeText ?? _discountBadgeText(m),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 10, 14, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: kWhite,
-                              fontSize: 9,
                               fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              height: 1.2,
                             ),
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 10, 14, 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: kWhite,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            height: 1.2,
-                          ),
-                        ),
-                        if (note.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            note,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: kMuted, fontSize: 11),
-                          ),
-                        ],
-                        const Spacer(),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (discounted)
-                                  Text(
-                                    'CHF ${price.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: kMuted,
-                                      fontSize: 10,
-                                      decoration: TextDecoration.lineThrough,
-                                      decorationColor: kMuted,
-                                    ),
-                                  ),
-                                Text(
-                                  'CHF ${finalPrice.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    color: discounted ? badgeColor : kPrimary,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ],
+                          if (note.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              note,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: kMuted,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
-                        ),
-                      ],
+                          const Spacer(),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (discounted)
+                                    Text(
+                                      'CHF ${price.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: kMuted,
+                                        fontSize: 10,
+                                        decoration: TextDecoration.lineThrough,
+                                        decorationColor: kMuted,
+                                      ),
+                                    ),
+                                  Text(
+                                    'CHF ${finalPrice.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      color: discounted ? badgeColor : kPrimary,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
