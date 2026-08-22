@@ -162,7 +162,10 @@ class _PaymentPageState extends State<PaymentPage> {
           'hotelId': 'jKuRDFBYEfDUzLdROtoM',
           'userId': user.uid,
           'options': m['additionalOptions'],
-          'size': m['size'],
+          'size': m['size'],          
+          'additionalOptions': m['additionalOptions'] ?? [],
+          'menuChoices': m['menuChoices'] ?? {},
+          'timestamp': (m['createdAt'] is Timestamp)
         };
       }).toList();
 
@@ -170,7 +173,7 @@ class _PaymentPageState extends State<PaymentPage> {
         'orderId': customOrderId,
         'cartItems': cartItemsForDb2,
         'hotelId': 'jKuRDFBYEfDUzLdROtoM',
-        'hotelName': 'KoreanKitchen',
+        'hotelName': 'RESTAURANT KLEEFELD',
         'paymentMethod': 'cash',
         'status': 'pending',
         'subTotal': subTotal,
@@ -181,6 +184,7 @@ class _PaymentPageState extends State<PaymentPage> {
         'userId': user.uid,
         'username': username,
         'role': role,
+        'delivery_method': orderDeliveryMethod,
         'table_no': (deliveryData['table_no'] ?? '').toString(),
         'chair_no': (deliveryData['chair_no'] ?? '').toString(),
         'timestamp': FieldValue.serverTimestamp(),

@@ -36,16 +36,24 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchUserRole() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final doc = await FirebaseFirestore.instance
-          .collection('user')
-          .doc(user.uid)
-          .get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _userRole =
-              (doc.data()?['role'] as String?)?.toLowerCase().trim() ??
-              'customer';
-        });
+      try {
+        // Document ID-க்கு பதிலாக 'uid' field-ஐ வைத்து தேடுகிறோம்
+        final query = await FirebaseFirestore.instance
+            .collection('user')
+            .where('uid', isEqualTo: user.uid)
+            .limit(1)
+            .get();
+
+        if (query.docs.isNotEmpty && mounted) {
+          final userData = query.docs.first.data();
+          setState(() {
+            _userRole =
+                (userData['role'] as String?)?.toLowerCase().trim() ??
+                'customer';
+          });
+        }
+      } catch (e) {
+        debugPrint('Error fetching role: $e');
       }
     }
   }
@@ -213,9 +221,8 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   String? _scannedValue;
 
   bool get isStaff =>
-      widget.userRole == 'cashier' ||
-      widget.userRole == 'admin' ||
-      widget.userRole == 'waiter';
+      //  widget.userRole == 'cashier' ||
+      widget.userRole == 'admin' || widget.userRole == 'waiter';
 
   @override
   void initState() {
