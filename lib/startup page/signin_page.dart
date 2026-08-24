@@ -365,22 +365,23 @@ class _SignInPageState extends State<SignInPage> {
                                   obscureText: _obscure,
                                   style: const TextStyle(color: kWhite),
                                   autofillHints: const [AutofillHints.password],
-                                  decoration: _dec(
-                                    AppLanguage.getText('password'),
-                                    icon: Icons.lock_outline_rounded,
-                                  ).copyWith(
-                                    suffixIcon: IconButton(
-                                      onPressed: () => setState(
-                                        () => _obscure = !_obscure,
+                                  decoration:
+                                      _dec(
+                                        AppLanguage.getText('password'),
+                                        icon: Icons.lock_outline_rounded,
+                                      ).copyWith(
+                                        suffixIcon: IconButton(
+                                          onPressed: () => setState(
+                                            () => _obscure = !_obscure,
+                                          ),
+                                          icon: Icon(
+                                            _obscure
+                                                ? Icons.visibility
+                                                : Icons.visibility_off,
+                                            color: kMuted,
+                                          ),
+                                        ),
                                       ),
-                                      icon: Icon(
-                                        _obscure
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                        color: kMuted,
-                                      ),
-                                    ),
-                                  ),
                                 ),
                                 if (_err != null) ...[
                                   const SizedBox(height: 12),
@@ -437,6 +438,20 @@ class _SignInPageState extends State<SignInPage> {
                                   ).pushReplacementNamed(AppRoutes.signUp),
                                   child: Text(
                                     AppLanguage.getText('dont_have_account'),
+                                    style: const TextStyle(
+                                      color: kMuted,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.of(context)
+                                      .pushReplacementNamed(
+                                        AppRoutes.forgotPassword,
+                                      ),
+                                  child: Text(
+                                    AppLanguage.getText('forgot_password'),
                                     style: const TextStyle(
                                       color: kMuted,
                                       fontSize: 14,

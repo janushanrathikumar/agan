@@ -15,18 +15,21 @@ import 'package:restorant/app_bar.dart'; // AppShell (customer)
 import 'package:restorant/admin/adminhome.dart'; // AdminHome (admin)
 import 'firebase_options.dart';
 import 'secondary_firebase_options.dart';
+import 'package:restorant/startup page/forgot_password_page.dart';
 
 const kSplashBg = Color(0xFF112A18);
 const kSplashSpinner = Color(0xFFE49024);
 
 // 🟢 Central place for every named route string
 class AppRoutes {
-  static const start = '/start'; // Changed from '/' to prevent conflict with AuthGate
+  static const start =
+      '/start'; // Changed from '/' to prevent conflict with AuthGate
   static const signIn = '/signin';
   static const signUp = '/signup';
   static const user = '/user';
   static const admin = '/admin';
   static const privacy = '/privacy';
+  static const forgotPassword = '/forgot-password';
 }
 
 Future<void> main() async {
@@ -67,6 +70,7 @@ class MyApp extends StatelessWidget {
         AppRoutes.user: (_) => const AppShell(),
         AppRoutes.admin: (_) => const AdminHome(),
         AppRoutes.privacy: (_) => const PrivacyPolicyPage(),
+        AppRoutes.forgotPassword: (_) => const ForgotPasswordPage(),
       },
     );
   }
