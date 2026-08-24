@@ -9,7 +9,6 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:restorant/startup page/signin_page.dart';
 import 'package:restorant/startup page/privacy_policy_page.dart';
 import 'package:restorant/startup page/start_page.dart';
-import 'package:restorant/startup%20page/forgot_password_page.dart';
 import 'package:restorant/startup%20page/signup_page.dart';
 import 'package:restorant/startup%20page/signupverify.dart';
 import 'package:restorant/app_bar.dart'; // AppShell (customer)
@@ -22,14 +21,12 @@ const kSplashSpinner = Color(0xFFE49024);
 
 // 🟢 Central place for every named route string
 class AppRoutes {
-  static const start =
-      '/start'; // Changed from '/' to prevent conflict with AuthGate
+  static const start = '/start'; // Changed from '/' to prevent conflict with AuthGate
   static const signIn = '/signin';
   static const signUp = '/signup';
   static const user = '/user';
   static const admin = '/admin';
   static const privacy = '/privacy';
-  static const forgotPassword = '/forgot-password';
 }
 
 Future<void> main() async {
@@ -44,10 +41,7 @@ Future<void> main() async {
     name: 'SecondaryDb',
     options: SecondaryFirebaseOptions.currentPlatform,
   );
-FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true, // Cache-ஐ ஆன் செய்கிறது
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // அளம்பற்ற டேட்டாவை சேமிக்க
-  );
+
   runApp(const MyApp());
 }
 
@@ -73,7 +67,6 @@ class MyApp extends StatelessWidget {
         AppRoutes.user: (_) => const AppShell(),
         AppRoutes.admin: (_) => const AdminHome(),
         AppRoutes.privacy: (_) => const PrivacyPolicyPage(),
-        AppRoutes.forgotPassword: (_) => const ForgotPasswordPage(),
       },
     );
   }
@@ -127,6 +120,7 @@ class _AuthGateState extends State<AuthGate> {
       if (!verified) {
         final phone = data['phone'] as String? ?? '';
         final userName = data['userName'] as String? ?? 'Guest';
+        final email = data['email'] as String? ?? user.email ?? '';
 
         if (phone.isEmpty) {
           Navigator.of(context).pushReplacementNamed(AppRoutes.start);
@@ -149,6 +143,7 @@ class _AuthGateState extends State<AuthGate> {
                   confirmationResult: confirmationResult, // Passed for Web
                   phoneNumber: formattedPhone,
                   userName: userName,
+                  email: email,
                   password: '',
                 ),
               ),
@@ -175,6 +170,7 @@ class _AuthGateState extends State<AuthGate> {
                     confirmationResult: null, // Null for Mobile
                     phoneNumber: formattedPhone,
                     userName: userName,
+                    email: email,
                     password: '',
                   ),
                 ),

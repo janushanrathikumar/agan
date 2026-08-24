@@ -1,9 +1,11 @@
 // lib/admin_order.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- Palette (Your Original Colors) ---
 const kPrimary = Color(0xFFB59410);
@@ -14,7 +16,37 @@ const kCardBg = Color(0xFF383735);
 const kItemBg = Color(0xFF2F2E2D);
 
 // ==========================================
-// 1. MAIN LIST PAGE (Modern Design - NO Sidebar & Working Search & Back Arrow)
+// 🖨️ GLOBAL PRINTER CONFIGURATION (With Local Storage)
+// ==========================================
+class PrinterConfig {
+  static String posPrinterIp = 'ipp://192.168.1.100';
+  static bool isAutoPrintOn = false;
+
+  // Local Storage-ல் இருந்து Settings-ஐ எடுப்பதற்கு
+  static Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    posPrinterIp = prefs.getString('printer_ip') ?? 'ipp://192.168.1.100';
+    isAutoPrintOn = prefs.getBool('auto_print_status') ?? false;
+  }
+
+  // IP Address-ஐ நிரந்தரமாக Save செய்வதற்கு
+  static Future<void> saveIp(String ip) async {
+    posPrinterIp = ip;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('printer_ip', ip);
+  }
+
+  // Auto Print ON/OFF ஸ்டேட்டஸை Save செய்வதற்கு
+  static Future<void> saveAutoPrintStatus(bool status) async {
+    isAutoPrintOn = status;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_print_status', status);
+  }
+}
+// ==========================================
+
+// ==========================================
+// 1. MAIN LIST PAGE (With Real-Time Auto Print Listener)
 // ==========================================
 class AdminOrdersListPage extends StatefulWidget {
   const AdminOrdersListPage({super.key});
@@ -27,6 +59,116 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
   String _selectedTab = 'All Status';
   String _searchQuery = '';
   final List<String> _tabs = ['All Status', 'New', 'Delivered', 'Canceled'];
+
+  StreamSubscription<QuerySnapshot>? _ordersSub;
+  DateTime _pageInitTime = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    // ஆப் திறக்கும்போது Save செய்யப்பட்ட Settings-ஐ எடுக்கிறோம்
+    PrinterConfig.loadSettings().then((_) {
+      setState(() {});
+      _startAutoPrintListener();
+    });
+  }
+
+  // 🔴 புதிய ஆர்டர்களைக் கவனித்து தானாகவே பிரிண்ட் செய்யும் ஃபங்ஷன்
+  void _startAutoPrintListener() {
+    _ordersSub = FirebaseFirestore.instance
+        .collection('orders')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+          if (!PrinterConfig.isAutoPrintOn) return;
+
+          for (var change in snapshot.docChanges) {
+            if (change.type == DocumentChangeType.added) {
+              final data = change.doc.data() as Map<String, dynamic>;
+              final status = data['status'] ?? 'Unknown';
+              final Timestamp? timestamp = data['timestamp'] as Timestamp?;
+
+              if (status == 'New' && timestamp != null) {
+                final orderDate = timestamp.toDate();
+                // இந்தப் பக்கம் Open ஆன பிறகு வந்த புதிய ஆர்டர் என்றால் மட்டுமே பிரிண்ட் ஆகும்
+                if (orderDate.isAfter(_pageInitTime)) {
+                  OrderPrinter.generateAndPrintPdf(context, data, true);
+                }
+              }
+            }
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _ordersSub?.cancel();
+    super.dispose();
+  }
+
+  // 🖨️ Printer Settings Dialog (Admin IP மாற்றிக்கொள்ள)
+  void _showPrinterSettings() {
+    final TextEditingController ipCtrl = TextEditingController(
+      text: PrinterConfig.posPrinterIp,
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kCardBg,
+        title: const Text('Printer Settings', style: TextStyle(color: kWhite)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter Printer IP Address:',
+              style: TextStyle(color: kMuted),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: ipCtrl,
+              style: const TextStyle(color: kWhite),
+              decoration: InputDecoration(
+                hintText: 'e.g., ipp://192.168.1.100',
+                hintStyle: const TextStyle(color: Colors.grey),
+                filled: true,
+                fillColor: kBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: kMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kPrimary),
+            onPressed: () async {
+              // 💾 Save The IP Permanently
+              await PrinterConfig.saveIp(ipCtrl.text.trim());
+              setState(() {}); // UI Update
+
+              if (!mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Printer IP Saved successfully!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text('Save IP', style: TextStyle(color: kWhite)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +214,6 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
     );
   }
 
-  // --- Top Header (Full Width with BACK ARROW) ---
   Widget _buildTopBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
@@ -81,7 +222,6 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
           IconButton(
             icon: const Icon(Icons.arrow_back_ios_new, color: kWhite, size: 22),
             onPressed: () => Navigator.pop(context),
-            tooltip: 'Back',
           ),
           const SizedBox(width: 8),
           Container(
@@ -102,9 +242,45 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
             ),
           ),
           const Spacer(),
+
+          // 🖨️ Printer IP Settings Icon
+          IconButton(
+            icon: const Icon(Icons.print, color: kPrimary),
+            onPressed: _showPrinterSettings,
+            tooltip: 'Printer Settings',
+          ),
+          const SizedBox(width: 8),
+
+          // 🟢 Auto Print Switch
+          const Text(
+            'Auto Print',
+            style: TextStyle(
+              color: kWhite,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          Switch(
+            value: PrinterConfig.isAutoPrintOn,
+            activeColor: kWhite,
+            activeTrackColor: kPrimary,
+            inactiveThumbColor: kMuted,
+            inactiveTrackColor: kItemBg,
+            onChanged: (val) async {
+              // 💾 Save Auto Print Status Permanently
+              await PrinterConfig.saveAutoPrintStatus(val);
+              setState(() {
+                if (val) {
+                  _pageInitTime = DateTime.now();
+                }
+              });
+            },
+          ),
+          const SizedBox(width: 16),
+
           // Search Bar
           Container(
-            width: 280,
+            width: 200,
             height: 45,
             decoration: BoxDecoration(
               color: kCardBg,
@@ -113,13 +289,9 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
             ),
             child: TextField(
               style: const TextStyle(color: kWhite),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
+              onChanged: (value) => setState(() => _searchQuery = value),
               decoration: const InputDecoration(
-                hintText: 'Search order ID...',
+                hintText: 'Search ID...',
                 hintStyle: TextStyle(color: kMuted),
                 prefixIcon: Icon(Icons.search, color: kMuted),
                 border: InputBorder.none,
@@ -127,18 +299,11 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
               ),
             ),
           ),
-          const SizedBox(width: 24),
-          const CircleAvatar(
-            backgroundColor: kPrimary,
-            radius: 22,
-            child: Icon(Icons.admin_panel_settings, color: kWhite),
-          ),
         ],
       ),
     );
   }
 
-  // --- Status Tabs ---
   Widget _buildTabs() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
@@ -176,7 +341,6 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
     );
   }
 
-  // --- Table Header ---
   Widget _buildTableHeader() {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -243,7 +407,6 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
     );
   }
 
-  // --- Orders List (Table Rows) ---
   Widget _buildOrdersList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -256,14 +419,13 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
             child: CircularProgressIndicator(color: kPrimary),
           );
         }
-        if (snapshot.hasError) {
+        if (snapshot.hasError)
           return Center(
             child: Text(
               'Error: ${snapshot.error}',
               style: const TextStyle(color: Colors.red),
             ),
           );
-        }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(
             child: Text(
@@ -275,21 +437,20 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
 
         var orders = snapshot.data!.docs;
 
-        // Filter based on Selected Tab
         if (_selectedTab != 'All Status') {
           orders = orders.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final status = data['status'] ?? 'Unknown';
+            final status =
+                (doc.data() as Map<String, dynamic>)['status'] ?? 'Unknown';
             return status.toString().toLowerCase() ==
                 _selectedTab.toLowerCase();
           }).toList();
         }
 
-        // Filter based on Search Query
         if (_searchQuery.isNotEmpty) {
           orders = orders.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final String orderId = (data['order_id'] ?? doc.id).toString();
+            final orderId =
+                ((doc.data() as Map<String, dynamic>)['order_id'] ?? doc.id)
+                    .toString();
             return orderId.toLowerCase().contains(_searchQuery.toLowerCase());
           }).toList();
         }
@@ -402,13 +563,12 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
 
   Widget _buildStatusPill(String status) {
     Color color;
-    if (status == 'New') {
+    if (status == 'New')
       color = Colors.greenAccent;
-    } else if (status == 'Canceled') {
+    else if (status == 'Canceled')
       color = Colors.redAccent;
-    } else {
+    else
       color = kPrimary;
-    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -443,7 +603,7 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
 }
 
 // ==========================================
-// 2. ORDER DETAILS PAGE (Modern Card Design & Explicit Back Arrow)
+// 2. ORDER DETAILS PAGE
 // ==========================================
 class AdminOrderDetailsPage extends StatelessWidget {
   final String documentId;
@@ -537,8 +697,12 @@ class AdminOrderDetailsPage extends StatelessWidget {
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.print, color: kPrimary),
-                  tooltip: 'Print PDF Receipt',
-                  onPressed: () => _generateAndPrintPdf(context, orderData),
+                  tooltip: 'Manual Print PDF',
+                  onPressed: () => OrderPrinter.generateAndPrintPdf(
+                    context,
+                    orderData,
+                    PrinterConfig.isAutoPrintOn,
+                  ),
                 ),
               ),
             ],
@@ -587,226 +751,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
     );
   }
 
-  // ==========================================
-  // 🖨️ PROFESSIONAL PDF RECEIPT GENERATOR
-  // ==========================================
-  Future<void> _generateAndPrintPdf(
-    BuildContext context,
-    Map<String, dynamic> orderData,
-  ) async {
-    final pdf = pw.Document();
-    final items = orderData['items'] ?? [];
-    final total = orderData['total'] ?? 0;
-    final num subtotal = orderData['subtotal'] ?? total;
-    final num serviceCharge = orderData['service_charge'] ?? 0;
-    final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
-
-    final String username = orderData['username'] ?? 'Guest';
-    final String role = orderData['role'] ?? 'Customer';
-
-    final String rawTableNo = (orderData['table_no'] ?? 'N/A').toString();
-    final String rawChairNo = (orderData['chair_no'] ?? '').toString();
-    final String displayTable = rawChairNo.isNotEmpty && rawTableNo != 'N/A'
-        ? '$rawTableNo (Chair $rawChairNo)'
-        : rawTableNo;
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(16),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Center(
-                child: pw.Text(
-                  'AGAN RESTAURANT',
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text('Order ID: ${orderData['order_id']}'),
-              pw.Text('Customer: $username ($role)'),
-              pw.Text('Type: ${orderData['delivery_method']}'),
-              if (rawTableNo != 'N/A' && rawTableNo.isNotEmpty)
-                pw.Text('Table No: $displayTable'),
-              pw.Text('Date: ${DateTime.now().toString().substring(0, 16)}'),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Expanded(
-                    flex: 3,
-                    child: pw.Text(
-                      'Item',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
-                  ),
-                  pw.Expanded(
-                    flex: 1,
-                    child: pw.Text(
-                      'Qty',
-                      textAlign: pw.TextAlign.center,
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
-                  ),
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Text(
-                      'Amount',
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
-              ...items.map((item) {
-                final String baseName = item['name'] ?? 'Item';
-                final String size = item['size'] ?? '';
-                final String name = size.isNotEmpty
-                    ? '$baseName ($size)'
-                    : baseName;
-                final num qty = item['qty'] ?? 1;
-                final num price = item['price'] ?? 0;
-                final num lineTotal = price * qty;
-
-                final List<dynamic> addOns = item['additionalOptions'] ?? [];
-
-                // 🟢 Calculate Base Price by subtracting add-on prices from the final DB price
-                num addOnTotal = 0;
-                for (var a in addOns) {
-                  addOnTotal += (a['price'] as num?) ?? 0;
-                }
-                final num basePrice = price - addOnTotal;
-
-                return pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(bottom: 4),
-                      child: pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Expanded(flex: 3, child: pw.Text(name)),
-                          pw.Expanded(
-                            flex: 1,
-                            child: pw.Text(
-                              'x$qty',
-                              textAlign: pw.TextAlign.center,
-                            ),
-                          ),
-                          pw.Expanded(
-                            flex: 2,
-                            child: pw.Text(
-                              'CHF ${lineTotal.toStringAsFixed(2)}',
-                              textAlign: pw.TextAlign.right,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // 🟢 PDF visually splits Base Price & Additional Options
-                    if (addOns.isNotEmpty) ...[
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
-                        child: pw.Text(
-                          'Base Price: CHF ${basePrice.toStringAsFixed(2)}',
-                          style: const pw.TextStyle(
-                            fontSize: 10,
-                            color: PdfColors.grey,
-                          ),
-                        ),
-                      ),
-                      ...addOns.map((addon) {
-                        final addonMap = addon as Map<String, dynamic>? ?? {};
-                        final String addonName = (addonMap['name'] ?? '')
-                            .toString();
-                        final num addonPrice = addonMap['price'] ?? 0;
-                        return pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
-                          child: pw.Text(
-                            '+ $addonName (CHF ${addonPrice.toStringAsFixed(2)})',
-                            style: const pw.TextStyle(
-                              fontSize: 10,
-                              color: PdfColors.grey,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ],
-                  ],
-                );
-              }).toList(),
-
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Subtotal'),
-                  pw.Text('CHF ${subtotal.toStringAsFixed(2)}'),
-                ],
-              ),
-              pw.SizedBox(height: 3),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
-                  ),
-                  pw.Text('CHF ${serviceCharge.toStringAsFixed(2)}'),
-                ],
-              ),
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'TOTAL',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    'CHF ${total.toStringAsFixed(2)}',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-              pw.Center(
-                child: pw.Text(
-                  '*** Thank You! ***',
-                  style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Receipt_${orderData['order_id']}',
-    );
-  }
-
-  // --- Widgets ---
   Widget _buildOrderSummaryCard(
     String orderId,
     String status,
@@ -931,9 +875,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
       ],
     );
   }
-
-  String _methodLabel(String method) =>
-      method == 'Take_Away' ? 'Take-Away' : 'Dine-In';
 
   Widget _buildChargeRow(String label, num value) {
     return Row(
@@ -1065,7 +1006,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
     );
   }
 
-  // 🟢 No longer fetches random IDs. Displays exactly the choices directly.
   Widget _buildMenuChoices(Map<String, dynamic> item) {
     final Map<String, dynamic> choices = Map<String, dynamic>.from(
       item['menuChoices'] ?? {},
@@ -1076,17 +1016,18 @@ class AdminOrderDetailsPage extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: choices.entries.map((e) {
-          return Text(
-            '✔️ ${e.key}: ${e.value}',
-            style: const TextStyle(color: kMuted, fontSize: 13),
-          );
-        }).toList(),
+        children: choices.entries
+            .map(
+              (e) => Text(
+                '✔️ ${e.key}: ${e.value}',
+                style: const TextStyle(color: kMuted, fontSize: 13),
+              ),
+            )
+            .toList(),
       ),
     );
   }
 
-  // 🟢 Math extracts base price explicitly if add-ons exist
   Widget _buildAdditionalOptions(Map<String, dynamic> item) {
     final List<dynamic> additionalOptions = item['additionalOptions'] ?? [];
     if (additionalOptions.isEmpty) return const SizedBox.shrink();
@@ -1185,5 +1126,250 @@ class AdminOrderDetailsPage extends StatelessWidget {
       color: kItemBg,
       child: Icon(Icons.fastfood, color: kPrimary.withOpacity(0.5)),
     );
+  }
+}
+
+// ==========================================
+// 🖨️ PDF PRINTER UTILITY CLASS
+// ==========================================
+class OrderPrinter {
+  static Future<void> generateAndPrintPdf(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+    bool isAutoPrint,
+  ) async {
+    final pdf = pw.Document();
+    final items = orderData['items'] ?? [];
+    final total = orderData['total'] ?? 0;
+    final num subtotal = orderData['subtotal'] ?? total;
+    final num serviceCharge = orderData['service_charge'] ?? 0;
+    final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
+
+    final String username = orderData['username'] ?? 'Guest';
+    final String role = orderData['role'] ?? 'Customer';
+
+    final String rawTableNo = (orderData['table_no'] ?? 'N/A').toString();
+    final String rawChairNo = (orderData['chair_no'] ?? '').toString();
+    final String displayTable = rawChairNo.isNotEmpty && rawTableNo != 'N/A'
+        ? '$rawTableNo (Chair $rawChairNo)'
+        : rawTableNo;
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(16),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  'AGAN RESTAURANT',
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Text('Order ID: ${orderData['order_id']}'),
+              pw.Text('Customer: $username ($role)'),
+              pw.Text('Type: ${orderData['delivery_method']}'),
+              if (rawTableNo != 'N/A' && rawTableNo.isNotEmpty)
+                pw.Text('Table No: $displayTable'),
+              pw.Text('Date: ${DateTime.now().toString().substring(0, 16)}'),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 5),
+
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Expanded(
+                    flex: 3,
+                    child: pw.Text(
+                      'Item',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Text(
+                      'Qty',
+                      textAlign: pw.TextAlign.center,
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      'Amount',
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 5),
+
+              ...items.map((item) {
+                final String baseName = item['name'] ?? 'Item';
+                final String size = item['size'] ?? '';
+                final String name = size.isNotEmpty
+                    ? '$baseName ($size)'
+                    : baseName;
+                final num qty = item['qty'] ?? 1;
+                final num price = item['price'] ?? 0;
+                final num lineTotal = price * qty;
+                final List<dynamic> addOns = item['additionalOptions'] ?? [];
+
+                num addOnTotal = 0;
+                for (var a in addOns) {
+                  addOnTotal += (a['price'] as num?) ?? 0;
+                }
+                final num basePrice = price - addOnTotal;
+
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(bottom: 4),
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Expanded(flex: 3, child: pw.Text(name)),
+                          pw.Expanded(
+                            flex: 1,
+                            child: pw.Text(
+                              'x$qty',
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Text(
+                              'CHF ${lineTotal.toStringAsFixed(2)}',
+                              textAlign: pw.TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (addOns.isNotEmpty) ...[
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
+                        child: pw.Text(
+                          'Base Price: CHF ${basePrice.toStringAsFixed(2)}',
+                          style: const pw.TextStyle(
+                            fontSize: 10,
+                            color: PdfColors.grey,
+                          ),
+                        ),
+                      ),
+                      ...addOns.map((addon) {
+                        final addonMap = addon as Map<String, dynamic>? ?? {};
+                        final String addonName = (addonMap['name'] ?? '')
+                            .toString();
+                        final num addonPrice = addonMap['price'] ?? 0;
+                        return pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
+                          child: pw.Text(
+                            '+ $addonName (CHF ${addonPrice.toStringAsFixed(2)})',
+                            style: const pw.TextStyle(
+                              fontSize: 10,
+                              color: PdfColors.grey,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ],
+                );
+              }).toList(),
+
+              pw.SizedBox(height: 5),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Subtotal'),
+                  pw.Text('CHF ${subtotal.toStringAsFixed(2)}'),
+                ],
+              ),
+              pw.SizedBox(height: 3),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
+                  ),
+                  pw.Text('CHF ${serviceCharge.toStringAsFixed(2)}'),
+                ],
+              ),
+              pw.SizedBox(height: 5),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'TOTAL',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    'CHF ${total.toStringAsFixed(2)}',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.Center(
+                child: pw.Text(
+                  '*** Thank You! ***',
+                  style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    final pdfBytes = await pdf.save();
+
+    if (isAutoPrint) {
+      final myNetworkPrinter = Printer(
+        url: PrinterConfig.posPrinterIp,
+        name: 'POS Printer',
+        isAvailable: true,
+      );
+
+      await Printing.directPrintPdf(
+        printer: myNetworkPrinter,
+        name: 'Receipt_${orderData['order_id']}',
+        format: PdfPageFormat.roll80,
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Auto-printed Order #${orderData['order_id']}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: 'Receipt_${orderData['order_id']}',
+      );
+    }
   }
 }

@@ -24,7 +24,7 @@ class SignInPage extends StatefulWidget {
 }
 
 class _SignInPageState extends State<SignInPage> {
-  final _phoneController = TextEditingController();
+  final _emailOrPhone = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
   String? _err;
@@ -42,72 +42,59 @@ class _SignInPageState extends State<SignInPage> {
       _busy = true;
       _err = null;
     });
-
-    String input = _phoneController.text.trim().replaceAll(
-      RegExp(r'[\s\-]'),
-      '',
-    );
-    String passwordText = _password.text.trim();
-
-    // 1. Validation: Check if fields are empty
-    if (input.isEmpty) {
-      setState(() {
-        _err = 'Please enter your phone number.';
-        _busy = false;
-      });
-      return;
-    }
-
-    if (passwordText.isEmpty) {
-      setState(() {
-        _err = 'Please enter your password.';
-        _busy = false;
-      });
-      return;
-    }
-
-    final queryPhone = input.startsWith('+')
-        ? input
-        : '$_selectedCountryCode$input';
+    String input = _emailOrPhone.text.trim().replaceAll(RegExp(r'[\s\-]'), '');
+    String loginEmail = input;
 
     try {
-      // 2. Find User in Firestore
-      final userQuery = await FirebaseFirestore.instance
-          .collection('user')
-          .where('phone', isEqualTo: queryPhone)
-          .limit(1)
-          .get();
+      if (!input.contains('@')) {
+        final queryPhone = input.startsWith('+')
+            ? input
+            : '$_selectedCountryCode$input';
+        final userQuery = await FirebaseFirestore.instance
+            .collection('user')
+            .where('phone', isEqualTo: queryPhone)
+            .limit(1)
+            .get();
+        if (userQuery.docs.isEmpty) {
+          throw Exception('No account found for this phone number.');
+        }
+        loginEmail = userQuery.docs.first.data()['email'] as String? ?? '';
+        if (loginEmail.isEmpty) {
+          throw Exception('No email registered for this account.');
+        }
+      }
 
-      if (userQuery.docs.isEmpty) {
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: loginEmail,
+        password: _password.text.trim(),
+      );
+      final user = cred.user;
+      if (user == null) {
         throw FirebaseAuthException(
-          code: 'user-not-found',
-          message: 'No account found for this phone number.',
+          code: 'no-user',
+          message: AppLanguage.getText('err_user_not_found'),
         );
       }
 
-      final userData = userQuery.docs.first.data();
-      final userId = userQuery.docs.first.id;
-      final verifiedField = userData['verified'] == true;
-      final userName = userData['userName'] as String? ?? 'Guest';
+      final users = FirebaseFirestore.instance.collection('user');
+      final snap = await users.doc(user.uid).get();
+      final data = snap.data() ?? {};
+      final verifiedField = data['verified'] == true;
 
-      // 3. Strict Password Validation via Firebase Auth
-      // Fetch the registered email or reconstruct the dummy email used during phone-only signup
-      String loginEmail = userData['email'] as String? ?? '';
-      if (loginEmail.isEmpty) {
-        loginEmail = '${queryPhone.replaceAll('+', '')}@kleefeld.ch';
-      }
-
-      // This will throw an error (e.g., wrong-password) if the password is incorrect
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: loginEmail,
-        password: passwordText,
-      );
-
-      // 4. Handle Unverified Users (OTP Flow)
       if (!verifiedField) {
+        final phone = data['phone'] as String? ?? '';
+        final userName = data['userName'] as String? ?? 'Guest';
+        if (phone.isEmpty) {
+          throw Exception(AppLanguage.getText('err_phone_not_found'));
+        }
+
+        final formattedPhone = phone.startsWith('+')
+            ? phone
+            : '$_selectedCountryCode$phone';
+
         if (kIsWeb) {
           ConfirmationResult confirmationResult = await FirebaseAuth.instance
-              .signInWithPhoneNumber(queryPhone);
+              .signInWithPhoneNumber(formattedPhone);
 
           if (!mounted) return;
           Navigator.pushReplacement(
@@ -116,20 +103,21 @@ class _SignInPageState extends State<SignInPage> {
               builder: (_) => SignUpVerifyPage(
                 verificationId: null,
                 confirmationResult: confirmationResult,
-                phoneNumber: queryPhone,
+                phoneNumber: formattedPhone,
                 userName: userName,
-                password: passwordText,
+                email: user.email ?? loginEmail,
+                password: _password.text,
               ),
             ),
           );
         } else {
           await FirebaseAuth.instance.verifyPhoneNumber(
-            phoneNumber: queryPhone,
+            phoneNumber: formattedPhone,
             verificationCompleted: (phoneAuthCredential) {},
             verificationFailed: (e) {
               if (!mounted) return;
               setState(() {
-                _err = _friendlyAuthError(e);
+                _err = e.message;
                 _busy = false;
               });
             },
@@ -141,9 +129,10 @@ class _SignInPageState extends State<SignInPage> {
                   builder: (_) => SignUpVerifyPage(
                     verificationId: verificationId,
                     confirmationResult: null,
-                    phoneNumber: queryPhone,
+                    phoneNumber: formattedPhone,
                     userName: userName,
-                    password: passwordText,
+                    email: user.email ?? loginEmail,
+                    password: _password.text,
                   ),
                 ),
               );
@@ -154,13 +143,12 @@ class _SignInPageState extends State<SignInPage> {
         return;
       }
 
-      // 5. Success: Update last login and Navigate
-      await FirebaseFirestore.instance.collection('user').doc(userId).set({
+      await users.doc(user.uid).set({
         'lastLogin': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       final role =
-          (userData['role'] as String?)?.toLowerCase().trim() ?? 'customer';
+          (data['role'] as String?)?.toLowerCase().trim() ?? 'customer';
 
       TextInput.finishAutofillContext();
 
@@ -178,22 +166,21 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
-  String _friendlyAuthError(dynamic e) {
-    if (e is FirebaseAuthException) {
-      switch (e.code) {
-        case 'invalid-credential':
-        case 'wrong-password':
-        case 'user-not-found':
-          return 'Incorrect phone number or password.';
-        case 'too-many-requests':
-          return 'Too many login attempts. Please try again later.';
-        case 'user-disabled':
-          return 'This account has been disabled.';
-        default:
-          return e.message ?? 'Sign in failed. Please try again.';
-      }
+  String _friendlyAuthError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-credential':
+      case 'wrong-password':
+      case 'user-not-found':
+        return 'Incorrect phone/email or password.';
+      case 'invalid-email':
+        return 'The email or phone format is invalid.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      default:
+        return e.message ?? 'Sign in failed. Please try again.';
     }
-    return e.toString().replaceAll('Exception: ', '');
   }
 
   void _navigateBackToStart() {
@@ -202,7 +189,7 @@ class _SignInPageState extends State<SignInPage> {
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _emailOrPhone.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -263,7 +250,7 @@ class _SignInPageState extends State<SignInPage> {
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
+      onPopInvoked: (didPop) {
         if (didPop) return;
         _navigateBackToStart();
       },
@@ -347,14 +334,15 @@ class _SignInPageState extends State<SignInPage> {
                                 ),
                                 const SizedBox(height: 28),
                                 TextField(
-                                  controller: _phoneController,
-                                  keyboardType: TextInputType.phone,
+                                  controller: _emailOrPhone,
+                                  keyboardType: TextInputType.emailAddress,
                                   style: const TextStyle(color: kWhite),
                                   autofillHints: const [
+                                    AutofillHints.email,
                                     AutofillHints.telephoneNumber,
                                   ],
                                   decoration: _dec(
-                                    AppLanguage.getText('phone_hint'),
+                                    AppLanguage.getText('email_or_phone'),
                                     prefixWidget: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -377,23 +365,22 @@ class _SignInPageState extends State<SignInPage> {
                                   obscureText: _obscure,
                                   style: const TextStyle(color: kWhite),
                                   autofillHints: const [AutofillHints.password],
-                                  decoration:
-                                      _dec(
-                                        AppLanguage.getText('password'),
-                                        icon: Icons.lock_outline_rounded,
-                                      ).copyWith(
-                                        suffixIcon: IconButton(
-                                          onPressed: () => setState(
-                                            () => _obscure = !_obscure,
-                                          ),
-                                          icon: Icon(
-                                            _obscure
-                                                ? Icons.visibility
-                                                : Icons.visibility_off,
-                                            color: kMuted,
-                                          ),
-                                        ),
+                                  decoration: _dec(
+                                    AppLanguage.getText('password'),
+                                    icon: Icons.lock_outline_rounded,
+                                  ).copyWith(
+                                    suffixIcon: IconButton(
+                                      onPressed: () => setState(
+                                        () => _obscure = !_obscure,
                                       ),
+                                      icon: Icon(
+                                        _obscure
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
+                                        color: kMuted,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                                 if (_err != null) ...[
                                   const SizedBox(height: 12),
@@ -455,16 +442,6 @@ class _SignInPageState extends State<SignInPage> {
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pushNamed(
-                                    context,
-                                    '/forgot-password',
-                                  ),
-                                  child: const Text(
-                                    'Forgot Password?',
-                                    style: TextStyle(color: kMuted),
                                   ),
                                 ),
                               ],

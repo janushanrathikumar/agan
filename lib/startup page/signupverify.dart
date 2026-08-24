@@ -3,20 +3,23 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:restorant/startup%20page/signup_page.dart';
+import 'package:restorant/startup%20page/signup_page.dart'; // Needed for finalizeSignup logic
 import '../language.dart';
 
+// Define the color constants so the page compiles correctly
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);
 
 class SignUpVerifyPage extends StatefulWidget {
+  // Mobile uses verificationId, Web uses confirmationResult
   final String? verificationId;
   final ConfirmationResult? confirmationResult;
 
   final String phoneNumber;
   final String userName;
+  final String email;
   final String password;
 
   const SignUpVerifyPage({
@@ -25,6 +28,7 @@ class SignUpVerifyPage extends StatefulWidget {
     required this.confirmationResult,
     required this.phoneNumber,
     required this.userName,
+    required this.email,
     required this.password,
   });
 
@@ -51,6 +55,7 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
 
     try {
       if (kIsWeb) {
+        // --- 1. Web Flow Verification ---
         if (widget.confirmationResult == null) {
           throw Exception("Confirmation setup failed.");
         }
@@ -61,9 +66,11 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
           user: userCredential.user!,
           phone: widget.phoneNumber,
           name: widget.userName,
+          email: widget.email,
           password: widget.password,
         );
       } else {
+        // --- 2. Mobile Flow Verification ---
         if (widget.verificationId == null) {
           throw Exception("Verification ID is missing.");
         }
@@ -76,6 +83,7 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
           phoneCredential: credential,
           phone: widget.phoneNumber,
           name: widget.userName,
+          email: widget.email,
           password: widget.password,
         );
       }
@@ -88,6 +96,7 @@ class _SignUpVerifyPageState extends State<SignUpVerifyPage> {
         ),
       );
 
+      // 3. Send them to the login page
       Navigator.pushReplacementNamed(context, '/signin');
     } on FirebaseAuthException catch (e) {
       setState(() {
