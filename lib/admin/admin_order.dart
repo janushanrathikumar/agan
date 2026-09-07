@@ -1,5 +1,6 @@
 // lib/admin_order.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/pdf.dart';
@@ -701,7 +702,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   onPressed: () => OrderPrinter.generateAndPrintPdf(
                     context,
                     orderData,
-                    PrinterConfig.isAutoPrintOn,
+                    false,
                   ),
                 ),
               ),
@@ -1132,6 +1133,9 @@ class AdminOrderDetailsPage extends StatelessWidget {
 // ==========================================
 // 🖨️ PDF PRINTER UTILITY CLASS
 // ==========================================
+// ==========================================
+// 🖨️ PDF PRINTER UTILITY CLASS (Updated for Epson TM-T88V)
+// ==========================================
 class OrderPrinter {
   static Future<void> generateAndPrintPdf(
     BuildContext context,
@@ -1164,7 +1168,7 @@ class OrderPrinter {
             children: [
               pw.Center(
                 child: pw.Text(
-                  'AGAN RESTAURANT',
+                  'RESTAURANT KLEEFLED',
                   style: pw.TextStyle(
                     fontSize: 20,
                     fontWeight: pw.FontWeight.bold,
@@ -1282,11 +1286,11 @@ class OrderPrinter {
                             ),
                           ),
                         );
-                      }).toList(),
+                      }),
                     ],
                   ],
                 );
-              }).toList(),
+              }),
 
               pw.SizedBox(height: 5),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
@@ -1343,33 +1347,87 @@ class OrderPrinter {
 
     final pdfBytes = await pdf.save();
 
-    if (isAutoPrint) {
+    if (isAutoPrint && !kIsWeb) {
+      // Clean up IP string format (remove 'ipp://' or 'socket://' prefixes if stored raw)
+      String cleanIp = PrinterConfig.posPrinterIp
+          .replaceAll('ipp://', '')
+          .replaceAll('socket://', '')
+          .trim();
+
+      // Epson TM-T88V usually works best with raw socket connection on port 9100
       final myNetworkPrinter = Printer(
-        url: PrinterConfig.posPrinterIp,
-        name: 'POS Printer',
+        url: 'socket://$cleanIp:9100',
+        name: 'Epson TM-T88V',
         isAvailable: true,
       );
 
-      await Printing.directPrintPdf(
-        printer: myNetworkPrinter,
-        name: 'Receipt_${orderData['order_id']}',
-        format: PdfPageFormat.roll80,
-        onLayout: (PdfPageFormat format) async => pdfBytes,
-      );
+      try {
+        await Printing.directPrintPdf(
+          printer: myNetworkPrinter,
+          name: 'Receipt_${orderData['order_id']}',
+          format: PdfPageFormat.roll80,
+          onLayout: (PdfPageFormat format) async => pdfBytes,
+        );
+      } catch (e) {
+        // Fallback to IPP if socket fails
+        final fallbackPrinter = Printer(
+          url: PrinterConfig.posPrinterIp.startsWith('ipp://')
+              ? PrinterConfig.posPrinterIp
+              : 'ipp://$cleanIp',
+          name: 'POS Printer IPP',
+          isAvailable: true,
+        );
+        try {
+          await Printing.directPrintPdf(
+            printer: fallbackPrinter,
+            name: 'Receipt_${orderData['order_id']}',
+            format: PdfPageFormat.roll80,
+            onLayout: (PdfPageFormat format) async => pdfBytes,
+          );
+        } catch (_) {
+          await Printing.layoutPdf(
+            onLayout: (PdfPageFormat format) async => pdfBytes,
+            name: 'Receipt_${orderData['order_id']}',
+          );
+        }
+      }
 
-      if (context.mounted) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Auto-printed Order #${orderData['order_id']}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      try {
+        final printed = await Printing.layoutPdf(
+          dynamicLayout: false,
+          format: PdfPageFormat.roll80,
+          onLayout: (PdfPageFormat format) async => pdfBytes,
+          name: 'Receipt_${orderData['order_id']}',
+        );
+
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Auto-printed Order #${orderData['order_id']}'),
-            backgroundColor: Colors.green,
+            content: Text(
+              printed
+                  ? 'Print job sent for Order #${orderData['order_id']}'
+                  : 'Printing was canceled for Order #${orderData['order_id']}',
+            ),
+            backgroundColor: printed ? Colors.green : Colors.orange,
+          ),
+        );
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not print order: $error'),
+            backgroundColor: Colors.red,
           ),
         );
       }
-    } else {
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdfBytes,
-        name: 'Receipt_${orderData['order_id']}',
-      );
     }
   }
 }

@@ -35,15 +35,23 @@ class AppRoutes {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🟢 Removes the '#' from web URLs
-  usePathUrlStrategy();
+  // Removes the '#' from web URLs. This must not run on Android/iOS.
+  if (kIsWeb) {
+    usePathUrlStrategy();
+  }
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  await Firebase.initializeApp(
-    name: 'SecondaryDb',
-    options: SecondaryFirebaseOptions.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      name: 'SecondaryDb',
+      options: SecondaryFirebaseOptions.currentPlatform,
+    );
+  } catch (error, stackTrace) {
+    // The main app can still start if the optional secondary project is unavailable.
+    debugPrint('Secondary Firebase initialization failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
 
   runApp(const MyApp());
 }
