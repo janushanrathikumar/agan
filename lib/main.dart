@@ -1,4 +1,6 @@
 // lib/main.dart
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -40,20 +42,98 @@ Future<void> main() async {
     usePathUrlStrategy();
   }
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final initialization = _initializeFirebase();
+  runApp(FirebaseBootstrap(initialization: initialization));
+}
 
+Future<void> _initializeFirebase() async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (error, stackTrace) {
+    debugPrint('Primary Firebase initialization failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+    rethrow;
+  }
+
+  // The secondary project is optional and must not delay the first web frame.
+  unawaited(_initializeSecondaryFirebase());
+}
+
+Future<void> _initializeSecondaryFirebase() async {
   try {
     await Firebase.initializeApp(
       name: 'SecondaryDb',
       options: SecondaryFirebaseOptions.currentPlatform,
     );
   } catch (error, stackTrace) {
-    // The main app can still start if the optional secondary project is unavailable.
     debugPrint('Secondary Firebase initialization failed: $error');
     debugPrintStack(stackTrace: stackTrace);
   }
+}
 
-  runApp(const MyApp());
+class FirebaseBootstrap extends StatelessWidget {
+  const FirebaseBootstrap({required this.initialization, super.key});
+
+  final Future<void> initialization;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: initialization,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return StartupErrorApp(
+            error: snapshot.error!,
+            stackTrace: snapshot.stackTrace,
+          );
+        }
+
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              backgroundColor: kSplashBg,
+              body: Center(
+                child: CircularProgressIndicator(color: kSplashSpinner),
+              ),
+            ),
+          );
+        }
+
+        return const MyApp();
+      },
+    );
+  }
+}
+
+class StartupErrorApp extends StatelessWidget {
+  const StartupErrorApp({required this.error, this.stackTrace, super.key});
+
+  final Object error;
+  final StackTrace? stackTrace;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: kSplashBg,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: SelectableText(
+                'The app could not start.\n\n$error',
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -99,7 +179,19 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
-    FirebaseAuth.instance.authStateChanges().first.then(_resolve);
+    unawaited(_listenForAuth());
+  }
+
+  Future<void> _listenForAuth() async {
+    try {
+      final user = await FirebaseAuth.instance.authStateChanges().first;
+      await _resolve(user);
+    } catch (error, stackTrace) {
+      debugPrint('Firebase Auth startup failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(AppRoutes.start);
+    }
   }
 
   Future<void> _resolve(User? user) async {
@@ -123,7 +215,7 @@ class _AuthGateState extends State<AuthGate> {
         return;
       }
 
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final data = doc.data() ?? {};
       final bool verified = data['verified'] == true;
       final String role =
           (data['role'] as String?)?.toLowerCase().trim() ?? 'customer';

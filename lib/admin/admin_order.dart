@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -1137,6 +1138,10 @@ class AdminOrderDetailsPage extends StatelessWidget {
 // 🖨️ PDF PRINTER UTILITY CLASS (Updated for Epson TM-T88V)
 // ==========================================
 class OrderPrinter {
+  static const MethodChannel _printerChannel = MethodChannel(
+    'restaurantkleefeld/printer',
+  );
+
   static Future<void> generateAndPrintPdf(
     BuildContext context,
     Map<String, dynamic> orderData,
@@ -1348,57 +1353,27 @@ class OrderPrinter {
     final pdfBytes = await pdf.save();
 
     if (isAutoPrint && !kIsWeb) {
-      // Clean up IP string format (remove 'ipp://' or 'socket://' prefixes if stored raw)
-      String cleanIp = PrinterConfig.posPrinterIp
-          .replaceAll('ipp://', '')
-          .replaceAll('socket://', '')
-          .trim();
-
-      // Epson TM-T88V usually works best with raw socket connection on port 9100
-      final myNetworkPrinter = Printer(
-        url: 'socket://$cleanIp:9100',
-        name: 'Epson TM-T88V',
-        isAvailable: true,
-      );
-
       try {
-        await Printing.directPrintPdf(
-          printer: myNetworkPrinter,
-          name: 'Receipt_${orderData['order_id']}',
-          format: PdfPageFormat.roll80,
-          onLayout: (PdfPageFormat format) async => pdfBytes,
+        final printed = await _printToNetworkPrinter(orderData);
+        if (!printed) {
+          throw Exception('Printer did not accept the receipt');
+        }
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Auto-printed Order #${orderData['order_id']}'),
+            backgroundColor: Colors.green,
+          ),
         );
       } catch (e) {
-        // Fallback to IPP if socket fails
-        final fallbackPrinter = Printer(
-          url: PrinterConfig.posPrinterIp.startsWith('ipp://')
-              ? PrinterConfig.posPrinterIp
-              : 'ipp://$cleanIp',
-          name: 'POS Printer IPP',
-          isAvailable: true,
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Auto-print failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
-        try {
-          await Printing.directPrintPdf(
-            printer: fallbackPrinter,
-            name: 'Receipt_${orderData['order_id']}',
-            format: PdfPageFormat.roll80,
-            onLayout: (PdfPageFormat format) async => pdfBytes,
-          );
-        } catch (_) {
-          await Printing.layoutPdf(
-            onLayout: (PdfPageFormat format) async => pdfBytes,
-            name: 'Receipt_${orderData['order_id']}',
-          );
-        }
       }
-
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Auto-printed Order #${orderData['order_id']}'),
-          backgroundColor: Colors.green,
-        ),
-      );
     } else {
       try {
         final printed = await Printing.layoutPdf(
@@ -1429,5 +1404,46 @@ class OrderPrinter {
         );
       }
     }
+  }
+
+  static Future<bool> _printToNetworkPrinter(
+    Map<String, dynamic> orderData,
+  ) async {
+    final address = PrinterConfig.posPrinterIp
+        .replaceFirst(RegExp(r'^(ipp|socket)://'), '')
+        .split(':')
+        .first
+        .trim();
+    if (address.isEmpty) {
+      throw Exception('Printer IP address is empty');
+    }
+
+    final items = (orderData['items'] as List<dynamic>? ?? [])
+        .map((item) {
+          final itemMap = item as Map<String, dynamic>;
+          final name = itemMap['name'] ?? 'Item';
+          final size = itemMap['size']?.toString() ?? '';
+          final qty = itemMap['qty'] ?? 1;
+          final price = (itemMap['price'] as num?) ?? 0;
+          return '${size.isEmpty ? name : '$name ($size)'} x$qty  CHF ${(price * qty).toStringAsFixed(2)}';
+        })
+        .join('\n');
+    final receipt = [
+      'RESTAURANT KLEEFELD',
+      'Order ID: ${orderData['order_id']}',
+      'Customer: ${orderData['username'] ?? 'Guest'}',
+      '------------------------------',
+      items,
+      '------------------------------',
+      'TOTAL: CHF ${((orderData['total'] as num?) ?? 0).toStringAsFixed(2)}',
+      '',
+      'Thank You!',
+    ].join('\n');
+
+    return await _printerChannel.invokeMethod<bool>('printReceipt', {
+          'address': address,
+          'receipt': receipt,
+        }) ??
+        false;
   }
 }
