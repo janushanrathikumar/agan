@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'payment_page.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -907,27 +906,6 @@ class _TablePickerSheetState extends State<TablePickerSheet>
   }
 
   Widget _buildQrTab() {
-    if (kIsWeb) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.qr_code_scanner,
-              color: kMuted.withOpacity(0.4),
-              size: 56,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'QR scanning not supported on web.\nPlease use a mobile device.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: kMuted, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
-
     if (_scannedTable != null) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
