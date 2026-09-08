@@ -5,10 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../language.dart';
 
-// Web Image CORS error avoidance imports
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/foundation.dart' show kIsWeb;
-
 // --- Palette ---
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -87,12 +83,13 @@ class _PaymentPageState extends State<PaymentPage> {
 
       try {
         final userDoc = await firestore1
-            .collection('users')
-            .doc(user.uid)
-            .get();
+          .collection('user')
+          .doc(user.uid)
+          .get();
         if (userDoc.exists) {
-          final userData = userDoc.data() as Map<String, dynamic>?;
-          username = userData?['username'] ?? userData?['name'] ?? fallbackName;
+          final userData = userDoc.data();
+            username =
+              userData?['username'] ?? userData?['userName'] ?? userData?['name'] ?? fallbackName;
           role = userData?['role'] ?? role;
         }
       } catch (e) {
@@ -335,8 +332,8 @@ class _PaymentPageState extends State<PaymentPage> {
         .doc(widget.uid)
         .collection('items');
     final userRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.uid);
+      .collection('user')
+      .doc(widget.uid);
 
     return Scaffold(
       backgroundColor: kBg,
@@ -371,7 +368,10 @@ class _PaymentPageState extends State<PaymentPage> {
           if (userSnap.hasData && userSnap.data!.exists) {
             final userData = userSnap.data!.data() as Map<String, dynamic>?;
             username =
-                userData?['username'] ?? userData?['name'] ?? fallbackName;
+                userData?['username'] ??
+                userData?['userName'] ??
+                userData?['name'] ??
+                fallbackName;
             role = userData?['role'] ?? 'Customer';
           }
 

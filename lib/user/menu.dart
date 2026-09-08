@@ -141,119 +141,36 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
-  void _showMethodPicker() {
+  Future<void> _showMethodPicker() async {
+    final uid = await _ensureUid();
+    if (uid == null || !mounted) return;
+
     showModalBottomSheet(
       context: context,
-      isDismissible: false,
-      enableDrag: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            padding: const EdgeInsets.all(32.0),
-            decoration: BoxDecoration(
-              color: kBg.withOpacity(0.85),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(32),
-              ),
-              border: Border(top: BorderSide(color: kWhite.withOpacity(0.2))),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  AppLanguage.getText('How would you like to order?'),
-                  style: const TextStyle(
-                    color: kWhite,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: kPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        icon: const Icon(Icons.storefront, color: kWhite),
-                        label: Text(
-                          AppLanguage.getText('dine_in'),
-                          style: const TextStyle(
-                            color: kWhite,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        onPressed: () async {
-                          final user = FirebaseAuth.instance.currentUser;
-                          if (user != null) {
-                            await FirebaseFirestore.instance
-                                .collection('food_delivery')
-                                .doc(user.uid)
-                                .set({
-                                  'delivery_method': 'Dine_In',
-                                  'table_no': 'Dine-In',
-                                  'timestamp': FieldValue.serverTimestamp(),
-                                });
-                          }
-                          if (mounted)
-                            setState(() => _currentTableNo = 'Dine-In');
-                          Navigator.pop(ctx);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: kPrimary, width: 1.5),
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        icon: const Icon(Icons.takeout_dining, color: kPrimary),
-                        label: Text(
-                          AppLanguage.getText('take_away'),
-                          style: const TextStyle(
-                            color: kWhite,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        onPressed: () async {
-                          final user = FirebaseAuth.instance.currentUser;
-                          if (user != null) {
-                            await FirebaseFirestore.instance
-                                .collection('food_delivery')
-                                .doc(user.uid)
-                                .set({
-                                  'delivery_method': 'Take_Away',
-                                  'table_no': '',
-                                  'timestamp': FieldValue.serverTimestamp(),
-                                });
-                          }
-                          if (mounted)
-                            setState(() => _currentTableNo = 'Take-Away');
-                          Navigator.pop(ctx);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+      builder: (_) => TablePickerSheet(
+        uid: uid,
+        onConfirm: (tableNo, chairNo) async {
+          final isTakeAway = tableNo == 'Take-Away';
+          await FirebaseFirestore.instance
+              .collection('food_delivery')
+              .doc(uid)
+              .set({
+                'uid': uid,
+                'delivery_method': isTakeAway ? 'Take_Away' : 'Dine_In',
+                'table_no': isTakeAway ? '' : tableNo,
+                'chair_no': isTakeAway ? '' : chairNo,
+                'timestamp': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+
+          if (!mounted) return;
+          setState(() {
+            _currentTableNo = isTakeAway
+                ? 'Take-Away'
+                : '$tableNo (Chair $chairNo)';
+          });
+        },
       ),
     );
   }

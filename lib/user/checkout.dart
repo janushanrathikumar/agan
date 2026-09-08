@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'payment_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -96,7 +95,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _TablePickerSheet(
+      builder: (_) => TablePickerSheet(
         uid: widget.uid,
         onConfirm: (tableNo, chairNo) async {
           final bool isTakeAway = tableNo == 'Take-Away';
@@ -114,14 +113,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
           try {
             final userDoc = await FirebaseFirestore.instance
-                .collection('users')
-                .doc(widget.uid)
-                .get();
+              .collection('user')
+              .doc(widget.uid)
+              .get();
 
             if (userDoc.exists) {
               final data = userDoc.data();
-              username = data?['username'] ?? data?['name'] ?? fallbackName;
-              role = data?['role'] ?? 'Customer';
+                username =
+                  data?['username'] ?? data?['userName'] ?? data?['name'] ?? fallbackName;
+                role = data?['role'] ?? 'Customer';
             }
           } catch (e) {
             debugPrint('Error fetching user info: $e');
@@ -206,9 +206,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ),
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.uid)
-            .get(),
+          .collection('user')
+          .doc(widget.uid)
+          .get(),
         builder: (context, userSnap) {
           final currentUser = FirebaseAuth.instance.currentUser;
           String fallbackName = 'Guest';
@@ -223,7 +223,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
           if (userSnap.hasData && userSnap.data!.exists) {
             final data = userSnap.data!.data() as Map<String, dynamic>?;
-            username = data?['username'] ?? data?['name'] ?? fallbackName;
+            username =
+              data?['username'] ?? data?['userName'] ?? data?['name'] ?? fallbackName;
             role = data?['role'] ?? 'Customer';
           }
 
@@ -745,16 +746,16 @@ class _OrderSummary extends StatelessWidget {
 }
 
 // ── Table & Chair Picker Sheet ─────────────────────────────────────────────
-class _TablePickerSheet extends StatefulWidget {
+class TablePickerSheet extends StatefulWidget {
   final String uid;
   final void Function(String tableNo, String chairNo) onConfirm;
-  const _TablePickerSheet({required this.uid, required this.onConfirm});
+  const TablePickerSheet({required this.uid, required this.onConfirm});
 
   @override
-  State<_TablePickerSheet> createState() => _TablePickerSheetState();
+  State<TablePickerSheet> createState() => _TablePickerSheetState();
 }
 
-class _TablePickerSheetState extends State<_TablePickerSheet>
+class _TablePickerSheetState extends State<TablePickerSheet>
     with TickerProviderStateMixin {
   TabController? _tabController;
   final _tableCtrl = TextEditingController();
@@ -772,14 +773,20 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
 
   Future<void> _fetchUserRole() async {
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
+      var userDoc = await FirebaseFirestore.instance
+          .collection('user')
           .doc(widget.uid)
           .get();
 
       if (userDoc.exists) {
-        final role = (userDoc.data()?['role'] as String?)?.toLowerCase() ?? '';
-        if (role == 'cashier' || role == 'admin' || role == 'staff') {
+        final role = (userDoc.data()?['role'] as String?)
+                ?.toLowerCase()
+                .trim() ??
+            '';
+        if (role == 'cashier' ||
+          role == 'admin' ||
+          role == 'staff' ||
+          role == 'waiter') {
           _isStaffOrAdmin = true;
         }
       }

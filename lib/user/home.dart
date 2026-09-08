@@ -221,8 +221,9 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   String? _scannedValue;
 
   bool get isStaff =>
-      //  widget.userRole == 'cashier' ||
-      widget.userRole == 'admin' || widget.userRole == 'waiter';
+      widget.userRole == 'cashier' ||
+      widget.userRole == 'admin' ||
+      widget.userRole == 'waiter';
 
   @override
   void initState() {
