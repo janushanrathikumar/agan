@@ -112,15 +112,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
           try {
             final userDoc = await FirebaseFirestore.instance
-              .collection('user')
-              .doc(widget.uid)
-              .get();
+                .collection('user')
+                .doc(widget.uid)
+                .get();
 
             if (userDoc.exists) {
               final data = userDoc.data();
-                username =
-                  data?['username'] ?? data?['userName'] ?? data?['name'] ?? fallbackName;
-                role = data?['role'] ?? 'Customer';
+              username =
+                  data?['username'] ??
+                  data?['userName'] ??
+                  data?['name'] ??
+                  fallbackName;
+              role = data?['role'] ?? 'Customer';
             }
           } catch (e) {
             debugPrint('Error fetching user info: $e');
@@ -205,9 +208,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ),
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance
-          .collection('user')
-          .doc(widget.uid)
-          .get(),
+            .collection('user')
+            .doc(widget.uid)
+            .get(),
         builder: (context, userSnap) {
           final currentUser = FirebaseAuth.instance.currentUser;
           String fallbackName = 'Guest';
@@ -223,7 +226,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
           if (userSnap.hasData && userSnap.data!.exists) {
             final data = userSnap.data!.data() as Map<String, dynamic>?;
             username =
-              data?['username'] ?? data?['userName'] ?? data?['name'] ?? fallbackName;
+                data?['username'] ??
+                data?['userName'] ??
+                data?['name'] ??
+                fallbackName;
             role = data?['role'] ?? 'Customer';
           }
 
@@ -778,14 +784,12 @@ class _TablePickerSheetState extends State<TablePickerSheet>
           .get();
 
       if (userDoc.exists) {
-        final role = (userDoc.data()?['role'] as String?)
-                ?.toLowerCase()
-                .trim() ??
-            '';
+        final role =
+            (userDoc.data()?['role'] as String?)?.toLowerCase().trim() ?? '';
         if (role == 'cashier' ||
-          role == 'admin' ||
-          role == 'staff' ||
-          role == 'waiter') {
+            role == 'admin' ||
+            role == 'staff' ||
+            role == 'waiter') {
           _isStaffOrAdmin = true;
         }
       }
