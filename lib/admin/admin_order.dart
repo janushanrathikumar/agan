@@ -8,6 +8,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:restorant/kitchen/bar.dart';
+import 'package:restorant/kitchen/kitchen.dart';
+import 'package:restorant/kitchen/station_orders.dart';
 
 // --- Palette (Your Original Colors) ---
 const kPrimary = Color(0xFFB59410);
@@ -245,6 +248,24 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
           ),
           const Spacer(),
 
+          // 🍳 Station views: the same orders split by preparation station
+          _buildStationButton(
+            context,
+            icon: Icons.soup_kitchen,
+            label: 'Kitchen',
+            color: OrderStation.kitchen.accent,
+            page: const KitchenPage(),
+          ),
+          const SizedBox(width: 8),
+          _buildStationButton(
+            context,
+            icon: Icons.local_bar,
+            label: 'Bar',
+            color: OrderStation.bar.accent,
+            page: const BarPage(),
+          ),
+          const SizedBox(width: 16),
+
           // 🖨️ Printer IP Settings Icon
           IconButton(
             icon: const Icon(Icons.print, color: kPrimary),
@@ -303,6 +324,29 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStationButton(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Widget page,
+  }) {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        side: BorderSide(color: color),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => page),
+      ),
+      icon: Icon(icon, size: 18),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
     );
   }
 
@@ -690,6 +734,20 @@ class AdminOrderDetailsPage extends StatelessWidget {
             foregroundColor: kWhite,
             elevation: 0,
             actions: [
+              // 🍳 Kitchen ticket: only the food/combo lines of this order
+              _stationPrintAction(
+                context,
+                orderData,
+                OrderStation.kitchen,
+                Icons.soup_kitchen,
+              ),
+              // 🍹 Bar ticket: only the drink lines of this order
+              _stationPrintAction(
+                context,
+                orderData,
+                OrderStation.bar,
+                Icons.local_bar,
+              ),
               Container(
                 margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
                 decoration: BoxDecoration(
@@ -750,6 +808,41 @@ class AdminOrderDetailsPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// AppBar action that prints just one station's share of the order.
+  /// Greyed out when the order has nothing for that station.
+  Widget _stationPrintAction(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+    OrderStation station,
+    IconData icon,
+  ) {
+    final hasItems = stationItems(orderData, station).isNotEmpty;
+    final color = hasItems ? station.accent : kMuted;
+
+    return Container(
+      margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: color),
+        tooltip: hasItems
+            ? 'Print ${station.title} ticket'
+            : 'No ${station.title} items in this order',
+        onPressed: hasItems
+            ? () => StationTicketPrinter.printTicket(
+                context,
+                orderData,
+                station,
+                documentId: documentId,
+              )
+            : null,
+      ),
     );
   }
 
@@ -962,27 +1055,23 @@ class AdminOrderDetailsPage extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (category.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (category.isNotEmpty) _tag(category, kPrimary),
+                    // Which station prepares this line
+                    _tag(
+                      OrderStation.bar.ownsItem(item)
+                          ? OrderStation.bar.title
+                          : OrderStation.kitchen.title,
+                      OrderStation.bar.ownsItem(item)
+                          ? OrderStation.bar.accent
+                          : OrderStation.kitchen.accent,
                     ),
-                    decoration: BoxDecoration(
-                      color: kPrimary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      category,
-                      style: const TextStyle(
-                        color: kPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
                 const SizedBox(height: 8),
                 if (iSize.isNotEmpty)
                   Padding(
@@ -1004,6 +1093,24 @@ class AdminOrderDetailsPage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _tag(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

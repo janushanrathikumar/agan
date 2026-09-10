@@ -8,6 +8,8 @@ import 'package:restorant/user/home.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/OrderDetails.dart';
 import 'package:restorant/user/AccountPage.dart';
+import 'package:restorant/user/scan_landing_page.dart';
+import 'package:restorant/shared/table_registry.dart';
 
 import '../language.dart';
 
@@ -19,13 +21,54 @@ const kDarkBar = Color(0xFF0C1E11);
 const kDiscount = Color(0xFFE0483E);
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, this.initialIndex = 0});
+
+  /// Which bottom tab to open on. 1 is the menu — used after a chair QR code
+  /// has already chosen the table.
+  final int initialIndex;
+
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
-  int _index = 0;
+  late int _index = widget.initialIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _consumePendingScan();
+  }
+
+  /// Applies a chair QR code that was scanned before the guest signed in.
+  ///
+  /// This is the one consumption point for that handoff: both the sign-in page
+  /// and the AuthGate end up here, so neither needs its own copy.
+  Future<void> _consumePendingScan() async {
+    final pending = await PendingScan.take();
+    if (pending == null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final seat = await TableRegistry.resolveByIds(
+        pending.tableId,
+        pending.chairId,
+      );
+      if (seat == null || !mounted) return;
+
+      await applySeatSelection(user.uid, seat);
+      if (!mounted) return;
+
+      setState(() => _index = 1); // straight to the menu
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(seat.label), backgroundColor: kPrimary),
+      );
+    } catch (_) {
+      // A failed handoff just means the guest picks the table by hand.
+    }
+  }
 
   void _onBottomTap(int i) => setState(() => _index = i);
 

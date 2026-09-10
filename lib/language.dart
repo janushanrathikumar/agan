@@ -141,6 +141,16 @@ class AppLanguage {
       'Next (Select Chair)': 'Weiter (Stuhl wählen)',
       'Scan again': 'Erneut scannen',
       'e.g. Table 5 or T5': 'z.B. Tisch 5 oder T5',
+
+      // Chair QR codes / seat lookup
+      // ('Go to Menu' and 'Continue' are already defined further down.)
+      'e.g. chair 7 or Table 5': 'z.B. Stuhl 7 oder Tisch 5',
+      'Used exactly as typed': 'Wird genau wie eingegeben übernommen',
+      'This QR code is not valid.': 'Dieser QR-Code ist ungültig.',
+      'This table is no longer available.':
+          'Dieser Tisch ist nicht mehr verfügbar.',
+      'Could not open this table.':
+          'Dieser Tisch konnte nicht geöffnet werden.',
       'Select Chair / Seat': 'Stuhl / Platz auswählen',
       'Enter your chair number(s) below (e.g. 1, 2, 3)':
           'Geben Sie unten Ihre Stuhlnummer(n) ein (z.B. 1, 2, 3)',
@@ -342,6 +352,14 @@ class AppLanguage {
       'Next (Select Chair)': 'Next (Select Chair)',
       'Scan again': 'Scan again',
       'e.g. Table 5 or T5': 'e.g. Table 5 or T5',
+
+      // Chair QR codes / seat lookup
+      'e.g. chair 7 or Table 5': 'e.g. chair 7 or Table 5',
+      'Used exactly as typed': 'Used exactly as typed',
+      'This QR code is not valid.': 'This QR code is not valid.',
+      'This table is no longer available.':
+          'This table is no longer available.',
+      'Could not open this table.': 'Could not open this table.',
       'Select Chair / Seat': 'Select Chair / Seat',
       'Enter your chair number(s) below (e.g. 1, 2, 3)':
           'Enter your chair number(s) below (e.g. 1, 2, 3)',

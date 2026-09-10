@@ -1,8 +1,11 @@
 // lib/user/checkout.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:restorant/shared/table_registry.dart';
 import 'payment_page.dart';
 
 const kPrimary = Color(0xFFB59410);
@@ -770,10 +773,89 @@ class _TablePickerSheetState extends State<TablePickerSheet>
   bool _isLoading = true;
   bool _isStaffOrAdmin = false;
 
+  // Result of looking the typed chair number up in the table registry.
+  ChairTextResult? _chairLookup;
+  Timer? _chairLookupDebounce;
+
   @override
   void initState() {
     super.initState();
     _fetchUserRole();
+    _chairCtrl.addListener(_onChairTextChanged);
+  }
+
+  /// Chair numbers are unique restaurant-wide, so typing one is enough to fill
+  /// in the table. Debounced so each keystroke does not hit Firestore.
+  void _onChairTextChanged() {
+    _chairLookupDebounce?.cancel();
+    final text = _chairCtrl.text;
+
+    if (text.trim().isEmpty) {
+      if (_chairLookup != null) setState(() => _chairLookup = null);
+      return;
+    }
+
+    _chairLookupDebounce = Timer(const Duration(milliseconds: 350), () async {
+      final result = await TableRegistry.resolveChairText(text);
+      if (!mounted || _chairCtrl.text != text) return;
+      setState(() {
+        _chairLookup = result;
+        // Only fill the table in for the user; never overwrite what they typed.
+        if (result.resolved && _tableCtrl.text.trim().isEmpty) {
+          _tableCtrl.text = result.table!.name;
+        }
+      });
+    });
+  }
+
+  /// The green/amber note under the chair field.
+  Widget _buildChairLookupNote() {
+    final lookup = _chairLookup;
+    if (lookup == null || lookup.rawText.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    late final String message;
+    late final Color color;
+    late final IconData icon;
+
+    if (lookup.spansMultipleTables) {
+      message = 'Those chairs are on different tables — check the table below.';
+      color = Colors.orangeAccent;
+      icon = Icons.warning_amber_rounded;
+    } else if (lookup.resolved && !lookup.hasUnresolved) {
+      message = lookup.chair == null
+          ? lookup.table!.name
+          : '${lookup.table!.name} · Chair ${lookup.chair!.no}';
+      color = Colors.greenAccent;
+      icon = Icons.check_circle;
+    } else if (lookup.resolved) {
+      message =
+          '${lookup.table!.name} — chair ${lookup.unresolved.join(', ')} '
+          'not registered';
+      color = Colors.orangeAccent;
+      icon = Icons.warning_amber_rounded;
+    } else {
+      message = 'Not registered — it will be used exactly as typed.';
+      color = Colors.orangeAccent;
+      icon = Icons.warning_amber_rounded;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: color, fontSize: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchUserRole() async {
@@ -784,14 +866,8 @@ class _TablePickerSheetState extends State<TablePickerSheet>
           .get();
 
       if (userDoc.exists) {
-        final role =
-            (userDoc.data()?['role'] as String?)?.toLowerCase().trim() ?? '';
-        if (role == 'cashier' ||
-            role == 'admin' ||
-            role == 'staff' ||
-            role == 'waiter') {
-          _isStaffOrAdmin = true;
-        }
+        final role = (userDoc.data()?['role'] as String?) ?? '';
+        _isStaffOrAdmin = isStaffRole(role);
       }
     } catch (e) {
       debugPrint('Error fetching role in picker: $e');
@@ -810,6 +886,8 @@ class _TablePickerSheetState extends State<TablePickerSheet>
 
   @override
   void dispose() {
+    _chairLookupDebounce?.cancel();
+    _chairCtrl.removeListener(_onChairTextChanged);
     _tabController?.dispose();
     _tableCtrl.dispose();
     _chairCtrl.dispose();
@@ -977,13 +1055,35 @@ class _TablePickerSheetState extends State<TablePickerSheet>
       borderRadius: BorderRadius.circular(16),
       child: MobileScanner(
         onDetect: (capture) {
-          final barcode = capture.barcodes.firstOrNull;
-          if (barcode?.rawValue != null) {
-            setState(() => _scannedTable = barcode!.rawValue);
-          }
+          final raw = capture.barcodes.firstOrNull?.rawValue;
+          if (raw != null) _handleScannedCode(raw);
         },
       ),
     );
+  }
+
+  /// Chair QR codes carry a link; anything else is still treated as a plain
+  /// table name, exactly as before, so older printed codes keep working.
+  Future<void> _handleScannedCode(String raw) async {
+    final payload = TableRegistry.parseScanPayload(raw);
+
+    if (!payload.hasIds) {
+      if (!mounted) return;
+      setState(() => _scannedTable = payload.plainText ?? raw);
+      return;
+    }
+
+    final seat = await TableRegistry.resolveByIds(
+      payload.tableId!,
+      payload.chairId,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _scannedTable = seat?.tableName ?? raw;
+      // Prefilled so the whole scan is one confirm tap.
+      if (seat?.chair != null) _chairCtrl.text = seat!.chairNo;
+    });
   }
 
   Widget _buildTypeTab() {
@@ -1035,6 +1135,7 @@ class _TablePickerSheetState extends State<TablePickerSheet>
             prefixIcon: const Icon(Icons.chair_outlined, color: kPrimary),
           ),
         ),
+        _buildChairLookupNote(),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,

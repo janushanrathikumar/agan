@@ -8,7 +8,10 @@ import 'add_menu_chocie.dart';
 import 'promotion.dart';
 import 'manage_additional_options.dart';
 import 'package:restorant/startup%20page/signin_page.dart';
+import 'package:restorant/kitchen/bar.dart';
+import 'package:restorant/kitchen/kitchen.dart';
 import 'AdminStaffManagementPage.dart';
+import 'manage_tables.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF1E1E1E);
@@ -156,6 +159,18 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
+                    case 'kitchen':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const KitchenPage()),
+                      );
+                      break;
+                    case 'bar':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const BarPage()),
+                      );
+                      break;
                     case 'manage_menu_items':
                       Navigator.push(
                         context,
@@ -185,6 +200,14 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => const ManageAdditionalOptionsPage(),
+                        ),
+                      );
+                      break;
+                    case 'manage_tables':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageTablesPage(),
                         ),
                       );
                       break;
@@ -218,6 +241,17 @@ class _AdminAppBarState extends State<AdminAppBar> {
                       'Orders',
                     ),
                   ),
+                  PopupMenuItem<String>(
+                    value: 'kitchen',
+                    child: _buildMenuItemChild(
+                      Icons.soup_kitchen_rounded,
+                      'Kitchen',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'bar',
+                    child: _buildMenuItemChild(Icons.local_bar_rounded, 'Bar'),
+                  ),
                   const PopupMenuDivider(),
                   PopupMenuItem<String>(
                     value: 'manage_menu_items',
@@ -245,6 +279,13 @@ class _AdminAppBarState extends State<AdminAppBar> {
                     child: _buildMenuItemChild(
                       Icons.add_circle_outline_rounded,
                       'Menu Additional Options',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'manage_tables',
+                    child: _buildMenuItemChild(
+                      Icons.table_restaurant,
+                      'Manage Tables',
                     ),
                   ),
                   PopupMenuItem<String>(
