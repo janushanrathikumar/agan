@@ -129,7 +129,13 @@ class _AdminStaffManagementPageState extends State<AdminStaffManagementPage> {
                           value: 'waiter',
                           child: Text('Waiter'),
                         ),
-                        //   DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                        // புதியதாக சேர்க்கப்பட்டவை:
+                        DropdownMenuItem(
+                          value: 'kitchen',
+                          child: Text('Kitchen'),
+                        ),
+                        DropdownMenuItem(value: 'bar', child: Text('Bar')),
+                        // DropdownMenuItem(value: 'admin', child: Text('Admin')),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -321,7 +327,10 @@ class _AdminStaffManagementPageState extends State<AdminStaffManagementPage> {
           StreamBuilder<QuerySnapshot>(
             stream: _firestore
                 .collection('user')
-                .where('role', whereIn: ['cashier', 'waiter', 'admin'])
+                .where(
+                  'role',
+                  whereIn: ['cashier', 'waiter', 'kitchen', 'bar', 'admin'],
+                )
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/checkout.dart';
+import 'package:restorant/shared/table_registry.dart';
 import '../language.dart';
 
 const kPrimary = Color(0xFFB59410);
@@ -59,22 +61,28 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleDineIn(BuildContext context) async {
-    final tableNo = await showModalBottomSheet<String>(
+    final selection = await showModalBottomSheet<TableSelection>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _TablePickerSheet(userRole: _userRole),
     );
 
-    if (tableNo == null || !context.mounted) return;
+    if (selection == null || !context.mounted) return;
 
-    final chairNo = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _ChairPickerDialog(userRole: _userRole),
-    );
+    final tableNo = selection.table;
 
-    if (chairNo == null || !context.mounted) return;
+    // A chair QR code (or a recognised chair number) already identified the
+    // seat — no need to ask for it again.
+    String? chairNo = selection.hasChair ? selection.chair : null;
+    if (chairNo == null) {
+      chairNo = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _ChairPickerDialog(userRole: _userRole),
+      );
+      if (chairNo == null || !context.mounted) return;
+    }
 
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -86,7 +94,9 @@ class _HomePageState extends State<HomePage> {
             'table_no': tableNo,
             'chair_no': chairNo,
             'timestamp': FieldValue.serverTimestamp(),
-          });
+            // Merged so the uid/username/role the checkout flow stores on this
+            // same document are not wiped.
+          }, SetOptions(merge: true));
     }
 
     if (context.mounted) {
@@ -206,6 +216,18 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+/// What the table picker hands back. [chair] is filled in when the seat was
+/// identified from a chair QR code or a chair number, which lets the caller
+/// skip asking for the chair a second time.
+class TableSelection {
+  const TableSelection(this.table, [this.chair = '']);
+
+  final String table;
+  final String chair;
+
+  bool get hasChair => chair.trim().isNotEmpty;
+}
+
 class _TablePickerSheet extends StatefulWidget {
   final String userRole;
   const _TablePickerSheet({required this.userRole});
@@ -220,25 +242,91 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   final _typeCtrl = TextEditingController();
   String? _scannedValue;
 
-  bool get isStaff =>
-      widget.userRole == 'cashier' ||
-      widget.userRole == 'admin' ||
-      widget.userRole == 'waiter';
+  /// Chair resolved alongside the table (from a chair QR code).
+  String? _scannedChair;
+
+  // Lookup for the number typed in the staff tab.
+  ChairTextResult? _typeLookup;
+  Timer? _typeDebounce;
+
+  bool get isStaff => isStaffRole(widget.userRole);
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: isStaff ? 2 : 1, vsync: this);
+    _typeCtrl.addListener(_onTypedTextChanged);
   }
 
   @override
   void dispose() {
+    _typeDebounce?.cancel();
+    _typeCtrl.removeListener(_onTypedTextChanged);
     _tab.dispose();
     _typeCtrl.dispose();
     super.dispose();
   }
 
-  void _confirm(String val) => Navigator.pop(context, val.trim());
+  void _confirm(String val, [String chair = '']) =>
+      Navigator.pop(context, TableSelection(val.trim(), chair.trim()));
+
+  /// Staff can type a chair number here instead of a table: chair numbers are
+  /// unique across the restaurant, so one number identifies the table too.
+  void _onTypedTextChanged() {
+    _typeDebounce?.cancel();
+    final text = _typeCtrl.text;
+
+    if (text.trim().isEmpty) {
+      if (_typeLookup != null) setState(() => _typeLookup = null);
+      return;
+    }
+
+    _typeDebounce = Timer(const Duration(milliseconds: 350), () async {
+      final result = await TableRegistry.resolveChairText(text);
+      if (!mounted || _typeCtrl.text != text) return;
+      setState(() => _typeLookup = result);
+    });
+  }
+
+  Widget _buildTypeLookupNote() {
+    final lookup = _typeLookup;
+    if (lookup == null || lookup.rawText.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final resolvedCleanly =
+        lookup.resolved && !lookup.hasUnresolved && !lookup.spansMultipleTables;
+    final color = resolvedCleanly ? Colors.greenAccent : Colors.orangeAccent;
+    final message = resolvedCleanly
+        ? (lookup.chair == null
+              ? lookup.table!.name
+              : '${lookup.table!.name} · '
+                    '${AppLanguage.getText("Chair")} ${lookup.chair!.no}')
+        : AppLanguage.getText('Used exactly as typed');
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            resolvedCleanly
+                ? Icons.check_circle
+                : Icons.warning_amber_rounded,
+            color: color,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              message,
+              style: TextStyle(color: color, fontSize: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -358,9 +446,13 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              onPressed: () => _confirm(_scannedValue!),
+              onPressed: () => _confirm(_scannedValue!, _scannedChair ?? ''),
               child: Text(
-                AppLanguage.getText('Next (Select Chair)'),
+                // A chair QR code already identified the seat, so there is
+                // nothing left to ask for.
+                _scannedChair != null
+                    ? AppLanguage.getText('Go to Menu')
+                    : AppLanguage.getText('Next (Select Chair)'),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -370,7 +462,10 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             ),
           ),
           TextButton(
-            onPressed: () => setState(() => _scannedValue = null),
+            onPressed: () => setState(() {
+              _scannedValue = null;
+              _scannedChair = null;
+            }),
             child: Text(
               AppLanguage.getText('Scan again'),
               style: const TextStyle(color: kMuted),
@@ -384,10 +479,33 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
       child: MobileScanner(
         onDetect: (capture) {
           final val = capture.barcodes.firstOrNull?.rawValue;
-          if (val != null && mounted) setState(() => _scannedValue = val);
+          if (val != null) _handleScannedCode(val);
         },
       ),
     );
+  }
+
+  /// A chair QR code carries a link to resolve; anything else stays a plain
+  /// table name, so QR codes printed before this feature still work.
+  Future<void> _handleScannedCode(String raw) async {
+    final payload = TableRegistry.parseScanPayload(raw);
+
+    if (!payload.hasIds) {
+      if (!mounted) return;
+      setState(() => _scannedValue = payload.plainText ?? raw);
+      return;
+    }
+
+    final seat = await TableRegistry.resolveByIds(
+      payload.tableId!,
+      payload.chairId,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _scannedValue = seat?.tableName ?? raw;
+      _scannedChair = seat?.chair == null ? null : seat!.chairNo;
+    });
   }
 
   Widget _buildTypeTab() {
@@ -404,7 +522,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
           ),
           textAlign: TextAlign.center,
           decoration: InputDecoration(
-            hintText: AppLanguage.getText('e.g. Table 5 or T5'),
+            hintText: AppLanguage.getText('e.g. chair 7 or Table 5'),
             hintStyle: TextStyle(
               color: kMuted.withOpacity(0.5),
               fontWeight: FontWeight.normal,
@@ -422,7 +540,8 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             ),
           ),
         ),
-        const SizedBox(height: 24),
+        _buildTypeLookupNote(),
+        const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
           height: 54,
@@ -435,10 +554,25 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
             ),
             onPressed: () {
               final val = _typeCtrl.text.trim();
-              if (val.isNotEmpty) _confirm(val);
+              if (val.isEmpty) return;
+
+              // A recognised chair number gives us the table and the seat, so
+              // the chair step can be skipped. Anything else is passed through
+              // as typed, exactly as before.
+              final lookup = _typeLookup;
+              if (lookup != null &&
+                  lookup.rawText == val &&
+                  lookup.resolved &&
+                  !lookup.spansMultipleTables) {
+                _confirm(lookup.table!.name, lookup.rawText);
+                return;
+              }
+              _confirm(val);
             },
             child: Text(
-              AppLanguage.getText('Next (Select Chair)'),
+              _typeLookup?.resolved == true
+                  ? AppLanguage.getText('Go to Menu')
+                  : AppLanguage.getText('Next (Select Chair)'),
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
