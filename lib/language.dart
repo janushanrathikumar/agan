@@ -218,6 +218,9 @@ class AppLanguage {
       'Please login to view orders.':
           'Bitte anmelden, um Bestellungen anzuzeigen.',
       'My Orders': 'Meine Bestellungen',
+      'Your orders could not be loaded.':
+          'Ihre Bestellungen konnten nicht geladen werden.',
+      'Retry': 'Erneut versuchen',
       'No orders found': 'Keine Bestellungen gefunden',
       'Pending': 'Ausstehend',
       'Items Breakdown': 'Artikelaufschlüsselung',
@@ -425,6 +428,8 @@ class AppLanguage {
       // Orders Page
       'Please login to view orders.': 'Please login to view orders.',
       'My Orders': 'My Orders',
+      'Your orders could not be loaded.': 'Your orders could not be loaded.',
+      'Retry': 'Retry',
       'No orders found': 'No orders found',
       'Pending': 'Pending',
       'Items Breakdown': 'Items Breakdown',

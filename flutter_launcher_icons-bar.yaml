@@ -1,0 +1,7 @@
+# Launcher icon for the standalone Kleefeld Bar app.
+# Generated into android/app/src/bar/res by:  dart run flutter_launcher_icons
+# (flutter_launcher_icons picks up every flutter_launcher_icons-<flavor>.yaml)
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon_bar.png"

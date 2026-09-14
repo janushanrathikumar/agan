@@ -11,8 +11,34 @@ const kBg = Color(0xFF112A18);
 const kMuted = Color(0xFFA1B3A1);
 const kWhite = Color(0xFFF7F7F2);
 
-class MyOrdersPage extends StatelessWidget {
+class MyOrdersPage extends StatefulWidget {
   const MyOrdersPage({super.key});
+
+  @override
+  State<MyOrdersPage> createState() => _MyOrdersPageState();
+}
+
+class _MyOrdersPageState extends State<MyOrdersPage> {
+  Stream<QuerySnapshot>? _ordersStream;
+  String? _streamUid;
+
+  /// The orders stream, created once per signed-in user.
+  ///
+  /// This must not be rebuilt on every `build`: the whole shell around this
+  /// page rebuilds whenever the auth token refreshes, the language is toggled
+  /// or a tab is switched, and a fresh `snapshots()` each time would drop the
+  /// subscription and send the list back to its loading spinner instead of
+  /// showing the orders.
+  Stream<QuerySnapshot> _streamFor(String uid) {
+    if (uid != _streamUid || _ordersStream == null) {
+      _streamUid = uid;
+      _ordersStream = FirebaseFirestore.instance
+          .collection('orders')
+          .where('uid', isEqualTo: uid)
+          .snapshots();
+    }
+    return _ordersStream!;
+  }
 
   Color _getStatusColor(String status) {
     final s = status.toLowerCase();
@@ -22,6 +48,15 @@ class MyOrdersPage extends StatelessWidget {
       return Colors.greenAccent;
     if (s == 'cancelled') return Colors.redAccent;
     return kMuted;
+  }
+
+  /// Order ids are short ('A1002'), so a fixed-length substring overruns them.
+  /// Taking a blind `substring(0, 6)` here threw a RangeError for every order,
+  /// and a release build paints a failed widget as a blank grey box - which is
+  /// why the list looked empty.
+  String _shortOrderId(Object? orderId) {
+    final id = orderId.toString().toUpperCase();
+    return id.length <= 10 ? id : id.substring(0, 10);
   }
 
   String _formatDateTime(DateTime dt) {
@@ -72,9 +107,7 @@ class MyOrdersPage extends StatelessWidget {
       );
     }
 
-    final ordersQuery = FirebaseFirestore.instance
-        .collection('orders')
-        .where('uid', isEqualTo: user.uid);
+    final ordersStream = _streamFor(user.uid);
 
     return Scaffold(
       backgroundColor: kBg,
@@ -115,7 +148,7 @@ class MyOrdersPage extends StatelessWidget {
                 // ── Orders Stream Builder ──
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
-                    stream: ordersQuery.snapshots(),
+                    stream: ordersStream,
                     builder: (context, snap) {
                       if (snap.connectionState == ConnectionState.waiting) {
                         return const Center(
@@ -124,10 +157,59 @@ class MyOrdersPage extends StatelessWidget {
                       }
 
                       if (snap.hasError) {
+                        final error = snap.error;
+                        final code = error is FirebaseException
+                            ? error.code
+                            : error.runtimeType.toString();
                         return Center(
-                          child: Text(
-                            '${AppLanguage.getText("Error:")} ${snap.error}',
-                            style: const TextStyle(color: Colors.redAccent),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: Colors.redAccent,
+                                  size: 42,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  AppLanguage.getText(
+                                    'Your orders could not be loaded.',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: kWhite,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                // Shown so the cause can be reported rather
+                                // than guessed at.
+                                SelectableText(
+                                  '$code\n${snap.error}',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: kPrimary,
+                                    foregroundColor: kWhite,
+                                  ),
+                                  onPressed: () => setState(() {
+                                    _ordersStream = null;
+                                    _streamUid = null;
+                                  }),
+                                  icon: const Icon(Icons.refresh, size: 18),
+                                  label: Text(AppLanguage.getText('Retry')),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       }
@@ -254,7 +336,7 @@ class MyOrdersPage extends StatelessWidget {
                                           MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
-                                          '#${orderId.toString().toUpperCase().substring(0, 6)}',
+                                          '#${_shortOrderId(orderId)}',
                                           style: const TextStyle(
                                             color: kWhite,
                                             fontWeight: FontWeight.bold,
