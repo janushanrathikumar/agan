@@ -6,6 +6,12 @@ project(restorant LANGUAGES CXX)
 # the on-disk name of your application.
 set(BINARY_NAME "restorant")
 
+# audioplayers_windows still includes <experimental/coroutine>, which the
+# MSVC toolchain on recent Visual Studio releases refuses to compile unless
+# this is defined. Setting it here, before the plugins are added, applies it to
+# every target in this build.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
