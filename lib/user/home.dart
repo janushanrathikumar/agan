@@ -10,6 +10,7 @@ import 'package:restorant/user/checkout.dart';
 import 'package:restorant/shared/table_registry.dart';
 import 'package:restorant/user/table_booking_page.dart';
 import '../language.dart';
+import 'package:restorant/shared/platform_support.dart';
 import 'package:restorant/startup%20page/auth_dialog.dart';
 
 const kPrimary = Color(0xFFB59410);
@@ -461,6 +462,28 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   }
 
   Widget _buildQrTab() {
+    // The Windows till build has no camera scanner; the chair number can be
+    // typed on the next tab instead.
+    if (!supportsCameraScanner) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.no_photography_outlined, color: Colors.white54),
+              const SizedBox(height: 10),
+              Text(
+                AppLanguage.getText('qr_not_available'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_scannedValue != null) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,

@@ -30,10 +30,7 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -47,6 +44,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAEqWRtEph-6QYr8JLNZfv2LFZ5cYevbFE',
+    appId: '1:382479866723:web:90e95d1ef4a417a0a65156',
+    messagingSenderId: '382479866723',
+    projectId: 'agan-ee7ee',
+    authDomain: 'agan-ee7ee.firebaseapp.com',
+    storageBucket: 'agan-ee7ee.firebasestorage.app',
+    measurementId: 'G-SKT6V90WC3',
+  );
+
+  // The Windows desktop build registers with Firebase as a web app, which is
+  // what the FlutterFire CLI generates for this platform too, so it reuses the
+  // web credentials above.
+  static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyAEqWRtEph-6QYr8JLNZfv2LFZ5cYevbFE',
     appId: '1:382479866723:web:90e95d1ef4a417a0a65156',
     messagingSenderId: '382479866723',

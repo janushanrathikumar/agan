@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:restorant/shared/till_printer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:restorant/kitchen/bar.dart';
 import 'package:restorant/kitchen/kitchen.dart';
@@ -80,6 +81,7 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
   void initState() {
     super.initState();
     // ஆப் திறக்கும்போது Save செய்யப்பட்ட Settings-ஐ எடுக்கிறோம்
+    TillPrinter.loadSettings();
     PrinterConfig.loadSettings().then((_) {
       setState(() {});
       _startAutoPrintListener();
@@ -127,13 +129,77 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         backgroundColor: kCardBg,
         title: const Text('Printer Settings', style: TextStyle(color: kWhite)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Choosing a printer here is what lets the desktop app print a
+            // bill without opening a print dialog at all.
+            if (TillPrinter.isSupported) ...[
+              const Text('Till printer:', style: TextStyle(color: kMuted)),
+              const SizedBox(height: 8),
+              FutureBuilder<List<Printer>>(
+                future: TillPrinter.available(),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: LinearProgressIndicator(color: kPrimary),
+                    );
+                  }
+                  final printers = snap.data ?? const <Printer>[];
+                  if (printers.isEmpty) {
+                    return const Text(
+                      'No printers found on this computer.',
+                      style: TextStyle(color: Colors.orangeAccent),
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final printer in printers)
+                        RadioListTile<String>(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          activeColor: kPrimary,
+                          value: printer.name,
+                          groupValue: TillPrinter.printerName,
+                          title: Text(
+                            printer.name,
+                            style: const TextStyle(
+                              color: kWhite,
+                              fontSize: 13,
+                            ),
+                          ),
+                          onChanged: (_) async {
+                            await TillPrinter.use(printer);
+                            setDialogState(() {});
+                            setState(() {});
+                          },
+                        ),
+                      if (TillPrinter.hasPrinter)
+                        TextButton(
+                          onPressed: () async {
+                            await TillPrinter.forget();
+                            setDialogState(() {});
+                            setState(() {});
+                          },
+                          child: const Text(
+                            'Ask every time instead',
+                            style: TextStyle(color: kMuted, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              const Divider(color: kMuted),
+              const SizedBox(height: 8),
+            ],
             const Text(
               'Enter Printer IP Address:',
               style: TextStyle(color: kMuted),
@@ -179,6 +245,7 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
             child: const Text('Save IP', style: TextStyle(color: kWhite)),
           ),
         ],
+        ),
       ),
     );
   }
@@ -1477,11 +1544,11 @@ class OrderPrinter {
       }
     } else {
       try {
-        final printed = await Printing.layoutPdf(
-          dynamicLayout: false,
-          format: PdfPageFormat.roll80,
-          onLayout: (PdfPageFormat format) async => pdfBytes,
-          name: 'Receipt_${orderData['order_id']}',
+        // On the desktop build this goes straight to the till printer; in a
+        // browser it can only open the print dialog.
+        final printed = await TillPrinter.printPdf(
+          pdfBytes,
+          jobName: 'Receipt_${orderData['order_id']}',
         );
 
         if (!context.mounted) return;
@@ -1489,7 +1556,10 @@ class OrderPrinter {
           SnackBar(
             content: Text(
               printed
-                  ? 'Print job sent for Order #${orderData['order_id']}'
+                  ? TillPrinter.hasPrinter
+                        ? 'Printed Order #${orderData['order_id']} on '
+                              '${TillPrinter.printerName}'
+                        : 'Print job sent for Order #${orderData['order_id']}'
                   : 'Printing was canceled for Order #${orderData['order_id']}',
             ),
             backgroundColor: printed ? Colors.green : Colors.orange,

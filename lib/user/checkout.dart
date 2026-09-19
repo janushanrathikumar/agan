@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:restorant/shared/platform_support.dart';
 import 'package:restorant/shared/table_registry.dart';
 import 'payment_page.dart';
 
@@ -988,6 +989,29 @@ class _TablePickerSheetState extends State<TablePickerSheet>
   }
 
   Widget _buildQrTab() {
+    // The Windows till build has no camera scanner; the chair number can be
+    // typed on the next tab instead.
+    if (!supportsCameraScanner) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.no_photography_outlined, color: Colors.white54),
+              const SizedBox(height: 10),
+              Text(
+                'The QR scanner is not available on this device.\n'
+                'Please type the chair number instead.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_scannedTable != null) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,

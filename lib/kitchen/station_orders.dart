@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:restorant/shared/till_printer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'station_alarm.dart';
@@ -202,21 +202,17 @@ class StationTicketPrinter {
         printed = await _printToNetworkPrinter(orderData, station, items);
         if (!printed) throw Exception('Printer did not accept the ticket');
       } else {
-        printed = await Printing.layoutPdf(
-          dynamicLayout: false,
-          format: PdfPageFormat.roll80,
-          onLayout: (PdfPageFormat format) async => pdfBytes,
-          name: '${station.title}_Ticket_$orderId',
+        printed = await TillPrinter.printPdf(
+          pdfBytes,
+          jobName: '${station.title}_Ticket_$orderId',
         );
       }
     } on MissingPluginException {
       // No native printer bridge on this platform — use the print dialog.
       try {
-        printed = await Printing.layoutPdf(
-          dynamicLayout: false,
-          format: PdfPageFormat.roll80,
-          onLayout: (PdfPageFormat format) async => pdfBytes,
-          name: '${station.title}_Ticket_$orderId',
+        printed = await TillPrinter.printPdf(
+          pdfBytes,
+          jobName: '${station.title}_Ticket_$orderId',
         );
       } catch (error) {
         if (!context.mounted) return;

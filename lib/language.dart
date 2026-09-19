@@ -244,6 +244,8 @@ class AppLanguage {
       'Sorry, that table was just booked. Please pick another time.':
           'Dieser Tisch wurde soeben reserviert. Bitte wählen Sie eine andere Uhrzeit.',
       'Booking failed.': 'Reservierung fehlgeschlagen.',
+      'qr_not_available':
+          'QR-Scanner ist auf diesem Gerät nicht verfügbar. Bitte die Stuhlnummer eingeben.',
       'Duration': 'Dauer',
       'hrs': 'Std.',
       'Price': 'Preis',
@@ -494,6 +496,8 @@ class AppLanguage {
       'Sorry, that table was just booked. Please pick another time.':
           'Sorry, that table was just booked. Please pick another time.',
       'Booking failed.': 'Booking failed.',
+      'qr_not_available':
+          'The QR scanner is not available on this device. Please type the chair number.',
       'Duration': 'Duration',
       'hrs': 'h',
       'Price': 'Price',
