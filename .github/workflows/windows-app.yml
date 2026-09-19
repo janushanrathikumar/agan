@@ -40,7 +40,28 @@ jobs:
       - name: Analyze
         run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
-      - run: flutter build windows --release
+      # The build log is only readable by someone signed in to GitHub, so a
+      # failure also gets repeated as an annotation and kept as an artifact.
+      - name: Build Windows app
+        shell: pwsh
+        run: |
+          flutter build windows --release 2>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $msg = (Get-Content build.log -Tail 40) -join "`n"
+            $msg = $msg.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Host "::error title=Windows build failed::$msg"
+            exit $code
+          }
+
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+
 
       # Flutter has moved this folder between versions, so find it rather than
       # assuming, and fail loudly if the build produced nothing.
