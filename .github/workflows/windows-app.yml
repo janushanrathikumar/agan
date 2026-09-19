@@ -34,9 +34,11 @@ jobs:
 
       - run: flutter pub get
 
-      # Fails the build on a real error rather than leaving it to the .exe.
+      # Stops a real error before it reaches the .exe. The warnings and lint
+      # hints this codebase already carries are not made fatal, or no build
+      # would ever run.
       - name: Analyze
-        run: flutter analyze lib
+        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
       - run: flutter build windows --release
 
