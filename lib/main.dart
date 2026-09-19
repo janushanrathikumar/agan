@@ -21,9 +21,7 @@ import 'package:restorant/admin/adminhome.dart'; // AdminHome (admin)
 import 'firebase_options.dart';
 import 'secondary_firebase_options.dart';
 import 'package:restorant/startup page/forgot_password_page.dart';
-
-const kSplashBg = Color(0xFF112A18);
-const kSplashSpinner = Color(0xFFE49024);
+import 'package:restorant/shared/startup_views.dart';
 
 // 🟢 Central place for every named route string
 class AppRoutes {
@@ -89,42 +87,6 @@ class FirebaseBootstrap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MyApp(initialization: initialization);
-}
-
-class StartupErrorView extends StatelessWidget {
-  const StartupErrorView({required this.error, super.key});
-
-  final Object error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kSplashBg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: SelectableText(
-              'The app could not start.\n\n$error',
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SplashView extends StatelessWidget {
-  const SplashView({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: kSplashBg,
-      body: Center(child: CircularProgressIndicator(color: kSplashSpinner)),
-    );
-  }
 }
 
 class MyApp extends StatelessWidget {
