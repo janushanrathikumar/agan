@@ -2,14 +2,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:restorant/startup%20page/signin_page.dart';
+import 'package:restorant/startup%20page/auth_dialog.dart';
 
 import 'package:restorant/user/home.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/OrderDetails.dart';
 import 'package:restorant/user/AccountPage.dart';
 import 'package:restorant/user/scan_landing_page.dart';
+import 'package:restorant/service/service_board.dart';
 import 'package:restorant/shared/table_registry.dart';
+import 'package:restorant/main.dart' show AppRoutes;
 
 import '../language.dart';
 
@@ -34,10 +36,22 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late int _index = widget.initialIndex;
 
+  /// Waiters and cashiers get an extra Service tab; customers do not.
+  String _userRole = 'customer';
+
   @override
   void initState() {
     super.initState();
     _consumePendingScan();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final role = await fetchUserRole(user.uid);
+    if (!mounted || role == _userRole) return;
+    setState(() => _userRole = role);
   }
 
   /// Applies a chair QR code that was scanned before the guest signed in.
@@ -70,7 +84,55 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  void _onBottomTap(int i) => setState(() => _index = i);
+  /// The tabs, in the order the bottom bar shows them.
+  ///
+  /// Home and Menu are open to guests - browsing is the whole point of landing
+  /// here without an account. Everything else works on the visitor's own data,
+  /// so it goes through [requireLogin] first.
+  List<_TabDef> _tabs() => [
+    _TabDef(AppLanguage.getText('home'), Icons.home_rounded, const HomePage()),
+    _TabDef(
+      AppLanguage.getText('menu'),
+      Icons.restaurant_menu_rounded,
+      const MenuPage(),
+    ),
+    _TabDef(
+      AppLanguage.getText('Orders'),
+      Icons.receipt_long_rounded,
+      const MyOrdersPage(),
+      requiresLogin: true,
+    ),
+    if (isStaffRole(_userRole))
+      _TabDef(
+        AppLanguage.getText('Service'),
+        Icons.room_service_rounded,
+        const ServiceBoardPage(),
+        requiresLogin: true,
+      ),
+    _TabDef(
+      AppLanguage.getText('account'),
+      Icons.person_rounded,
+      const AccountPage(),
+      requiresLogin: true,
+    ),
+  ];
+
+  Future<void> _onBottomTap(int i) async {
+    final tabs = _tabs();
+    if (i >= tabs.length) return;
+
+    if (tabs[i].requiresLogin && !isSignedIn()) {
+      final signedIn = await requireLogin(
+        context,
+        reason: AppLanguage.getText('login_to_continue'),
+      );
+      if (!signedIn || !mounted) return;
+      await _loadRole();
+      if (!mounted) return;
+    }
+
+    setState(() => _index = i);
+  }
 
   void _toggleLanguage() {
     setState(() {
@@ -113,10 +175,9 @@ class _AppShellState extends State<AppShell> {
               Navigator.pop(ctx);
               await FirebaseAuth.instance.signOut();
               if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const SignInPage()),
-                  (route) => false,
-                );
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil(AppRoutes.start, (route) => false);
               }
             },
             child: const Text('Logout', style: TextStyle(color: kWhite)),
@@ -140,10 +201,9 @@ class _AppShellState extends State<AppShell> {
 
         if (context.mounted) {
           // Navigate to Login Page after successful deletion
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const SignInPage()),
-            (route) => false,
-          );
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil(AppRoutes.start, (route) => false);
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -403,33 +463,14 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final List<_TabDef> tabs = [
-      _TabDef(
-        AppLanguage.getText('home'),
-        Icons.home_rounded,
-        const HomePage(),
-      ),
-      _TabDef(
-        AppLanguage.getText('menu'),
-        Icons.restaurant_menu_rounded,
-        const MenuPage(),
-      ),
-      _TabDef(
-        AppLanguage.getText('Orders'),
-        Icons.receipt_long_rounded,
-        const MyOrdersPage(),
-      ),
-      _TabDef(
-        AppLanguage.getText('account'),
-        Icons.person_rounded,
-        const AccountPage(),
-      ),
-    ];
+    final tabs = _tabs();
+    final index = _index < tabs.length ? _index : 0;
 
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snap) {
         final user = snap.data;
+        final guest = user == null || user.isAnonymous;
         final display = (user?.displayName?.trim().isNotEmpty ?? false)
             ? user!.displayName!.trim()
             : (user?.email?.split('@').first ?? 'Guest');
@@ -518,103 +559,149 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
 
-              // --- Settings Menu ---
-              Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: kDiscount.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: kDiscount.withOpacity(0.3)),
-                  ),
-                  child: PopupMenuButton<String>(
-                    color: kBg,
-                    icon: const Icon(
-                      Icons.settings,
-                      color: kDiscount,
-                      size: 20,
+              // A guest gets a way in; the account actions only make sense
+              // once there is an account.
+              if (guest)
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 4),
+                    decoration: BoxDecoration(
+                      color: kPrimary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: kPrimary.withOpacity(0.6)),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: kWhite.withOpacity(0.2)),
-                    ),
-                    onSelected: (value) {
-                      if (value == 'logout') {
-                        _confirmLogout(context);
-                      } else if (value == 'delete') {
-                        _confirmDeleteAccount(context);
-                      } else if (value == 'change_password') {
-                        _showChangePasswordDialog(context);
-                      } else if (value == 'reset_email') {
-                        _sendPasswordResetEmail(context);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      // const PopupMenuItem(
-                      //   value: 'change_password',
-                      //   child: Row(
-                      //     children: [
-                      //       Icon(Icons.lock_reset, color: kWhite, size: 20),
-                      //       SizedBox(width: 8),
-                      //       Text(
-                      //         'Change Password',
-                      //         style: TextStyle(color: kWhite),
-                      //       ),
-                      //     ],
-                      //   ),
-                      // ),
-                      // const PopupMenuItem(
-                      //   value: 'reset_email',
-                      //   child: Row(
-                      //     children: [
-                      //       Icon(
-                      //         Icons.mark_email_read,
-                      //         color: kWhite,
-                      //         size: 20,
-                      //       ),
-                      //       SizedBox(width: 8),
-                      //       Text(
-                      //         'Send Reset Email',
-                      //         style: TextStyle(color: kWhite),
-                      //       ),
-                      //     ],
-                      //   ),
-                      // ),
-                      // const PopupMenuDivider(height: 1),
-                      const PopupMenuItem(
-                        value: 'logout',
-                        child: Row(
-                          children: [
-                            Icon(Icons.logout, color: kWhite, size: 20),
-                            SizedBox(width: 8),
-                            Text('Logout', style: TextStyle(color: kWhite)),
-                          ],
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () async {
+                        final signedIn = await requireLogin(context);
+                        if (signedIn && mounted) await _loadRole();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
                         ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.delete_forever,
-                              color: kDiscount,
-                              size: 20,
+                            const Icon(
+                              Icons.login_rounded,
+                              color: kPrimary,
+                              size: 16,
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Text(
-                              'Delete Account',
-                              style: TextStyle(color: kDiscount),
+                              AppLanguage.getText('log_in'),
+                              style: const TextStyle(
+                                color: kPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+                )
+              else
+                // --- Settings Menu ---
+                Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: kDiscount.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: kDiscount.withOpacity(0.3)),
+                    ),
+                    child: PopupMenuButton<String>(
+                      color: kBg,
+                      icon: const Icon(
+                        Icons.settings,
+                        color: kDiscount,
+                        size: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: kWhite.withOpacity(0.2)),
+                      ),
+                      onSelected: (value) {
+                        if (value == 'logout') {
+                          _confirmLogout(context);
+                        } else if (value == 'delete') {
+                          _confirmDeleteAccount(context);
+                        } else if (value == 'change_password') {
+                          _showChangePasswordDialog(context);
+                        } else if (value == 'reset_email') {
+                          _sendPasswordResetEmail(context);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        // const PopupMenuItem(
+                        //   value: 'change_password',
+                        //   child: Row(
+                        //     children: [
+                        //       Icon(Icons.lock_reset, color: kWhite, size: 20),
+                        //       SizedBox(width: 8),
+                        //       Text(
+                        //         'Change Password',
+                        //         style: TextStyle(color: kWhite),
+                        //       ),
+                        //     ],
+                        //   ),
+                        // ),
+                        // const PopupMenuItem(
+                        //   value: 'reset_email',
+                        //   child: Row(
+                        //     children: [
+                        //       Icon(
+                        //         Icons.mark_email_read,
+                        //         color: kWhite,
+                        //         size: 20,
+                        //       ),
+                        //       SizedBox(width: 8),
+                        //       Text(
+                        //         'Send Reset Email',
+                        //         style: TextStyle(color: kWhite),
+                        //       ),
+                        //     ],
+                        //   ),
+                        // ),
+                        // const PopupMenuDivider(height: 1),
+                        const PopupMenuItem(
+                          value: 'logout',
+                          child: Row(
+                            children: [
+                              Icon(Icons.logout, color: kWhite, size: 20),
+                              SizedBox(width: 8),
+                              Text('Logout', style: TextStyle(color: kWhite)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_forever,
+                                color: kDiscount,
+                                size: 20,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Delete Account',
+                                style: TextStyle(color: kDiscount),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+
               const SizedBox(width: 16),
             ],
           ),
-          body: tabs[_index].page,
+          body: tabs[index].page,
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               color: kDarkBar,
@@ -654,7 +741,7 @@ class _AppShellState extends State<AppShell> {
                   }),
                 ),
                 child: NavigationBar(
-                  selectedIndex: _index,
+                  selectedIndex: index,
                   onDestinationSelected: _onBottomTap,
                   destinations: tabs
                       .map(
@@ -678,5 +765,9 @@ class _TabDef {
   final String title;
   final IconData icon;
   final Widget page;
-  _TabDef(this.title, this.icon, this.page);
+
+  /// Tabs that read or write the visitor's own data need a real account.
+  final bool requiresLogin;
+
+  _TabDef(this.title, this.icon, this.page, {this.requiresLogin = false});
 }

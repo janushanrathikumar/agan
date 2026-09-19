@@ -42,7 +42,12 @@ class _SignInPageState extends State<SignInPage> {
       _busy = true;
       _err = null;
     });
-    String input = _emailOrPhone.text.trim().replaceAll(RegExp(r'[\s\-]'), '');
+    // Only a phone number may have its spaces and dashes stripped; an email
+    // address keeps every character it was typed with.
+    final String typed = _emailOrPhone.text.trim();
+    final String input = typed.contains('@')
+        ? typed
+        : typed.replaceAll(RegExp(r'[\s\-]'), '');
     String loginEmail = input;
 
     try {

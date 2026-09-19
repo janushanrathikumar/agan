@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:restorant/shared/image_upload.dart';
 
 // வெப் இமேஜ் CORS எர்ரரைத் தவிர்க்க
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -56,23 +56,6 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     });
   }
 
-  String _guessContentType(String? filename) {
-    final ext = filename?.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'webp':
-        return 'image/webp';
-      case 'gif':
-        return 'image/gif';
-      case 'bmp':
-        return 'image/bmp';
-      default:
-        return 'image/png';
-    }
-  }
-
   // 🟢 Add / Edit Save Function
   Future<void> _saveCategory({DocumentSnapshot? existingDoc}) async {
     if (!_formKey.currentState!.validate()) return;
@@ -106,20 +89,16 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
 
       // Upload new image if selected
       if (_iconBytes != null) {
-        final safeBase = (_iconFileName ?? name).replaceAll(
-          RegExp(r'[^a-zA-Z0-9._-]+'),
-          '_',
-        );
-        iconFileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
-        final ref = FirebaseStorage.instance.ref(
-          'menu_category_icons/$iconFileName',
-        );
-
-        await ref.putData(
+        // The previous icon is left in place: its URL has been copied onto
+        // every menu item of this category, and deleting it would blank them.
+        final uploaded = await ImageUploader.upload(
           _iconBytes!,
-          SettableMetadata(contentType: _guessContentType(_iconFileName)),
+          folder: 'menu_category_icons',
+          nameHint: _iconFileName ?? name,
+          use: ImageUse.categoryIcon,
         );
-        iconUrl = await ref.getDownloadURL();
+        iconFileName = uploaded.fileName;
+        iconUrl = uploaded.url;
       }
 
       // Save to Firestore
@@ -207,12 +186,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
 
     try {
       if (iconFileName.isNotEmpty) {
-        final ref = FirebaseStorage.instance.ref(
-          'menu_category_icons/$iconFileName',
-        );
-        try {
-          await ref.delete();
-        } catch (_) {}
+        await ImageUploader.deleteQuietly('menu_category_icons', iconFileName);
       }
       await doc.reference.delete();
       setState(() => _selectedCategoryId = null);

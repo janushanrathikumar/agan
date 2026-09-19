@@ -22,6 +22,7 @@ import 'firebase_options.dart';
 import 'secondary_firebase_options.dart';
 import 'package:restorant/startup page/forgot_password_page.dart';
 import 'package:restorant/shared/startup_views.dart';
+import 'package:restorant/shared/table_registry.dart' show fetchUserRole;
 
 // 🟢 Central place for every named route string
 class AppRoutes {
@@ -94,13 +95,19 @@ class MyApp extends StatelessWidget {
 
   final Future<void> initialization;
 
+  /// The customer app is open to guests: the menu can be browsed without an
+  /// account, and [requireLogin] puts the sign in popup in front of the actions
+  /// that actually need one. The admin panel stays behind [RouteGuard], so a
+  /// link shared to another device shows the start page until someone signs in.
+  /// Kitchen and Bar carry their own station login.
   static final Map<String, WidgetBuilder> appRoutes = {
     '/': (_) => const AuthGate(),
     AppRoutes.start: (_) => const StartPage(),
     AppRoutes.signIn: (_) => const SignInPage(),
     AppRoutes.signUp: (_) => const SignUpPage(),
     AppRoutes.user: (_) => const AppShell(),
-    AppRoutes.admin: (_) => const AdminHome(),
+    AppRoutes.admin: (_) =>
+        const RouteGuard(requiredRole: 'admin', child: AdminHome()),
     AppRoutes.privacy: (_) => const PrivacyPolicyPage(),
     AppRoutes.forgotPassword: (_) => const ForgotPasswordPage(),
     AppRoutes.kitchen: (_) => const KitchenPage(),
@@ -158,6 +165,12 @@ class MyApp extends StatelessWidget {
       // 🟢 Needed for '/scan?t=…&c=…': the `routes` map can only match a route
       // name exactly, so a URL carrying a query string never matches it.
       onGenerateRoute: _routeFor,
+      // An address that matches nothing goes through the AuthGate, which sends
+      // signed-out visitors to the start page.
+      onUnknownRoute: (settings) => MaterialPageRoute<void>(
+        builder: (_) => const AuthGate(),
+        settings: const RouteSettings(name: '/'),
+      ),
       // 🔴 Firebase must be ready before any page touches Auth or Firestore.
       // Gating here — rather than swapping in a second MaterialApp — keeps a
       // single Navigator alive, so the browser URL the user opened (e.g.
@@ -177,6 +190,96 @@ class MyApp extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// Where each role belongs after signing in. Kitchen and Bar staff land
+/// straight on their station board.
+String homeRouteForRole(String role) {
+  switch (role.toLowerCase().trim()) {
+    case 'admin':
+      return AppRoutes.admin;
+    case 'kitchen':
+      return AppRoutes.kitchen;
+    case 'bar':
+      return AppRoutes.bar;
+    default:
+      return AppRoutes.user;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// RouteGuard: keeps a pasted link from opening a page it should not.
+//
+// Only the Kitchen and Bar boards are meant to be opened straight from a URL
+// (they carry their own station login). Every other protected page goes
+// through here, so pasting '/user' or '/admin' into a browser on another
+// device lands on the start page until somebody actually signs in.
+// ─────────────────────────────────────────────────────────────────────────
+class RouteGuard extends StatefulWidget {
+  const RouteGuard({required this.child, this.requiredRole, super.key});
+
+  final Widget child;
+
+  /// When set, the signed-in account must hold this exact role.
+  final String? requiredRole;
+
+  @override
+  State<RouteGuard> createState() => _RouteGuardState();
+}
+
+class _RouteGuardState extends State<RouteGuard> {
+  bool _allowed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_check());
+  }
+
+  Future<void> _check() async {
+    try {
+      // On a cold page load Firebase restores the session asynchronously, so
+      // waiting for the first auth event is what stops a signed-in user from
+      // being bounced out of their own link.
+      var user = FirebaseAuth.instance.currentUser;
+      user ??= await FirebaseAuth.instance.authStateChanges().first;
+
+      if (!mounted) return;
+
+      if (user == null) {
+        _redirect(AppRoutes.start);
+        return;
+      }
+
+      final required = widget.requiredRole;
+      if (required != null) {
+        final role = await fetchUserRole(user.uid);
+        if (!mounted) return;
+        if (role != required.toLowerCase()) {
+          // Signed in, but not for this page - send them to their own home
+          // rather than stranding them.
+          _redirect(homeRouteForRole(role));
+          return;
+        }
+      }
+
+      setState(() => _allowed = true);
+    } catch (error, stackTrace) {
+      debugPrint('RouteGuard failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) _redirect(AppRoutes.start);
+    }
+  }
+
+  void _redirect(String route) {
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _allowed ? widget.child : const SplashView();
   }
 }
 
@@ -217,20 +320,7 @@ class _AuthGateState extends State<AuthGate> {
   bool get _canRedirect =>
       mounted && (ModalRoute.of(context)?.isCurrent ?? false);
 
-  // 🟢 Where each role belongs after signing in. Kitchen and Bar staff land
-  // straight on their station board.
-  String _homeRouteFor(String role) {
-    switch (role) {
-      case 'admin':
-        return AppRoutes.admin;
-      case 'kitchen':
-        return AppRoutes.kitchen;
-      case 'bar':
-        return AppRoutes.bar;
-      default:
-        return AppRoutes.user;
-    }
-  }
+  String _homeRouteFor(String role) => homeRouteForRole(role);
 
   Future<void> _resolve(User? user) async {
     if (!_canRedirect) return;

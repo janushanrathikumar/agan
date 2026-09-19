@@ -5,8 +5,8 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:restorant/startup page/signin_page.dart';
-import 'package:restorant/startup page/signup_page.dart';
+import 'package:restorant/startup page/auth_dialog.dart';
+import 'package:restorant/main.dart' show AppRoutes;
 import '../language.dart';
 
 const kPrimary = Color(0xFFB59410);
@@ -25,6 +25,20 @@ class StartPage extends StatefulWidget {
 class _StartPageState extends State<StartPage> {
   final PageController _controller = PageController();
   int _currentIndex = 0;
+
+  /// The start page is an introduction, not a gate: it always leads to the
+  /// home page. Signing in happens in a popup, either from here or later, when
+  /// an action actually needs an account.
+  void _openHome() {
+    Navigator.of(context).pushReplacementNamed(AppRoutes.user);
+  }
+
+  Future<void> _openAuth(AuthMode mode) async {
+    final signedIn = await showAuthDialog(context, mode: mode);
+    if (!mounted) return;
+    // A staff sign in has already routed itself to its own board.
+    if (signedIn && ModalRoute.of(context)?.isCurrent == true) _openHome();
+  }
 
   void _toggleLanguage() {
     setState(() {
@@ -541,10 +555,7 @@ class _StartPageState extends State<StartPage> {
                           ),
                           const SizedBox(width: 6),
                           TextButton(
-                            onPressed: () => Navigator.pushReplacementNamed(
-                              context,
-                              SignInPage.route,
-                            ),
+                            onPressed: _openHome,
                             child: Text(
                               AppLanguage.getText('skip'),
                               style: const TextStyle(
@@ -767,10 +778,7 @@ class _StartPageState extends State<StartPage> {
                                     curve: Curves.easeOutCubic,
                                   );
                                 } else {
-                                  Navigator.pushReplacementNamed(
-                                    context,
-                                    SignUpPage.route,
-                                  );
+                                  _openAuth(AuthMode.signUp);
                                 }
                               },
                               child: Text(
@@ -803,15 +811,12 @@ class _StartPageState extends State<StartPage> {
                                     curve: Curves.easeOutCubic,
                                   );
                                 } else {
-                                  Navigator.pushReplacementNamed(
-                                    context,
-                                    SignInPage.route,
-                                  );
+                                  _openHome();
                                 }
                               },
                               child: Text(
                                 _currentIndex == slides.length - 1
-                                    ? AppLanguage.getText('log_in')
+                                    ? AppLanguage.getText('get_started')
                                     : AppLanguage.getText('next'),
                                 style: const TextStyle(
                                   fontSize: 16,

@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "agan-ee7ee"
+  },
+  "targets": {},
+  "etags": {
+    "agan-ee7ee": {
+      "extensionInstances": {
+        "firestore-send-email": "5928e64a3e73d86908e62f6d6a4544eb2dd5c73f2c9623670481df0fa9af7c6d"
+      }
+    }
   }
 }

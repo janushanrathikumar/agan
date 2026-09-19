@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'checkout.dart';
 import '../language.dart';
+import 'package:restorant/startup%20page/auth_dialog.dart';
 import 'package:restorant/platform_image/platform_image.dart';
 
 const kPrimary = Color(0xFFB59410);
@@ -121,6 +122,10 @@ class _MenuPageState extends State<MenuPage> {
   }
 
   Future<void> _checkOrAskMethod() async {
+    // A guest is only looking at the menu; nothing is asked of them until they
+    // tap a dish, which is where the sign in popup comes in.
+    if (!isSignedIn()) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final doc = await FirebaseFirestore.instance
@@ -141,11 +146,38 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
+  /// Opens a dish, asking for an account first.
+  ///
+  /// Everything past this point writes to the visitor's cart and profile, so
+  /// the popup has to close successfully before the sheet is allowed to open.
+  Future<void> _openItem(Map<String, dynamic> item, _MenuKind kind) async {
+    final signedIn = await requireLogin(
+      context,
+      reason: AppLanguage.getText('login_to_order'),
+    );
+    if (!signedIn || !mounted) return;
+
+    // The table is asked for once, right after the first sign in, and the
+    // dish only opens after that sheet is done with.
+    if (_currentTableNo == null) {
+      await _showMethodPicker();
+      if (!mounted) return;
+    }
+
+    _showItemSheet(
+      context,
+      kind,
+      item,
+      FirebaseAuth.instance.currentUser?.uid,
+      _currentTableNo,
+    );
+  }
+
   Future<void> _showMethodPicker() async {
     final uid = await _ensureUid();
     if (uid == null || !mounted) return;
 
-    showModalBottomSheet(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -398,13 +430,8 @@ class _MenuPageState extends State<MenuPage> {
                                   category: _selectedCategory,
                                   searchQuery: _searchQuery,
                                   tableNo: _currentTableNo,
-                                  onTapItem: (m, actualKind) => _showItemSheet(
-                                    context,
-                                    actualKind,
-                                    m,
-                                    uid,
-                                    _currentTableNo,
-                                  ),
+                                  onTapItem: (m, actualKind) =>
+                                      _openItem(m, actualKind),
                                 ),
                               ),
                             ],

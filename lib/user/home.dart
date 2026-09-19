@@ -8,7 +8,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/checkout.dart';
 import 'package:restorant/shared/table_registry.dart';
+import 'package:restorant/user/table_booking_page.dart';
 import '../language.dart';
+import 'package:restorant/startup%20page/auth_dialog.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
@@ -61,6 +63,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleDineIn(BuildContext context) async {
+    // Choosing a table writes to the visitor's own profile, so it needs an
+    // account even though the page it sits on does not.
+    if (!await requireLogin(
+      context,
+      reason: AppLanguage.getText('login_to_order'),
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+
     final selection = await showModalBottomSheet<TableSelection>(
       context: context,
       isScrollControlled: true,
@@ -110,6 +122,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleTakeAway(BuildContext context) async {
+    if (!await requireLogin(
+      context,
+      reason: AppLanguage.getText('login_to_order'),
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await FirebaseFirestore.instance
@@ -172,6 +192,30 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _BigActionButton(
+                  label: AppLanguage.getText('Book a table'),
+                  icon: Icons.event_seat_rounded,
+                  isPrimary: false,
+                  onTap: () async {
+                    if (!await requireLogin(
+                      context,
+                      reason: AppLanguage.getText('login_to_continue'),
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TableBookingPage(),
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 32),
@@ -938,7 +982,16 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                   final isActive = _current == index;
 
                   return GestureDetector(
-                    onTap: () => _openItemSheet(context, data),
+                    onTap: () async {
+                      if (!await requireLogin(
+                        context,
+                        reason: AppLanguage.getText('login_to_order'),
+                      )) {
+                        return;
+                      }
+                      if (!context.mounted) return;
+                      _openItemSheet(context, data);
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 350),
                       curve: Curves.easeOutCubic,

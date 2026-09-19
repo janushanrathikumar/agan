@@ -145,6 +145,29 @@ bool isStaffRole(String? role) {
   return staffRoles.contains((role ?? '').toLowerCase().trim());
 }
 
+/// Reads a user's role.
+///
+/// User documents are created with the auth uid as the document id, but some
+/// older screens look them up by a `uid` field instead, so both are tried
+/// rather than silently treating a staff member as a customer.
+Future<String> fetchUserRole(String uid) async {
+  final users = FirebaseFirestore.instance.collection('user');
+  try {
+    final doc = await users.doc(uid).get();
+    final role = (doc.data()?['role'] as String?)?.trim();
+    if (role != null && role.isNotEmpty) return role.toLowerCase();
+
+    final query = await users.where('uid', isEqualTo: uid).limit(1).get();
+    if (query.docs.isNotEmpty) {
+      final queried = (query.docs.first.data()['role'] as String?)?.trim();
+      if (queried != null && queried.isNotEmpty) return queried.toLowerCase();
+    }
+  } catch (_) {
+    // Fall through to the default below.
+  }
+  return 'customer';
+}
+
 class TableRegistry {
   static final CollectionReference<Map<String, dynamic>> _collection =
       FirebaseFirestore.instance.collection('tables');

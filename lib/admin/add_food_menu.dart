@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:restorant/shared/image_upload.dart';
 
 import 'choice_dialog.dart';
 import 'manage_menu_items.dart';
@@ -219,14 +219,6 @@ class _AddMenuPageState extends State<AddMenuPage> {
     });
   }
 
-  String _guessContentType(String? filename) {
-    final ext = filename?.split('.').last.toLowerCase();
-    if (ext == 'jpg' || ext == 'jpeg') return 'image/jpeg';
-    if (ext == 'webp') return 'image/webp';
-    if (ext == 'png') return 'image/png';
-    return 'image/jpeg';
-  }
-
   Future<void> _save() async {
     setState(() {
       _saving = true;
@@ -311,18 +303,14 @@ class _AddMenuPageState extends State<AddMenuPage> {
       if (_itemType == 'combo') {
         imageUrl = (_selectedComboItems.first['imageUrl'] as String?) ?? '';
       } else {
-        final safeBase = (_imgFileName ?? name).replaceAll(
-          RegExp(r'[^a-zA-Z0-9._-]+'),
-          '_',
-        );
-        fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
-        final imgRef = FirebaseStorage.instance.ref('menu_images/$fileName');
-
-        await imgRef.putData(
+        final uploaded = await ImageUploader.upload(
           _imgBytes!,
-          SettableMetadata(contentType: _guessContentType(_imgFileName)),
+          folder: 'menu_images',
+          nameHint: _imgFileName ?? name,
+          use: ImageUse.menuPhoto,
         );
-        imageUrl = await imgRef.getDownloadURL();
+        fileName = uploaded.fileName;
+        imageUrl = uploaded.url;
       }
 
       final List<Map<String, dynamic>> comboItemsData = _selectedComboItems

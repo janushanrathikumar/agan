@@ -46,3 +46,7 @@ app.*.map.json
 
 # Firebase deploy cache
 .firebase/
+
+# Firebase Extensions local secrets
+extensions/*.secret.local
+extensions/*.env

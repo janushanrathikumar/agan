@@ -141,14 +141,11 @@ class _PaymentPageState extends State<PaymentPage> {
 
       final String orderDeliveryMethod =
           (deliveryData['delivery_method'] as String?) ?? 'Take_Away';
-      final double serviceChargeRate = orderDeliveryMethod == 'Take_Away'
-          ? 0.026
-          : 0.081;
 
       double subTotal = total;
       double deliveryFee = 0.0;
-      double serviceCharge = subTotal * serviceChargeRate;
-      double finalTotal = subTotal + deliveryFee + serviceCharge;
+      // No service charge: the guest pays exactly what the items cost.
+      double finalTotal = subTotal + deliveryFee;
 
       final List<Map<String, dynamic>> cartItemsForDb2 = itemsList.map((m) {
         return {
@@ -175,8 +172,6 @@ class _PaymentPageState extends State<PaymentPage> {
         'status': 'pending',
         'subTotal': subTotal,
         'deliveryFee': deliveryFee,
-        'serviceCharge': serviceCharge,
-        'serviceChargeRate': serviceChargeRate,
         'total': finalTotal,
         'userId': user.uid,
         'username': username,
@@ -206,8 +201,6 @@ class _PaymentPageState extends State<PaymentPage> {
           'username': username,
           'role': role,
           'subtotal': subTotal,
-          'service_charge': serviceCharge,
-          'service_charge_rate': serviceChargeRate,
           'total': finalTotal,
           'items': itemsList,
           'status': 'New',
@@ -417,12 +410,8 @@ class _PaymentPageState extends State<PaymentPage> {
                     total += p * q;
                   }
 
-                  final double serviceChargeRatePreview = method == 'Take_Away'
-                      ? 0.026
-                      : 0.081;
-                  final double serviceChargePreview =
-                      total * serviceChargeRatePreview;
-                  final double grandTotalPreview = total + serviceChargePreview;
+                  // The guest pays the item total, with nothing added on top.
+                  final double grandTotalPreview = total;
 
                   return Column(
                     children: [
@@ -684,10 +673,6 @@ class _PaymentPageState extends State<PaymentPage> {
                                       total,
                                     ),
                                     const SizedBox(height: 6),
-                                    _chargeRow(
-                                      '${AppLanguage.getText("Service Charge")} (${_methodLabel(method)} • ${(serviceChargeRatePreview * 100).toStringAsFixed(1)}%)',
-                                      serviceChargePreview,
-                                    ),
                                     const Divider(
                                       color: kMuted,
                                       height: 20,
@@ -802,10 +787,6 @@ class _PaymentPageState extends State<PaymentPage> {
       ],
     );
   }
-
-  String _methodLabel(String method) => method == 'Take_Away'
-      ? AppLanguage.getText('Take-Away')
-      : AppLanguage.getText('Dine-In');
 
   Widget _chargeRow(String label, num value, {bool isBold = false}) {
     return Row(

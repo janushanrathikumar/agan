@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:restorant/shared/image_upload.dart';
 
 // --- Palette ---
 const kPrimary = Color(0xFFB59410);
@@ -314,14 +314,6 @@ class _CreateComboWidgetState extends State<_CreateComboWidget> {
     });
   }
 
-  String _guessContentType(String? filename) {
-    final ext = filename?.split('.').last.toLowerCase();
-    if (ext == 'jpg' || ext == 'jpeg') return 'image/jpeg';
-    if (ext == 'webp') return 'image/webp';
-    if (ext == 'png') return 'image/png';
-    return 'image/jpeg';
-  }
-
   Future<void> _createCombo() async {
     if (_nameController.text.isEmpty || _priceController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -351,19 +343,14 @@ class _CreateComboWidgetState extends State<_CreateComboWidget> {
       String imageUrl = '';
       String? imageFileName;
       if (_imgBytes != null) {
-        final safeBase = (_imgFileName ?? _nameController.text).replaceAll(
-          RegExp(r'[^a-zA-Z0-9._-]+'),
-          '_',
-        );
-        imageFileName = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
-        final imgRef = FirebaseStorage.instance.ref(
-          'menu_images/$imageFileName',
-        );
-        await imgRef.putData(
+        final uploaded = await ImageUploader.upload(
           _imgBytes!,
-          SettableMetadata(contentType: _guessContentType(_imgFileName)),
+          folder: 'menu_images',
+          nameHint: _imgFileName ?? _nameController.text,
+          use: ImageUse.menuPhoto,
         );
-        imageUrl = await imgRef.getDownloadURL();
+        imageFileName = uploaded.fileName;
+        imageUrl = uploaded.url;
       }
 
       // Create a new document in menu_items

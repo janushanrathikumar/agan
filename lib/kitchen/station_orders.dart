@@ -946,7 +946,11 @@ class _StationOrdersPageState extends State<StationOrdersPage> {
 
         final docs = (snapshot.data?.docs ?? []).where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          if ((data['status'] ?? '') == 'Canceled') return false;
+          final orderStatus = (data['status'] ?? '').toString();
+          // Canceled, or already served and paid for by the waiter.
+          if (orderStatus == 'Canceled' || orderStatus == 'Completed') {
+            return false;
+          }
           // Only orders that actually contain work for this station.
           if (stationItems(data, _station).isEmpty) return false;
           if (_selectedTab == 'All') return true;
