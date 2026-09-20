@@ -57,6 +57,8 @@ dependencies:
   printing: ^5.11.1
   shared_preferences: ^2.5.5
   qr_flutter: ^4.1.0
+  # Used by tool/generate_chair_qr.dart to render the chair stickers.
+  qr: ^3.0.2
   audioplayers: ^6.1.0
 
 dev_dependencies:

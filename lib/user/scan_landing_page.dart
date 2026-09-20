@@ -1,9 +1,16 @@
 // lib/user/scan_landing_page.dart
 //
-// Landing page for a chair QR code: /scan?t=<tableId>&c=<chairId>
+// Landing page for a chair QR code:
+//
+//   /scan?t=<tableId>&c=<chairId>   the seat's own ids, which survive renumbering
+//   /scan?n=<chairNumber>           the number printed on the chair
 //
 // A guest points their phone camera at the sticker on their chair, and this
 // page selects that table and seat for them before handing over to the menu.
+//
+// The numbered form exists so a sticker can be printed for a chair before the
+// admin has added it to a table: it starts working the moment a chair with
+// that number exists.
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -21,26 +28,41 @@ const _kSpinner = Color(0xFFE49024);
 class PendingScan {
   static const _tableKey = 'pending_scan_table';
   static const _chairKey = 'pending_scan_chair';
+  static const _chairNoKey = 'pending_scan_chair_no';
 
-  static Future<void> save(String tableId, String? chairId) async {
+  static Future<void> save({
+    String? tableId,
+    String? chairId,
+    int? chairNo,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tableKey);
+    await prefs.remove(_chairKey);
+    await prefs.remove(_chairNoKey);
+
+    if (chairNo != null) {
+      await prefs.setInt(_chairNoKey, chairNo);
+      return;
+    }
+    if (tableId == null || tableId.isEmpty) return;
     await prefs.setString(_tableKey, tableId);
-    if (chairId == null || chairId.isEmpty) {
-      await prefs.remove(_chairKey);
-    } else {
+    if (chairId != null && chairId.isNotEmpty) {
       await prefs.setString(_chairKey, chairId);
     }
   }
 
   /// Reads and clears the pending scan, so it is applied exactly once.
-  static Future<({String tableId, String? chairId})?> take() async {
+  static Future<({String? tableId, String? chairId, int? chairNo})?>
+  take() async {
     final prefs = await SharedPreferences.getInstance();
     final tableId = prefs.getString(_tableKey);
-    if (tableId == null || tableId.isEmpty) return null;
     final chairId = prefs.getString(_chairKey);
+    final chairNo = prefs.getInt(_chairNoKey);
+    if ((tableId == null || tableId.isEmpty) && chairNo == null) return null;
     await prefs.remove(_tableKey);
     await prefs.remove(_chairKey);
-    return (tableId: tableId, chairId: chairId);
+    await prefs.remove(_chairNoKey);
+    return (tableId: tableId, chairId: chairId, chairNo: chairNo);
   }
 }
 
@@ -58,10 +80,18 @@ Future<void> applySeatSelection(String uid, SeatSelection seat) {
 }
 
 class ScanLandingPage extends StatefulWidget {
-  const ScanLandingPage({super.key, this.tableId, this.chairId});
+  const ScanLandingPage({
+    super.key,
+    this.tableId,
+    this.chairId,
+    this.chairNo,
+  });
 
   final String? tableId;
   final String? chairId;
+
+  /// The number printed on the chair, for `/scan?n=<number>`.
+  final int? chairNo;
 
   @override
   State<ScanLandingPage> createState() => _ScanLandingPageState();
@@ -80,7 +110,8 @@ class _ScanLandingPageState extends State<ScanLandingPage> {
 
   Future<void> _handleScan() async {
     final tableId = widget.tableId;
-    if (tableId == null || tableId.isEmpty) {
+    final chairNo = widget.chairNo;
+    if (chairNo == null && (tableId == null || tableId.isEmpty)) {
       _fail(AppLanguage.getText('This QR code is not valid.'));
       return;
     }
@@ -89,16 +120,27 @@ class _ScanLandingPageState extends State<ScanLandingPage> {
     if (user == null) {
       // Remember the seat and resolve it after sign-in — reading the table
       // before authentication would depend on public read access.
-      await PendingScan.save(tableId, widget.chairId);
+      await PendingScan.save(
+        tableId: tableId,
+        chairId: widget.chairId,
+        chairNo: chairNo,
+      );
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRoutes.start);
       return;
     }
 
     try {
-      final seat = await TableRegistry.resolveByIds(tableId, widget.chairId);
+      final seat = chairNo != null
+          ? await TableRegistry.resolveByChairNumber(chairNo)
+          : await TableRegistry.resolveByIds(tableId!, widget.chairId);
       if (seat == null) {
-        _fail(AppLanguage.getText('This table is no longer available.'));
+        _fail(
+          chairNo != null
+              ? '${AppLanguage.getText('This chair is not set up yet.')} '
+                    '($chairNo)'
+              : AppLanguage.getText('This table is no longer available.'),
+        );
         return;
       }
 

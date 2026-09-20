@@ -128,6 +128,7 @@ class MyApp extends StatelessWidget {
         builder: (_) => ScanLandingPage(
           tableId: uri.queryParameters['t'],
           chairId: uri.queryParameters['c'],
+          chairNo: int.tryParse(uri.queryParameters['n'] ?? ''),
         ),
         settings: settings,
       );

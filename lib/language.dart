@@ -246,6 +246,8 @@ class AppLanguage {
       'Booking failed.': 'Reservierung fehlgeschlagen.',
       'qr_not_available':
           'QR-Scanner ist auf diesem Gerät nicht verfügbar. Bitte die Stuhlnummer eingeben.',
+      'This chair is not set up yet.':
+          'Dieser Stuhl ist noch nicht eingerichtet.',
       'Duration': 'Dauer',
       'hrs': 'Std.',
       'Price': 'Preis',
@@ -498,6 +500,7 @@ class AppLanguage {
       'Booking failed.': 'Booking failed.',
       'qr_not_available':
           'The QR scanner is not available on this device. Please type the chair number.',
+      'This chair is not set up yet.': 'This chair is not set up yet.',
       'Duration': 'Duration',
       'hrs': 'h',
       'Price': 'Price',

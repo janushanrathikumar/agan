@@ -66,10 +66,13 @@ class _AppShellState extends State<AppShell> {
     if (user == null) return;
 
     try {
-      final seat = await TableRegistry.resolveByIds(
-        pending.tableId,
-        pending.chairId,
-      );
+      final chairNo = pending.chairNo;
+      final seat = chairNo != null
+          ? await TableRegistry.resolveByChairNumber(chairNo)
+          : await TableRegistry.resolveByIds(
+              pending.tableId!,
+              pending.chairId,
+            );
       if (seat == null || !mounted) return;
 
       await applySeatSelection(user.uid, seat);
