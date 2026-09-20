@@ -1091,16 +1091,15 @@ class _TablePickerSheetState extends State<TablePickerSheet>
   Future<void> _handleScannedCode(String raw) async {
     final payload = TableRegistry.parseScanPayload(raw);
 
-    if (!payload.hasIds) {
+    if (!payload.isResolvable) {
       if (!mounted) return;
       setState(() => _scannedTable = payload.plainText ?? raw);
       return;
     }
 
-    final seat = await TableRegistry.resolveByIds(
-      payload.tableId!,
-      payload.chairId,
-    );
+    final seat = payload.hasChairNumber
+        ? await TableRegistry.resolveByChairNumber(payload.chairNo!)
+        : await TableRegistry.resolveByIds(payload.tableId!, payload.chairId);
     if (!mounted) return;
 
     setState(() {

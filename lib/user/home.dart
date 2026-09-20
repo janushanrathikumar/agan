@@ -557,19 +557,21 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   Future<void> _handleScannedCode(String raw) async {
     final payload = TableRegistry.parseScanPayload(raw);
 
-    if (!payload.hasIds) {
+    if (!payload.isResolvable) {
       if (!mounted) return;
       setState(() => _scannedValue = payload.plainText ?? raw);
       return;
     }
 
-    final seat = await TableRegistry.resolveByIds(
-      payload.tableId!,
-      payload.chairId,
-    );
+    final seat = payload.hasChairNumber
+        ? await TableRegistry.resolveByChairNumber(payload.chairNo!)
+        : await TableRegistry.resolveByIds(payload.tableId!, payload.chairId);
     if (!mounted) return;
 
     setState(() {
+      // A sticker for a chair nobody has set up yet resolves to nothing; the
+      // raw code is shown so the guest can see something went wrong rather
+      // than silently sitting at no table.
       _scannedValue = seat?.tableName ?? raw;
       _scannedChair = seat?.chair == null ? null : seat!.chairNo;
     });
