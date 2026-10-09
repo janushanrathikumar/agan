@@ -40,12 +40,17 @@ android {
         versionName = flutter.versionName
     }
 
-    // One app per station, so both can be installed on the same tablet.
+    // The customer app uses main.dart; station apps can be installed alongside it.
+    //   flutter build appbundle --release --flavor customer -t lib/main.dart
     // Each flavor pairs with its own Dart entrypoint:
     //   flutter build apk --flavor kitchen -t lib/main_kitchen.dart
     //   flutter build apk --flavor bar     -t lib/main_bar.dart
     flavorDimensions += "station"
     productFlavors {
+        create("customer") {
+            dimension = "station"
+            resValue("string", "app_name", "Restaurant Kleefeld")
+        }
         create("kitchen") {
             dimension = "station"
             applicationIdSuffix = ".kitchen"

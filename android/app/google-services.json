@@ -22,6 +22,22 @@
           }
         },
         {
+          "client_id": "382479866723-d98lgfk390d8p1g7j85cafn62fl77c4i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ch.restaurantkleefeld.app",
+            "certificate_hash": "6b8b096712b7b6eaedd961394f1cafc1ed8141d3"
+          }
+        },
+        {
+          "client_id": "382479866723-gvhm9labgtjqt3fuigd6i6s1lot48mog.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ch.restaurantkleefeld.app",
+            "certificate_hash": "ed7bd82167bb70bd12cb4cf74fae9e1955fb9d0d"
+          }
+        },
+        {
           "client_id": "382479866723-llued4ds4bgm2glm9kiumil8acgraphe.apps.googleusercontent.com",
           "client_type": 3
         }

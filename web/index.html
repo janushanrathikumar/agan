@@ -1,33 +1,183 @@
 <!DOCTYPE html>
-<html>
+<html lang="de-CH">
 <head>
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  
-  <!-- 🟢 1. Google Bots-kkaana thelivaana Description -->
-  <meta name="description" content="Restaurant Kleefeld app allows users to easily browse our menu, order food online, and manage their personal accounts.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- 🟢 SEO: title, description, canonical -->
+  <title>Restaurant Kleefeld Bern – Pizza, Italienische &amp; Schweizer Küche | Bümpliz</title>
+  <meta name="description" content="Restaurant Kleefeld an der Mädergutstrasse 5 in Bern-Bümpliz: Pizza, Salate, Fleischgerichte und Desserts. Speisekarte ansehen, online bestellen oder Tisch reservieren.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://restaurantkleefeld.ch/start">
+
+  <!-- 🟢 Social sharing (Facebook, WhatsApp etc.) -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="de_CH">
+  <meta property="og:site_name" content="Restaurant Kleefeld">
+  <meta property="og:title" content="Restaurant Kleefeld Bern">
+  <meta property="og:description" content="Pizza, italienische &amp; Schweizer Küche in Bern-Bümpliz. Online bestellen oder Tisch reservieren.">
+  <meta property="og:url" content="https://restaurantkleefeld.ch/start">
+  <meta property="og:image" content="https://restaurantkleefeld.ch/icons/Icon-512.png"><!-- TODO: echtes Restaurant-Foto (1200x630) -->
+  <meta name="twitter:card" content="summary_large_image">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Restaurant Kleefeld">
-<link rel="apple-touch-icon" href="icons/Icon-192.png">
-<link rel="icon" type="image/png" href="favicon.png?v=2"/>
-
-  <!-- 🟢 2. Title-a exact-a match pannunga -->
-  <title>Restaurant Kleefeld</title>
- 
-  <meta name="description" content="Welcome to Restaurant Kleefeld. This application allows users to browse our complete food menu, place online orders, track deliveries, and manage customer accounts.">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png?v=2"/>
   <link rel="manifest" href="manifest.json">
+
+  <!-- 🟢 Structured data (JSON-LD). TODO: Öffnungszeiten prüfen -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Restaurant",
+    "name": "Restaurant Kleefeld",
+    "alternateName": ["Kleefeld", "Kleefeld Bern", "Restaurant Kleefeld Bümpliz"],
+    "url": "https://restaurantkleefeld.ch/start",
+    "image": "https://restaurantkleefeld.ch/icons/Icon-512.png",
+    "telephone": "+41 31 981 14 10",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "Mädergutstrasse 5",
+      "postalCode": "3018",
+      "addressLocality": "Bern",
+      "addressRegion": "BE",
+      "addressCountry": "CH"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 46.937248,
+      "longitude": 7.386680
+    },
+    "hasMap": "https://www.google.com/maps/search/?api=1&query=46.937248,7.386680",
+    "servesCuisine": ["Italienisch", "Pizza", "Schweizer Küche"],
+    "priceRange": "CHF 20–50",
+    "acceptsReservations": true,
+    "openingHoursSpecification": [
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Tuesday", "Wednesday", "Thursday", "Friday"],
+        "opens": "09:00",
+        "closes": "22:30"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "Saturday",
+        "opens": "09:00",
+        "closes": "23:30"
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    #seo-content {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      color: #222;
+      line-height: 1.5;
+    }
+    #seo-content h1 { color: #E49024; }
+    #seo-content a { color: #b5651d; }
+    #seo-content td { padding: 2px 16px 2px 0; }
+  </style>
 </head>
 <body>
-  <div style="display: none;">
-    <h1>Restaurant Kleefeld</h1>
-    <p>Welcome to Restaurant Kleefeld. This application allows users to browse our complete food menu, place online orders, track deliveries, and manage customer accounts.</p>
-    <a href="https://restaurantkleefeld.ch/privacy">Privacy Policy</a>
+  <!-- 🟢 Real, crawlable text in the HTML. Visitors see it while the app
+       loads; it is removed as soon as Flutter paints its first frame. -->
+  <div id="seo-content">
+    <header>
+      <h1>Restaurant Kleefeld – Ihr Restaurant in Bern-Bümpliz</h1>
+      <p>Pizza, italienische Klassiker und Schweizer Gerichte – frisch zubereitet, mit Herz serviert.</p>
+      <p>
+        <a href="tel:+41319811410">031 981 14 10</a> ·
+        <a href="https://restaurantkleefeld.ch/signin">Online bestellen</a> ·
+        <a href="tel:+41319811410">Tisch reservieren</a>
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>Willkommen im Restaurant Kleefeld</h2>
+        <p>
+          Das Restaurant Kleefeld an der Mädergutstrasse in Bern-Bümpliz verbindet italienische
+          Lebensfreude mit Schweizer Gastfreundschaft. Bei uns erwarten Sie frisch gebackene Pizzen,
+          knackige Salate, herzhafte Fleischgerichte und hausgemachte Desserts.
+        </p>
+        <p>
+          Ob Mittagessen, ein gemütlicher Abend zu zweit, ein Geburtstagsessen mit der Familie
+          oder ein Geschäftsessen – bei uns sind Sie herzlich willkommen.
+        </p>
+      </section>
+
+      <section>
+        <h2>Unsere Küche</h2>
+        <ul>
+          <li><strong>Pizza</strong> – klassisch und kreativ belegt</li>
+          <li><strong>Salate</strong> – frisch und saisonal</li>
+          <li><strong>Fleischgerichte</strong> – herzhaft und grosszügig portioniert</li>
+          <li><strong>Desserts</strong> – zum Beispiel unsere beliebte Mousse au Chocolat</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Lieferung &amp; Takeaway in Bern</h2>
+        <p>
+          Lust auf Pizza zu Hause? Bestellen Sie bequem online und holen Sie Ihr Essen ab
+          oder lassen Sie es sich liefern.
+        </p>
+        <p><a href="https://restaurantkleefeld.ch/signin">Jetzt online bestellen</a></p>
+      </section>
+
+      <section>
+        <h2>Feiern &amp; Gruppen</h2>
+        <p>
+          Sie planen einen Geburtstag, ein Familienfest oder ein Firmenessen? Wir beraten Sie gerne
+          und stellen ein passendes Menü für Ihre Gruppe zusammen.
+        </p>
+      </section>
+
+      <section>
+        <h2>Öffnungszeiten</h2>
+        <table>
+          <tr><td>Montag</td><td>Geschlossen</td></tr>
+          <tr><td>Dienstag – Freitag</td><td>09:00 – 22:30</td></tr>
+          <tr><td>Samstag</td><td>09:00 – 23:30</td></tr>
+          <tr><td>Sonntag</td><td>Geschlossen</td></tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>Kontakt &amp; Anfahrt</h2>
+        <address>
+          Restaurant Kleefeld<br>
+          Mädergutstrasse 5<br>
+          3018 Bern<br>
+          Telefon: <a href="tel:+41319811410">031 981 14 10</a>
+        </address>
+        <p><a href="https://www.google.com/maps/search/?api=1&amp;query=46.937248,7.386680">Route in Google Maps</a></p>
+      </section>
+    </main>
+
+    <footer>
+      <p>© Restaurant Kleefeld, Mädergutstrasse 5, 3018 Bern</p>
+      <p><a href="https://restaurantkleefeld.ch/privacy">Datenschutz</a></p>
+    </footer>
   </div>
+
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var seo = document.getElementById('seo-content');
+      if (seo) seo.remove();
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

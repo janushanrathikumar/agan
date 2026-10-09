@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /start
+Allow: /privacy
+Disallow: /admin
+Disallow: /kitchen
+Disallow: /bar
+Disallow: /user
+Disallow: /scan
+
+Sitemap: https://restaurantkleefeld.ch/sitemap.xml
