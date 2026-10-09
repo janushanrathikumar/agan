@@ -8,7 +8,10 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/checkout.dart';
 import 'package:restorant/shared/table_registry.dart';
+import 'package:restorant/user/table_booking_page.dart';
 import '../language.dart';
+import 'package:restorant/shared/platform_support.dart';
+import 'package:restorant/startup%20page/auth_dialog.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF112A18);
@@ -61,6 +64,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleDineIn(BuildContext context) async {
+    // Choosing a table writes to the visitor's own profile, so it needs an
+    // account even though the page it sits on does not.
+    if (!await requireLogin(
+      context,
+      reason: AppLanguage.getText('login_to_order'),
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+
     final selection = await showModalBottomSheet<TableSelection>(
       context: context,
       isScrollControlled: true,
@@ -110,6 +123,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleTakeAway(BuildContext context) async {
+    if (!await requireLogin(
+      context,
+      reason: AppLanguage.getText('login_to_order'),
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await FirebaseFirestore.instance
@@ -172,6 +193,30 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _BigActionButton(
+                  label: AppLanguage.getText('Book a table'),
+                  icon: Icons.event_seat_rounded,
+                  isPrimary: false,
+                  onTap: () async {
+                    if (!await requireLogin(
+                      context,
+                      reason: AppLanguage.getText('login_to_continue'),
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TableBookingPage(),
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 32),
@@ -417,6 +462,28 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   }
 
   Widget _buildQrTab() {
+    // The Windows till build has no camera scanner; the chair number can be
+    // typed on the next tab instead.
+    if (!supportsCameraScanner) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.no_photography_outlined, color: Colors.white54),
+              const SizedBox(height: 10),
+              Text(
+                AppLanguage.getText('qr_not_available'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_scannedValue != null) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -490,19 +557,21 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   Future<void> _handleScannedCode(String raw) async {
     final payload = TableRegistry.parseScanPayload(raw);
 
-    if (!payload.hasIds) {
+    if (!payload.isResolvable) {
       if (!mounted) return;
       setState(() => _scannedValue = payload.plainText ?? raw);
       return;
     }
 
-    final seat = await TableRegistry.resolveByIds(
-      payload.tableId!,
-      payload.chairId,
-    );
+    final seat = payload.hasChairNumber
+        ? await TableRegistry.resolveByChairNumber(payload.chairNo!)
+        : await TableRegistry.resolveByIds(payload.tableId!, payload.chairId);
     if (!mounted) return;
 
     setState(() {
+      // A sticker for a chair nobody has set up yet resolves to nothing; the
+      // raw code is shown so the guest can see something went wrong rather
+      // than silently sitting at no table.
       _scannedValue = seat?.tableName ?? raw;
       _scannedChair = seat?.chair == null ? null : seat!.chairNo;
     });
@@ -938,7 +1007,16 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                   final isActive = _current == index;
 
                   return GestureDetector(
-                    onTap: () => _openItemSheet(context, data),
+                    onTap: () async {
+                      if (!await requireLogin(
+                        context,
+                        reason: AppLanguage.getText('login_to_order'),
+                      )) {
+                        return;
+                      }
+                      if (!context.mounted) return;
+                      _openItemSheet(context, data);
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 350),
                       curve: Curves.easeOutCubic,

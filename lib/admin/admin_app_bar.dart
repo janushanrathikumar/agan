@@ -12,6 +12,7 @@ import 'package:restorant/kitchen/bar.dart';
 import 'package:restorant/kitchen/kitchen.dart';
 import 'AdminStaffManagementPage.dart';
 import 'manage_tables.dart';
+import 'manage_reservations.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF1E1E1E);
@@ -211,6 +212,14 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
+                    case 'reservations':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageReservationsPage(),
+                        ),
+                      );
+                      break;
                     case 'User Management':
                       Navigator.push(
                         context,
@@ -286,6 +295,13 @@ class _AdminAppBarState extends State<AdminAppBar> {
                     child: _buildMenuItemChild(
                       Icons.table_restaurant,
                       'Manage Tables',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'reservations',
+                    child: _buildMenuItemChild(
+                      Icons.event_seat_rounded,
+                      'Reservations',
                     ),
                   ),
                   PopupMenuItem<String>(

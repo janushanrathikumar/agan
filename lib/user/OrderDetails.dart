@@ -288,10 +288,6 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
 
                           final num subtotal =
                               (data['subtotal'] as num?) ?? total;
-                          final num serviceCharge =
-                              (data['service_charge'] as num?) ?? 0;
-                          final num serviceChargeRate =
-                              (data['service_charge_rate'] as num?) ?? 0;
 
                           final timestamp = data['timestamp'] as Timestamp?;
                           final dateStr = timestamp != null
@@ -463,32 +459,6 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                                                 ),
                                               ],
                                             ),
-                                            if (serviceCharge > 0) ...[
-                                              const SizedBox(height: 6),
-                                              Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  Text(
-                                                    '${AppLanguage.getText("Service Charge")} (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
-                                                    style: const TextStyle(
-                                                      color: kMuted,
-                                                      fontSize: 13,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    'CHF ${serviceCharge.toStringAsFixed(2)}',
-                                                    style: const TextStyle(
-                                                      color: kWhite,
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
                                             const Padding(
                                               padding: EdgeInsets.symmetric(
                                                 vertical: 8.0,

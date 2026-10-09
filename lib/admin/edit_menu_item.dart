@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:restorant/shared/image_upload.dart';
 import 'choice_dialog.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -365,24 +365,20 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
       String imageUrl = _existingImageUrl ?? '';
       String imageFileName = _existingImageFileName ?? '';
 
-      if (_imgBytes != null) {
-        if (_existingImageFileName != null &&
-            _existingImageFileName!.isNotEmpty) {
-          try {
-            await FirebaseStorage.instance
-                .ref('menu_images/$_existingImageFileName')
-                .delete();
-          } catch (e) {
-            debugPrint("Failed to delete old image: $e");
-          }
-        }
+      // The old picture is only removed once the item points at the new one,
+      // so a failed upload or save never leaves the item without an image.
+      String? replacedFileName;
 
-        imageFileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final imgRef = FirebaseStorage.instance.ref(
-          'menu_images/$imageFileName',
+      if (_imgBytes != null) {
+        final uploaded = await ImageUploader.upload(
+          _imgBytes!,
+          folder: 'menu_images',
+          nameHint: _imgFileName ?? name,
+          use: ImageUse.menuPhoto,
         );
-        await imgRef.putData(_imgBytes!);
-        imageUrl = await imgRef.getDownloadURL();
+        replacedFileName = _existingImageFileName;
+        imageFileName = uploaded.fileName;
+        imageUrl = uploaded.url;
       } else if (_itemType == 'combo' && imageUrl.isEmpty) {
         imageUrl = (_selectedComboItems.first['imageUrl'] as String?) ?? '';
         imageFileName = '';
@@ -423,6 +419,10 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             'canTakeAway': _canTakeAway,
             'comboItems': comboItemsData,
           });
+
+      if (replacedFileName != imageFileName) {
+        await ImageUploader.deleteQuietly('menu_images', replacedFileName);
+      }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {

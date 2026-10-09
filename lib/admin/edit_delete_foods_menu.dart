@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:restorant/shared/image_upload.dart';
 
 // Your universal image importer! This handles both Web and Mobile automatically.
 import 'package:restorant/platform_image/platform_image.dart';
@@ -126,23 +127,6 @@ class _EditDeleteFoodsMenuPageState extends State<EditDeleteFoodsMenuPage> {
             });
           }
 
-          String guessCT(String? fn) {
-            final ext = fn?.split('.').last.toLowerCase();
-            switch (ext) {
-              case 'jpg':
-              case 'jpeg':
-                return 'image/jpeg';
-              case 'webp':
-                return 'image/webp';
-              case 'gif':
-                return 'image/gif';
-              case 'bmp':
-                return 'image/bmp';
-              default:
-                return 'image/png';
-            }
-          }
-
           Future<void> save() async {
             final nm = nameCtrl.text.trim();
             final pr = double.tryParse(priceCtrl.text.trim());
@@ -157,26 +141,15 @@ class _EditDeleteFoodsMenuPageState extends State<EditDeleteFoodsMenuPage> {
               String? uploadedFileName;
 
               if (newImgBytes != null) {
-                final safeBase = (newImgFileName ?? nm).replaceAll(
-                  RegExp(r'[^a-zA-Z0-9._-]+'),
-                  '_',
-                );
-                final fn = '${DateTime.now().millisecondsSinceEpoch}_$safeBase';
-                final ref = FirebaseStorage.instance.ref('foods_images/$fn');
-                await ref.putData(
+                final uploaded = await ImageUploader.upload(
                   newImgBytes!,
-                  SettableMetadata(contentType: guessCT(newImgFileName)),
+                  folder: 'foods_images',
+                  nameHint: newImgFileName ?? nm,
+                  use: ImageUse.menuPhoto,
                 );
-                uploadedUrl = await ref.getDownloadURL();
-                uploadedFileName = fn;
-
-                if ((imageFileName ?? '').isNotEmpty) {
-                  try {
-                    await FirebaseStorage.instance
-                        .ref('foods_images/$imageFileName')
-                        .delete();
-                  } catch (_) {}
-                }
+                uploadedUrl = uploaded.url;
+                uploadedFileName = uploaded.fileName;
+                await ImageUploader.deleteQuietly('foods_images', imageFileName);
               }
 
               final update = <String, dynamic>{

@@ -7,10 +7,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:restorant/shared/till_printer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:restorant/kitchen/bar.dart';
 import 'package:restorant/kitchen/kitchen.dart';
 import 'package:restorant/kitchen/station_orders.dart';
+import 'package:restorant/shared/bill_receipt.dart';
+import 'edit_order_page.dart';
 
 // --- Palette (Your Original Colors) ---
 const kPrimary = Color(0xFFB59410);
@@ -63,7 +66,13 @@ class AdminOrdersListPage extends StatefulWidget {
 class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
   String _selectedTab = 'All Status';
   String _searchQuery = '';
-  final List<String> _tabs = ['All Status', 'New', 'Delivered', 'Canceled'];
+  final List<String> _tabs = [
+    'All Status',
+    'New',
+    'Completed',
+    'Delivered',
+    'Canceled',
+  ];
 
   StreamSubscription<QuerySnapshot>? _ordersSub;
   DateTime _pageInitTime = DateTime.now();
@@ -72,6 +81,7 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
   void initState() {
     super.initState();
     // ஆப் திறக்கும்போது Save செய்யப்பட்ட Settings-ஐ எடுக்கிறோம்
+    TillPrinter.loadSettings();
     PrinterConfig.loadSettings().then((_) {
       setState(() {});
       _startAutoPrintListener();
@@ -119,13 +129,77 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         backgroundColor: kCardBg,
         title: const Text('Printer Settings', style: TextStyle(color: kWhite)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Choosing a printer here is what lets the desktop app print a
+            // bill without opening a print dialog at all.
+            if (TillPrinter.isSupported) ...[
+              const Text('Till printer:', style: TextStyle(color: kMuted)),
+              const SizedBox(height: 8),
+              FutureBuilder<List<Printer>>(
+                future: TillPrinter.available(),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: LinearProgressIndicator(color: kPrimary),
+                    );
+                  }
+                  final printers = snap.data ?? const <Printer>[];
+                  if (printers.isEmpty) {
+                    return const Text(
+                      'No printers found on this computer.',
+                      style: TextStyle(color: Colors.orangeAccent),
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final printer in printers)
+                        RadioListTile<String>(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          activeColor: kPrimary,
+                          value: printer.name,
+                          groupValue: TillPrinter.printerName,
+                          title: Text(
+                            printer.name,
+                            style: const TextStyle(
+                              color: kWhite,
+                              fontSize: 13,
+                            ),
+                          ),
+                          onChanged: (_) async {
+                            await TillPrinter.use(printer);
+                            setDialogState(() {});
+                            setState(() {});
+                          },
+                        ),
+                      if (TillPrinter.hasPrinter)
+                        TextButton(
+                          onPressed: () async {
+                            await TillPrinter.forget();
+                            setDialogState(() {});
+                            setState(() {});
+                          },
+                          child: const Text(
+                            'Ask every time instead',
+                            style: TextStyle(color: kMuted, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              const Divider(color: kMuted),
+              const SizedBox(height: 8),
+            ],
             const Text(
               'Enter Printer IP Address:',
               style: TextStyle(color: kMuted),
@@ -171,6 +245,7 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
             child: const Text('Save IP', style: TextStyle(color: kWhite)),
           ),
         ],
+        ),
       ),
     );
   }
@@ -341,10 +416,8 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
-      onPressed: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => page),
-      ),
+      onPressed: () =>
+          Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
       icon: Icon(icon, size: 18),
       label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
     );
@@ -702,8 +775,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
         final List<dynamic> items = orderData['items'] ?? [];
 
         final num subtotal = orderData['subtotal'] ?? total;
-        final num serviceCharge = orderData['service_charge'] ?? 0;
-        final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
 
         final String username = orderData['username'] ?? 'Guest';
         final String role = orderData['role'] ?? 'Customer';
@@ -734,6 +805,27 @@ class AdminOrderDetailsPage extends StatelessWidget {
             foregroundColor: kWhite,
             elevation: 0,
             actions: [
+              // ✏️ Corrections stay possible after an order is completed.
+              _actionButton(
+                icon: Icons.edit,
+                tooltip: 'Edit order',
+                color: kPrimary,
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditOrderPage(
+                      documentId: documentId,
+                      orderData: orderData,
+                    ),
+                  ),
+                ),
+              ),
+              _actionButton(
+                icon: Icons.delete_outline,
+                tooltip: 'Delete order',
+                color: Colors.redAccent,
+                onPressed: () => _confirmDelete(context, orderData),
+              ),
               // 🍳 Kitchen ticket: only the food/combo lines of this order
               _stationPrintAction(
                 context,
@@ -778,8 +870,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
                   deliveryMethod,
                   displayTable,
                   subtotal,
-                  serviceCharge,
-                  serviceChargeRate,
                   total,
                   username,
                   role,
@@ -813,6 +903,88 @@ class AdminOrderDetailsPage extends StatelessWidget {
 
   /// AppBar action that prints just one station's share of the order.
   /// Greyed out when the order has nothing for that station.
+  Widget _actionButton({
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: color),
+        tooltip: tooltip,
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  /// Deleting an order is permanent, so it names what is about to go.
+  Future<void> _confirmDelete(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+  ) async {
+    final orderId = (orderData['order_id'] ?? documentId).toString();
+    final num total = (orderData['total'] as num?) ?? 0;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kCardBg,
+        title: const Text('Delete order?', style: TextStyle(color: kWhite)),
+        content: Text(
+          'Order #$orderId (CHF ${total.toStringAsFixed(2)}) will be removed '
+          'permanently. It also disappears from the Kitchen, Bar and Service '
+          'boards and from the customer\'s order list.',
+          style: const TextStyle(color: kMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kWhite)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !context.mounted) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(documentId)
+          .delete();
+      if (!context.mounted) return;
+      Navigator.pop(context); // back to the order list
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Order #$orderId deleted.'),
+          backgroundColor: kPrimary,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not delete: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   Widget _stationPrintAction(
     BuildContext context,
     Map<String, dynamic> orderData,
@@ -852,8 +1024,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
     String deliveryMethod,
     String tableNo,
     num subtotal,
-    num serviceCharge,
-    num serviceChargeRate,
     num total,
     String username,
     String role,
@@ -922,11 +1092,6 @@ class AdminOrderDetailsPage extends StatelessWidget {
           _buildSummaryRow(Icons.table_restaurant, 'Table No', tableNo),
           const Divider(color: kItemBg, thickness: 1, height: 32),
           _buildChargeRow('Subtotal', subtotal),
-          const SizedBox(height: 12),
-          _buildChargeRow(
-            'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
-            serviceCharge,
-          ),
           const Divider(color: kItemBg, thickness: 1, height: 32),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1249,208 +1414,104 @@ class OrderPrinter {
     'restaurantkleefeld/printer',
   );
 
+  /// Builds the guest bill in the same layout as the restaurant's till
+  /// receipt: centred header, one item per two lines, and a plain sum with no
+  /// service charge added.
   static Future<void> generateAndPrintPdf(
     BuildContext context,
     Map<String, dynamic> orderData,
-    bool isAutoPrint,
-  ) async {
+    bool isAutoPrint, {
+    String? operatorName,
+  }) async {
+    final bill = BillData.fromOrder(orderData, operatorName: operatorName);
     final pdf = pw.Document();
-    final items = orderData['items'] ?? [];
-    final total = orderData['total'] ?? 0;
-    final num subtotal = orderData['subtotal'] ?? total;
-    final num serviceCharge = orderData['service_charge'] ?? 0;
-    final num serviceChargeRate = orderData['service_charge_rate'] ?? 0;
 
-    final String username = orderData['username'] ?? 'Guest';
-    final String role = orderData['role'] ?? 'Customer';
-
-    final String rawTableNo = (orderData['table_no'] ?? 'N/A').toString();
-    final String rawChairNo = (orderData['chair_no'] ?? '').toString();
-    final String displayTable = rawChairNo.isNotEmpty && rawTableNo != 'N/A'
-        ? '$rawTableNo (Chair $rawChairNo)'
-        : rawTableNo;
+    pw.Widget centered(String text, {double size = 11, bool bold = false}) {
+      return pw.Center(
+        child: pw.Text(
+          text,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+            fontSize: size,
+            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          ),
+        ),
+      );
+    }
 
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(16),
+        margin: const pw.EdgeInsets.all(12),
         build: (pw.Context context) {
           return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              pw.Center(
-                child: pw.Text(
-                  'RESTAURANT KLEEFLED',
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
+              centered(RestaurantInfo.name, size: 13, bold: true),
+              centered(RestaurantInfo.street, bold: true),
+              centered(RestaurantInfo.city, bold: true),
+              centered(RestaurantInfo.phone, bold: true),
+              centered(RestaurantInfo.email, bold: true),
+              centered(RestaurantInfo.vatId, bold: true),
+              pw.SizedBox(height: 14),
+
+              pw.Text(bill.title, style: const pw.TextStyle(fontSize: 11)),
+              pw.SizedBox(height: 12),
+              if (bill.tableLabel.isNotEmpty)
+                pw.Text(
+                  bill.tableLabel,
+                  style: const pw.TextStyle(fontSize: 11),
                 ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text('Order ID: ${orderData['order_id']}'),
-              pw.Text('Customer: $username ($role)'),
-              pw.Text('Type: ${orderData['delivery_method']}'),
-              if (rawTableNo != 'N/A' && rawTableNo.isNotEmpty)
-                pw.Text('Table No: $displayTable'),
-              pw.Text('Date: ${DateTime.now().toString().substring(0, 16)}'),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
+              pw.SizedBox(height: 4),
+              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
 
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Expanded(
-                    flex: 3,
-                    child: pw.Text(
-                      'Item',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
-                  ),
-                  pw.Expanded(
-                    flex: 1,
-                    child: pw.Text(
-                      'Qty',
-                      textAlign: pw.TextAlign.center,
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
-                  ),
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Text(
-                      'Amount',
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
-              ...items.map((item) {
-                final String baseName = item['name'] ?? 'Item';
-                final String size = item['size'] ?? '';
-                final String name = size.isNotEmpty
-                    ? '$baseName ($size)'
-                    : baseName;
-                final num qty = item['qty'] ?? 1;
-                final num price = item['price'] ?? 0;
-                final num lineTotal = price * qty;
-                final List<dynamic> addOns = item['additionalOptions'] ?? [];
-
-                num addOnTotal = 0;
-                for (var a in addOns) {
-                  addOnTotal += (a['price'] as num?) ?? 0;
-                }
-                final num basePrice = price - addOnTotal;
-
-                return pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(bottom: 4),
-                      child: pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Expanded(flex: 3, child: pw.Text(name)),
-                          pw.Expanded(
-                            flex: 1,
-                            child: pw.Text(
-                              'x$qty',
-                              textAlign: pw.TextAlign.center,
-                            ),
-                          ),
-                          pw.Expanded(
-                            flex: 2,
-                            child: pw.Text(
-                              'CHF ${lineTotal.toStringAsFixed(2)}',
-                              textAlign: pw.TextAlign.right,
-                            ),
-                          ),
-                        ],
+              // Each article prints as its name, then its amount underneath.
+              ...bill.lines.map(
+                (line) => pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 4, left: 8),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        line.label,
+                        style: const pw.TextStyle(fontSize: 11),
                       ),
-                    ),
-                    if (addOns.isNotEmpty) ...[
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
-                        child: pw.Text(
-                          'Base Price: CHF ${basePrice.toStringAsFixed(2)}',
-                          style: const pw.TextStyle(
-                            fontSize: 10,
-                            color: PdfColors.grey,
-                          ),
-                        ),
+                      pw.Text(
+                        '${BillData.money(line.amount)} CHF',
+                        style: const pw.TextStyle(fontSize: 11),
                       ),
-                      ...addOns.map((addon) {
-                        final addonMap = addon as Map<String, dynamic>? ?? {};
-                        final String addonName = (addonMap['name'] ?? '')
-                            .toString();
-                        final num addonPrice = addonMap['price'] ?? 0;
-                        return pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
-                          child: pw.Text(
-                            '+ $addonName (CHF ${addonPrice.toStringAsFixed(2)})',
-                            style: const pw.TextStyle(
-                              fontSize: 10,
-                              color: PdfColors.grey,
-                            ),
-                          ),
-                        );
-                      }),
                     ],
-                  ],
-                );
-              }),
-
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Subtotal'),
-                  pw.Text('CHF ${subtotal.toStringAsFixed(2)}'),
-                ],
-              ),
-              pw.SizedBox(height: 3),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(1)}%)',
                   ),
-                  pw.Text('CHF ${serviceCharge.toStringAsFixed(2)}'),
-                ],
-              ),
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'TOTAL',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    'CHF ${total.toStringAsFixed(2)}',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-              pw.Center(
-                child: pw.Text(
-                  '*** Thank You! ***',
-                  style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
                 ),
               ),
+
+              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
+              pw.Text(
+                'Summe CHF:     ${bill.sumText}',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Divider(thickness: 1.2, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 10),
+
+              pw.Text(
+                'Datum ${bill.dateText}',
+                style: const pw.TextStyle(fontSize: 11),
+              ),
+              pw.Text(
+                'Bediener: ${bill.operatorName}',
+                style: const pw.TextStyle(fontSize: 11),
+              ),
+              pw.Text(
+                'Kasse: ${RestaurantInfo.till}',
+                style: const pw.TextStyle(fontSize: 11),
+              ),
+              pw.SizedBox(height: 16),
+
+              ...RestaurantInfo.thankYou.map((l) => centered(l, bold: true)),
             ],
           );
         },
@@ -1483,11 +1544,11 @@ class OrderPrinter {
       }
     } else {
       try {
-        final printed = await Printing.layoutPdf(
-          dynamicLayout: false,
-          format: PdfPageFormat.roll80,
-          onLayout: (PdfPageFormat format) async => pdfBytes,
-          name: 'Receipt_${orderData['order_id']}',
+        // On the desktop build this goes straight to the till printer; in a
+        // browser it can only open the print dialog.
+        final printed = await TillPrinter.printPdf(
+          pdfBytes,
+          jobName: 'Receipt_${orderData['order_id']}',
         );
 
         if (!context.mounted) return;
@@ -1495,7 +1556,10 @@ class OrderPrinter {
           SnackBar(
             content: Text(
               printed
-                  ? 'Print job sent for Order #${orderData['order_id']}'
+                  ? TillPrinter.hasPrinter
+                        ? 'Printed Order #${orderData['order_id']} on '
+                              '${TillPrinter.printerName}'
+                        : 'Print job sent for Order #${orderData['order_id']}'
                   : 'Printing was canceled for Order #${orderData['order_id']}',
             ),
             backgroundColor: printed ? Colors.green : Colors.orange,
@@ -1525,27 +1589,8 @@ class OrderPrinter {
       throw Exception('Printer IP address is empty');
     }
 
-    final items = (orderData['items'] as List<dynamic>? ?? [])
-        .map((item) {
-          final itemMap = item as Map<String, dynamic>;
-          final name = itemMap['name'] ?? 'Item';
-          final size = itemMap['size']?.toString() ?? '';
-          final qty = itemMap['qty'] ?? 1;
-          final price = (itemMap['price'] as num?) ?? 0;
-          return '${size.isEmpty ? name : '$name ($size)'} x$qty  CHF ${(price * qty).toStringAsFixed(2)}';
-        })
-        .join('\n');
-    final receipt = [
-      'RESTAURANT KLEEFELD',
-      'Order ID: ${orderData['order_id']}',
-      'Customer: ${orderData['username'] ?? 'Guest'}',
-      '------------------------------',
-      items,
-      '------------------------------',
-      'TOTAL: CHF ${((orderData['total'] as num?) ?? 0).toStringAsFixed(2)}',
-      '',
-      'Thank You!',
-    ].join('\n');
+    // Same bill as the PDF, rendered as plain text for the till printer.
+    final receipt = BillData.fromOrder(orderData).toPlainText().join('\n');
 
     return await _printerChannel.invokeMethod<bool>('printReceipt', {
           'address': address,
