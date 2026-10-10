@@ -8,6 +8,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/checkout.dart';
 import 'package:restorant/shared/table_registry.dart';
+import 'package:restorant/user/daily_meal_section.dart';
+import 'package:restorant/user/opening_hours_card.dart';
 import 'package:restorant/user/table_booking_page.dart';
 import '../language.dart';
 import 'package:restorant/shared/platform_support.dart';
@@ -31,36 +33,41 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String _userRole = 'customer';
+  StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
     _fetchUserRole();
+    // A guest can browse this page and sign in afterwards through the popup,
+    // so the role has to be read again rather than staying whatever it was
+    // when the page was first built - otherwise a waiter who signs in here
+    // keeps a customer's screen until they reload.
+    _authSub = FirebaseAuth.instance.authStateChanges().listen(
+      (_) => _fetchUserRole(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchUserRole() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        // Document ID-க்கு பதிலாக 'uid' field-ஐ வைத்து தேடுகிறோம்
-        final query = await FirebaseFirestore.instance
-            .collection('user')
-            .where('uid', isEqualTo: user.uid)
-            .limit(1)
-            .get();
-
-        if (query.docs.isNotEmpty && mounted) {
-          final userData = query.docs.first.data();
-          setState(() {
-            _userRole =
-                (userData['role'] as String?)?.toLowerCase().trim() ??
-                'customer';
-          });
-        }
-      } catch (e) {
-        debugPrint('Error fetching role: $e');
+    if (user == null) {
+      if (mounted && _userRole != 'customer') {
+        setState(() => _userRole = 'customer');
       }
+      return;
     }
+
+    // The same lookup the rest of the app uses, so a waiter cannot end up
+    // with the manual entry on one screen and not on another.
+    final role = await fetchUserRole(user.uid);
+    if (!mounted || role == _userRole) return;
+    setState(() => _userRole = role);
   }
 
   Future<void> _handleDineIn(BuildContext context) async {
@@ -220,6 +227,10 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(height: 32),
+
+              // Every active daily meal, grouped by its scheduled day.
+              const DailyMealSection(),
+
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
@@ -252,6 +263,8 @@ class _HomePageState extends State<HomePage> {
                 onDineIn: () => _handleDineIn(context),
                 onTakeAway: () => _handleTakeAway(context),
               ),
+              const SizedBox(height: 32),
+              const OpeningHoursCard(),
               const SizedBox(height: 120),
             ],
           ),
@@ -355,9 +368,7 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            resolvedCleanly
-                ? Icons.check_circle
-                : Icons.warning_amber_rounded,
+            resolvedCleanly ? Icons.check_circle : Icons.warning_amber_rounded,
             color: color,
             size: 16,
           ),
@@ -555,24 +566,13 @@ class _TablePickerSheetState extends State<_TablePickerSheet>
   /// A chair QR code carries a link to resolve; anything else stays a plain
   /// table name, so QR codes printed before this feature still work.
   Future<void> _handleScannedCode(String raw) async {
-    final payload = TableRegistry.parseScanPayload(raw);
-
-    if (!payload.isResolvable) {
-      if (!mounted) return;
-      setState(() => _scannedValue = payload.plainText ?? raw);
-      return;
-    }
-
-    final seat = payload.hasChairNumber
-        ? await TableRegistry.resolveByChairNumber(payload.chairNo!)
-        : await TableRegistry.resolveByIds(payload.tableId!, payload.chairId);
+    final seat = await TableRegistry.resolveScan(raw);
     if (!mounted) return;
 
     setState(() {
-      // A sticker for a chair nobody has set up yet resolves to nothing; the
-      // raw code is shown so the guest can see something went wrong rather
-      // than silently sitting at no table.
-      _scannedValue = seat?.tableName ?? raw;
+      // Nothing matched: show what was actually scanned rather than pretending
+      // a seat was found.
+      _scannedValue = seat?.tableName ?? raw.trim();
       _scannedChair = seat?.chair == null ? null : seat!.chairNo;
     });
   }

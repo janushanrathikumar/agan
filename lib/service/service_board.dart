@@ -15,16 +15,13 @@ import 'package:flutter/material.dart';
 
 import 'package:restorant/admin/admin_order.dart' show OrderPrinter;
 import 'package:restorant/kitchen/station_orders.dart';
+import 'package:restorant/service/combine_bills_page.dart';
+import 'package:restorant/shared/bill_groups.dart';
 import 'package:restorant/shared/bill_receipt.dart';
+import 'package:restorant/shared/payment_prompt.dart';
 
 /// Order-level status written when service staff close an order out.
 const String kOrderCompleted = 'Completed';
-
-/// How the guest paid. Stored on the order as `payment_method`.
-class PaymentMethod {
-  static const cash = 'Cash';
-  static const card = 'Card';
-}
 
 /// Where one order stands across both preparation stations.
 class OrderServiceState {
@@ -113,21 +110,42 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
     String documentId,
     Map<String, dynamic> data,
   ) async {
-    final method = await _askPaymentMethod(data);
+    final method = await askPaymentMethod(
+      context,
+      title: 'Order #${data['order_id'] ?? ''}',
+      // The amount on the bill, so what is collected always matches what the
+      // guest is handed.
+      total: BillData.fromOrder(data).sum,
+    );
     if (method == null || !mounted) return;
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      await FirebaseFirestore.instance
+      final ref = FirebaseFirestore.instance
           .collection('orders')
-          .doc(documentId)
-          .set({
-            'status': kOrderCompleted,
-            'payment_method': method,
-            'completed_at': FieldValue.serverTimestamp(),
-            'completed_by': user?.uid ?? '',
-            'completed_by_name': user?.displayName ?? '',
-          }, SetOptions(merge: true));
+          .doc(documentId);
+      // Checked and written in one transaction: the order may have been paid
+      // on a combined bill from another till a moment ago, and must not be
+      // charged twice.
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final current = (await tx.get(ref)).data();
+        if (current == null) {
+          throw const BillConflictException('This order was deleted.');
+        }
+        if (!BillGroups.isOpen(current)) {
+          throw BillConflictException(
+            'Order #${current['order_id'] ?? documentId} has already been '
+            'paid.',
+          );
+        }
+        tx.set(ref, {
+          'status': kOrderCompleted,
+          'payment_method': method,
+          'completed_at': FieldValue.serverTimestamp(),
+          'completed_by': user?.uid ?? '',
+          'completed_by_name': user?.displayName ?? '',
+        }, SetOptions(merge: true));
+      });
 
       if (!mounted) return;
       // Show the finished order as one bill covering both stations.
@@ -136,6 +154,14 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
         'status': kOrderCompleted,
         'payment_method': method,
       });
+    } on BillConflictException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${e.message} Nothing was charged.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -147,133 +173,44 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
     }
   }
 
-  Future<String?> _askPaymentMethod(Map<String, dynamic> data) {
-    final orderId = (data['order_id'] ?? '').toString();
-    // The amount on the bill, so what is collected always matches what the
-    // guest is handed.
-    final billSum = BillData.fromOrder(data).sum;
-    String? selected;
-
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: kStCardBg,
-          title: Text(
-            'Order #$orderId',
-            style: const TextStyle(color: kStWhite),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Total to collect: CHF ${BillData.money(billSum)}',
-                style: const TextStyle(
-                  color: kStPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'How did the guest pay?',
-                style: TextStyle(color: kStMuted),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _paymentChoice(
-                      label: PaymentMethod.cash,
-                      icon: Icons.payments,
-                      selected: selected == PaymentMethod.cash,
-                      onTap: () =>
-                          setDialogState(() => selected = PaymentMethod.cash),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _paymentChoice(
-                      label: PaymentMethod.card,
-                      icon: Icons.credit_card,
-                      selected: selected == PaymentMethod.card,
-                      onTap: () =>
-                          setDialogState(() => selected = PaymentMethod.card),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: kStMuted)),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: kStWhite,
-              ),
-              // Stays disabled until a payment method is chosen.
-              onPressed: selected == null
-                  ? null
-                  : () => Navigator.pop(ctx, selected),
-              icon: const Icon(Icons.check, size: 18),
-              label: const Text('Complete'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _paymentChoice({
-    required String label,
-    required IconData icon,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          color: selected ? kStPrimary.withOpacity(0.18) : kStItemBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? kStPrimary : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: selected ? kStPrimary : kStMuted, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? kStPrimary : kStWhite,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ------------------------------------------------------------------- bill
 
-  /// The bill exactly as it prints: same header, same lines, same sum.
-  Future<void> _showBill(String documentId, Map<String, dynamic> data) {
-    final bill = BillData.fromOrder(
+  /// Prints the bill for an order.
+  ///
+  /// A completed order that nobody recorded a payment for - closed from the
+  /// admin edit page, say - asks Cash or Card once and remembers the answer,
+  /// so the next print goes straight to the printer. An order still being
+  /// prepared prints as an interim bill without asking, since the money is
+  /// taken by Complete.
+  Future<void> _printBill(
+    String documentId,
+    Map<String, dynamic> data,
+    OrderServiceState state,
+  ) async {
+    final order = await ensurePaymentRecorded(
+      context,
+      documentId: documentId,
+      order: data,
+      isCompleted: state.completed,
+    );
+    if (order == null || !mounted) return;
+
+    final bill = await BillData.forOrder(
+      order,
+      operatorName: FirebaseAuth.instance.currentUser?.displayName,
+    );
+    if (!mounted) return;
+    await OrderPrinter.printBill(context, bill);
+  }
+
+  /// The bill exactly as it prints: same header, same lines, same sum. An
+  /// order that was paid together with others shows the whole combined bill.
+  Future<void> _showBill(String documentId, Map<String, dynamic> data) async {
+    final bill = await BillData.forOrder(
       data,
       operatorName: FirebaseAuth.instance.currentUser?.displayName,
     );
+    if (!mounted) return;
     final payment = (data['payment_method'] ?? '').toString();
 
     return showDialog<void>(
@@ -297,26 +234,27 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
                 const SizedBox(height: 16),
 
                 Text(bill.title, style: _receiptStyle()),
+                if (bill.isCombined)
+                  Text('Bestellungen: ${bill.orderId}', style: _receiptStyle()),
                 const SizedBox(height: 12),
-                if (bill.tableLabel.isNotEmpty)
-                  Text(bill.tableLabel, style: _receiptStyle()),
-                const Divider(color: kStItemBg, height: 18),
 
-                ...bill.lines.map(
-                  (line) => Padding(
-                    padding: const EdgeInsets.only(left: 8, bottom: 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(line.label, style: _receiptStyle()),
-                        Text(
-                          '${BillData.money(line.amount)} CHF',
-                          style: _receiptStyle(),
-                        ),
-                      ],
+                if (!bill.hasTableSections) ...[
+                  if (bill.tableLabel.isNotEmpty)
+                    Text(bill.tableLabel, style: _receiptStyle()),
+                  const Divider(color: kStItemBg, height: 18),
+                  ..._billLines(bill.lines),
+                ] else
+                  for (final section in bill.sections) ...[
+                    if (section != bill.sections.first)
+                      const Divider(color: kStItemBg, height: 18),
+                    Text(section.label, style: _receiptStyle(bold: true)),
+                    const SizedBox(height: 6),
+                    ..._billLines(section.lines),
+                    Text(
+                      'Zwischensumme CHF: ${BillData.money(section.subtotal)}',
+                      style: _receiptStyle(),
                     ),
-                  ),
-                ),
+                  ],
 
                 const Divider(color: kStItemBg, height: 18),
                 Text(
@@ -375,6 +313,23 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
       ),
     );
   }
+
+  List<Widget> _billLines(List<BillLine> lines) => [
+    for (final line in lines)
+      Padding(
+        padding: const EdgeInsets.only(left: 8, bottom: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(line.label, style: _receiptStyle()),
+            Text(
+              '${BillData.money(line.amount)} CHF',
+              style: _receiptStyle(),
+            ),
+          ],
+        ),
+      ),
+  ];
 
   TextStyle _receiptStyle({double size = 13, bool bold = false}) {
     return TextStyle(
@@ -435,6 +390,20 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
               fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
+          ),
+          const Spacer(),
+          // One guest paying for the whole table, or for several tables.
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: kStWhite,
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CombineBillsPage()),
+            ),
+            icon: const Icon(Icons.call_merge, size: 18),
+            label: const Text('Combine bills'),
           ),
         ],
       ),
@@ -660,7 +629,7 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
               ],
               const Spacer(),
               TextButton.icon(
-                onPressed: () => _showBill(documentId, data),
+                onPressed: () => _printBill(documentId, data, state),
                 icon: const Icon(Icons.receipt_long, size: 18),
                 label: const Text('Bill'),
                 style: TextButton.styleFrom(foregroundColor: kStPrimary),

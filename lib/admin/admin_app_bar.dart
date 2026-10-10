@@ -11,6 +11,8 @@ import 'package:restorant/startup%20page/signin_page.dart';
 import 'package:restorant/kitchen/bar.dart';
 import 'package:restorant/kitchen/kitchen.dart';
 import 'AdminStaffManagementPage.dart';
+import 'manage_daily_meals.dart';
+import 'manage_opening_hours.dart';
 import 'manage_tables.dart';
 import 'manage_reservations.dart';
 
@@ -204,6 +206,22 @@ class _AdminAppBarState extends State<AdminAppBar> {
                         ),
                       );
                       break;
+                    case 'daily_meal':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageDailyMealsPage(),
+                        ),
+                      );
+                      break;
+                    case 'opening_hours':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageOpeningHoursPage(),
+                        ),
+                      );
+                      break;
                     case 'manage_tables':
                       Navigator.push(
                         context,
@@ -288,6 +306,20 @@ class _AdminAppBarState extends State<AdminAppBar> {
                     child: _buildMenuItemChild(
                       Icons.add_circle_outline_rounded,
                       'Menu Additional Options',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'daily_meal',
+                    child: _buildMenuItemChild(
+                      Icons.local_fire_department_rounded,
+                      'Daily Meal',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'opening_hours',
+                    child: _buildMenuItemChild(
+                      Icons.schedule_rounded,
+                      'Opening Hours',
                     ),
                   ),
                   PopupMenuItem<String>(

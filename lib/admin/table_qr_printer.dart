@@ -11,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'package:restorant/shared/table_registry.dart';
+import 'package:restorant/shared/receipt_fonts.dart';
 
 class TableQrPrinter {
   /// One labelled QR per chair of [table], laid out on A4.
@@ -59,7 +60,7 @@ class TableQrPrinter {
   }
 
   static Future<Uint8List> _buildSheet(TableDoc table, String? origin) async {
-    final pdf = pw.Document();
+    final pdf = pw.Document(theme: await ReceiptFonts.theme());
 
     pdf.addPage(
       pw.MultiPage(

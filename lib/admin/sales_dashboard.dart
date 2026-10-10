@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'package:restorant/shared/bill_receipt.dart';
+
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF1E1E1E);
 const kCardBg = Color(0xFF2A2A2A);
@@ -44,21 +46,50 @@ class SalesDashboard extends StatelessWidget {
         int totalOrdersCount = docs.length;
         int totalDeliveredCount = 0;
         int totalCanceledCount = 0;
-        double totalRevenue = 0.0;
+
+        // Revenue is money actually taken: an order counts once it carries a
+        // payment method, which is written when it is completed or paid on a
+        // combined bill. Orders still open, and cancelled ones, are not
+        // revenue.
+        double cashRevenue = 0.0;
+        double cardRevenue = 0.0;
+        double otherRevenue = 0.0;
 
         for (var doc in docs) {
           final data = doc.data() as Map<String, dynamic>;
           final status = (data['status'] ?? '').toString().toLowerCase();
-          final num orderTotal = data['total'] ?? 0;
 
           if (status == 'delivered') {
             totalDeliveredCount++;
           } else if (status == 'canceled') {
             totalCanceledCount++;
+            continue;
           }
 
-          totalRevenue += orderTotal.toDouble();
+          final method = (data['payment_method'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+          if (method.isEmpty) continue;
+
+          // What was charged. Older orders keep the total they were billed at;
+          // anything without one falls back to the sum of its items, which is
+          // what the bill would print.
+          final num stored = data['total'] ?? 0;
+          final amount = stored > 0
+              ? stored.toDouble()
+              : BillData.fromOrder(data).sum;
+
+          if (method == 'cash') {
+            cashRevenue += amount;
+          } else if (method == 'card') {
+            cardRevenue += amount;
+          } else {
+            otherRevenue += amount;
+          }
         }
+
+        final totalRevenue = cashRevenue + cardRevenue + otherRevenue;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -120,9 +151,25 @@ class SalesDashboard extends StatelessWidget {
                       _buildStatCard(
                         title: "Total Revenue",
                         value: "CHF ${totalRevenue.toStringAsFixed(2)}",
-                        trend: "Total Earnings",
+                        trend: "Cash + Card",
                         icon: Icons.account_balance_wallet_rounded,
                         iconColor: kPrimary,
+                        isPositive: true,
+                      ),
+                      _buildStatCard(
+                        title: "Cash",
+                        value: "CHF ${cashRevenue.toStringAsFixed(2)}",
+                        trend: "Paid in cash",
+                        icon: Icons.payments_rounded,
+                        iconColor: kGreen,
+                        isPositive: true,
+                      ),
+                      _buildStatCard(
+                        title: "Card",
+                        value: "CHF ${cardRevenue.toStringAsFixed(2)}",
+                        trend: "Paid by card",
+                        icon: Icons.credit_card_rounded,
+                        iconColor: Colors.lightBlueAccent,
                         isPositive: true,
                       ),
                     ],
@@ -141,9 +188,10 @@ class SalesDashboard extends StatelessWidget {
                       Expanded(
                         flex: isMobile ? 0 : 2,
                         child: _buildChartPlaceholder(
-                          "Daily Revenue",
+                          "Revenue collected",
                           "CHF ${totalRevenue.toStringAsFixed(2)}",
-                          "Updated Live",
+                          "Cash CHF ${cashRevenue.toStringAsFixed(2)} · "
+                              "Card CHF ${cardRevenue.toStringAsFixed(2)}",
                         ),
                       ),
                       if (!isMobile) const SizedBox(width: 16),

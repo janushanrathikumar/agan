@@ -1,4 +1,6 @@
 // lib/user/app_bar.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +12,7 @@ import 'package:restorant/user/OrderDetails.dart';
 import 'package:restorant/user/AccountPage.dart';
 import 'package:restorant/user/scan_landing_page.dart';
 import 'package:restorant/service/service_board.dart';
+import 'package:restorant/shared/platform_support.dart';
 import 'package:restorant/shared/table_registry.dart';
 import 'package:restorant/main.dart' show AppRoutes;
 
@@ -39,16 +42,37 @@ class _AppShellState extends State<AppShell> {
   /// Waiters and cashiers get an extra Service tab; customers do not.
   String _userRole = 'customer';
 
+  StreamSubscription<User?>? _authSub;
+
   @override
   void initState() {
     super.initState();
     _consumePendingScan();
     _loadRole();
+    // Signing in can happen long after this shell was built - a guest browses
+    // the menu and the popup appears on the first action - so the role is read
+    // again on every auth change, which is what makes the Service tab appear
+    // without a reload.
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+      _consumePendingScan();
+      _loadRole();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadRole() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted && _userRole != 'customer') {
+        setState(() => _userRole = 'customer');
+      }
+      return;
+    }
     final role = await fetchUserRole(user.uid);
     if (!mounted || role == _userRole) return;
     setState(() => _userRole = role);
@@ -105,7 +129,8 @@ class _AppShellState extends State<AppShell> {
       const MyOrdersPage(),
       requiresLogin: true,
     ),
-    if (isStaffRole(_userRole))
+    // Staff tools are not part of the guest app published to the stores.
+    if (!kCustomerOnlyBuild && isStaffRole(_userRole))
       _TabDef(
         AppLanguage.getText('Service'),
         Icons.room_service_rounded,

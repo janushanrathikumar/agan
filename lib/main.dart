@@ -22,6 +22,7 @@ import 'firebase_options.dart';
 import 'secondary_firebase_options.dart';
 import 'package:restorant/startup page/forgot_password_page.dart';
 import 'package:restorant/shared/startup_views.dart';
+import 'package:restorant/shared/platform_support.dart';
 import 'package:restorant/shared/table_registry.dart' show fetchUserRole;
 
 // 🟢 Central place for every named route string
@@ -106,12 +107,17 @@ class MyApp extends StatelessWidget {
     AppRoutes.signIn: (_) => const SignInPage(),
     AppRoutes.signUp: (_) => const SignUpPage(),
     AppRoutes.user: (_) => const AppShell(),
-    AppRoutes.admin: (_) =>
-        const RouteGuard(requiredRole: 'admin', child: AdminHome()),
     AppRoutes.privacy: (_) => const PrivacyPolicyPage(),
     AppRoutes.forgotPassword: (_) => const ForgotPasswordPage(),
-    AppRoutes.kitchen: (_) => const KitchenPage(),
-    AppRoutes.bar: (_) => const BarPage(),
+
+    // Staff tools live on the website; the store build does not carry them,
+    // so even a pasted link cannot open one.
+    if (!kCustomerOnlyBuild) ...{
+      AppRoutes.admin: (_) =>
+          const RouteGuard(requiredRole: 'admin', child: AdminHome()),
+      AppRoutes.kitchen: (_) => const KitchenPage(),
+      AppRoutes.bar: (_) => const BarPage(),
+    },
   };
 
   /// Resolves a route name that may carry a query string.
@@ -197,6 +203,9 @@ class MyApp extends StatelessWidget {
 /// Where each role belongs after signing in. Kitchen and Bar staff land
 /// straight on their station board.
 String homeRouteForRole(String role) {
+  // In the guest app everyone lands on the customer screens, staff included.
+  if (kCustomerOnlyBuild) return AppRoutes.user;
+
   switch (role.toLowerCase().trim()) {
     case 'admin':
       return AppRoutes.admin;

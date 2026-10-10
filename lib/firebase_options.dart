@@ -76,11 +76,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDCFDx1LytYswBi4GzQaLH0E67SY2xa8yE',
-    appId: '1:382479866723:ios:2b37824b2ef11a5ca65156',
+    appId: '1:382479866723:ios:54c1688b4a324a4ba65156',
     messagingSenderId: '382479866723',
     projectId: 'agan-ee7ee',
     storageBucket: 'agan-ee7ee.firebasestorage.app',
-    iosBundleId: 'com.example.restorant',
+    iosBundleId: 'ch.restaurantkleefeld.app',
   );
 
   

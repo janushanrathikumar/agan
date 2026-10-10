@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:restorant/shared/receipt_fonts.dart';
 import 'package:restorant/shared/till_printer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -262,7 +263,7 @@ class StationTicketPrinter {
     OrderStation station,
     List<Map<String, dynamic>> items,
   ) async {
-    final pdf = pw.Document();
+    final pdf = pw.Document(theme: await ReceiptFonts.theme());
 
     final orderId = (orderData['order_id'] ?? '').toString();
     final deliveryMethod = (orderData['delivery_method'] ?? '').toString();
