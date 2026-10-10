@@ -249,6 +249,33 @@ class TableRegistry {
     return null;
   }
 
+  /// Everything a scanner can read, resolved to a seat.
+  ///
+  /// Accepts both QR formats this app prints - `?t=…&c=…` and `?n=…` - and a
+  /// code holding nothing but the number printed on the chair, which is what
+  /// plain numeric stickers carry. That last case goes through the very same
+  /// lookup as typing the number by hand, so a scanned 157 and a typed 157
+  /// can never disagree.
+  ///
+  /// Returns null when nothing in the restaurant matches, leaving the caller
+  /// to fall back to the raw text.
+  static Future<SeatSelection?> resolveScan(String raw) async {
+    final payload = parseScanPayload(raw);
+
+    if (payload.hasChairNumber) {
+      return resolveByChairNumber(payload.chairNo!);
+    }
+    if (payload.hasIds) {
+      return resolveByIds(payload.tableId!, payload.chairId);
+    }
+
+    final lookup = await resolveChairText(payload.plainText ?? raw);
+    if (lookup.resolved && !lookup.spansMultipleTables) {
+      return SeatSelection(table: lookup.table!, chair: lookup.chair);
+    }
+    return null;
+  }
+
   /// Resolves whatever a staff member typed into a chair field.
   ///
   /// The chair fields already invite several seats at once ("e.g. 1, 2, 3"), so

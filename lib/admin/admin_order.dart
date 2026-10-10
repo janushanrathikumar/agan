@@ -1,6 +1,8 @@
 // lib/admin_order.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,11 +10,16 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:restorant/shared/till_printer.dart';
+import 'package:restorant/service/combine_bills_page.dart';
+import 'package:restorant/shared/bill_groups.dart';
+import 'package:restorant/shared/payment_prompt.dart';
+import 'package:restorant/service/service_board.dart' show kOrderCompleted;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:restorant/kitchen/bar.dart';
 import 'package:restorant/kitchen/kitchen.dart';
 import 'package:restorant/kitchen/station_orders.dart';
 import 'package:restorant/shared/bill_receipt.dart';
+import 'package:restorant/shared/receipt_fonts.dart';
 import 'edit_order_page.dart';
 
 // --- Palette (Your Original Colors) ---
@@ -338,6 +345,15 @@ class _AdminOrdersListPageState extends State<AdminOrdersListPage> {
             label: 'Bar',
             color: OrderStation.bar.accent,
             page: const BarPage(),
+          ),
+          const SizedBox(width: 8),
+          // One guest paying for a whole table, or for several tables.
+          _buildStationButton(
+            context,
+            icon: Icons.call_merge,
+            label: 'Combine bills',
+            color: Colors.green,
+            page: const CombineBillsPage(),
           ),
           const SizedBox(width: 16),
 
@@ -849,11 +865,12 @@ class AdminOrderDetailsPage extends StatelessWidget {
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.print, color: kPrimary),
-                  tooltip: 'Manual Print PDF',
-                  onPressed: () => OrderPrinter.generateAndPrintPdf(
+                  tooltip: 'Print bill',
+                  onPressed: () => _printBill(
                     context,
+                    documentId,
                     orderData,
-                    false,
+                    status,
                   ),
                 ),
               ),
@@ -864,6 +881,7 @@ class AdminOrderDetailsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _buildBillBanner(context, orderData, rawTableNo),
                 _buildOrderSummaryCard(
                   orderId,
                   status,
@@ -925,6 +943,158 @@ class AdminOrderDetailsPage extends StatelessWidget {
   }
 
   /// Deleting an order is permanent, so it names what is about to go.
+  /// Prints the bill, asking how a completed order was paid when nobody has
+  /// recorded that yet - an order closed from the edit page, for instance.
+  /// Once the answer is stored, printing goes straight to the printer.
+  Future<void> _printBill(
+    BuildContext context,
+    String documentId,
+    Map<String, dynamic> orderData,
+    String status,
+  ) async {
+    final order = await ensurePaymentRecorded(
+      context,
+      documentId: documentId,
+      order: orderData,
+      isCompleted: status == kOrderCompleted,
+    );
+    if (order == null || !context.mounted) return;
+    await OrderPrinter.generateAndPrintPdf(context, order, false);
+  }
+
+  /// Where this order stands with respect to a combined bill: paid together
+  /// with others (with a way to undo it), or still open and combinable with
+  /// the rest of its table.
+  Widget _buildBillBanner(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+    String tableNo,
+  ) {
+    final billId = (orderData['bill_id'] ?? '').toString();
+
+    if (billId.isNotEmpty) {
+      return _banner(
+        icon: Icons.call_merge,
+        color: Colors.green,
+        text:
+            'Paid together with other orders on one bill '
+            '(${orderData['payment_method'] ?? ''}). Printing prints the '
+            'whole bill.',
+        action: TextButton.icon(
+          onPressed: () => _confirmUndoBill(context, billId),
+          icon: const Icon(Icons.call_split, color: Colors.redAccent, size: 18),
+          label: const Text(
+            'Undo combined bill',
+            style: TextStyle(color: Colors.redAccent),
+          ),
+        ),
+      );
+    }
+
+    final hasTable = tableNo.trim().isNotEmpty && tableNo != 'N/A';
+    if (BillGroups.isOpen(orderData) && hasTable) {
+      return _banner(
+        icon: Icons.table_restaurant,
+        color: kPrimary,
+        text: 'Not paid yet. Someone paying for the whole table?',
+        action: TextButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CombineBillsPage(initialTable: tableNo),
+            ),
+          ),
+          icon: const Icon(Icons.call_merge, color: kPrimary, size: 18),
+          label: Text(
+            'Combine table $tableNo',
+            style: const TextStyle(color: kPrimary),
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _banner({
+    required IconData icon,
+    required Color color,
+    required String text,
+    required Widget action,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 6,
+        children: [
+          Icon(icon, color: color, size: 20),
+          Text(text, style: const TextStyle(color: kWhite)),
+          action,
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmUndoBill(BuildContext context, String billId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kCardBg,
+        title: const Text(
+          'Undo combined bill?',
+          style: TextStyle(color: kWhite),
+        ),
+        content: const Text(
+          'Every order on this bill goes back to unpaid, with the status it '
+          'had before. The recorded payment is removed, so the orders can be '
+          'paid again - together or one by one.',
+          style: TextStyle(color: kMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep', style: TextStyle(color: kWhite)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Undo',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    try {
+      final released = await BillGroups.undo(billId);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Combined bill undone: $released orders are unpaid.'),
+          backgroundColor: kPrimary,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not undo the bill: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   Future<void> _confirmDelete(
     BuildContext context,
     Map<String, dynamic> orderData,
@@ -1414,113 +1584,19 @@ class OrderPrinter {
     'restaurantkleefeld/printer',
   );
 
-  /// Builds the guest bill in the same layout as the restaurant's till
-  /// receipt: centred header, one item per two lines, and a plain sum with no
-  /// service charge added.
+  /// Prints the bill for [orderData].
+  ///
+  /// An order that was paid together with others prints the whole combined
+  /// bill, whichever of its orders the button was pressed on.
   static Future<void> generateAndPrintPdf(
     BuildContext context,
     Map<String, dynamic> orderData,
     bool isAutoPrint, {
     String? operatorName,
   }) async {
-    final bill = BillData.fromOrder(orderData, operatorName: operatorName);
-    final pdf = pw.Document();
-
-    pw.Widget centered(String text, {double size = 11, bool bold = false}) {
-      return pw.Center(
-        child: pw.Text(
-          text,
-          textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(
-            fontSize: size,
-            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          ),
-        ),
-      );
-    }
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(12),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              centered(RestaurantInfo.name, size: 13, bold: true),
-              centered(RestaurantInfo.street, bold: true),
-              centered(RestaurantInfo.city, bold: true),
-              centered(RestaurantInfo.phone, bold: true),
-              centered(RestaurantInfo.email, bold: true),
-              centered(RestaurantInfo.vatId, bold: true),
-              pw.SizedBox(height: 14),
-
-              pw.Text(bill.title, style: const pw.TextStyle(fontSize: 11)),
-              pw.SizedBox(height: 12),
-              if (bill.tableLabel.isNotEmpty)
-                pw.Text(
-                  bill.tableLabel,
-                  style: const pw.TextStyle(fontSize: 11),
-                ),
-              pw.SizedBox(height: 4),
-              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
-
-              // Each article prints as its name, then its amount underneath.
-              ...bill.lines.map(
-                (line) => pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 4, left: 8),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        line.label,
-                        style: const pw.TextStyle(fontSize: 11),
-                      ),
-                      pw.Text(
-                        '${BillData.money(line.amount)} CHF',
-                        style: const pw.TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
-              pw.Text(
-                'Summe CHF:     ${bill.sumText}',
-                style: pw.TextStyle(
-                  fontSize: 12,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 2),
-              pw.Divider(thickness: 1.2, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 10),
-
-              pw.Text(
-                'Datum ${bill.dateText}',
-                style: const pw.TextStyle(fontSize: 11),
-              ),
-              pw.Text(
-                'Bediener: ${bill.operatorName}',
-                style: const pw.TextStyle(fontSize: 11),
-              ),
-              pw.Text(
-                'Kasse: ${RestaurantInfo.till}',
-                style: const pw.TextStyle(fontSize: 11),
-              ),
-              pw.SizedBox(height: 16),
-
-              ...RestaurantInfo.thankYou.map((l) => centered(l, bold: true)),
-            ],
-          );
-        },
-      ),
-    );
-
-    final pdfBytes = await pdf.save();
-
     if (isAutoPrint && !kIsWeb) {
+      // Auto-print only ever fires for a brand-new order, which cannot be on a
+      // combined bill yet.
       try {
         final printed = await _printToNetworkPrinter(orderData);
         if (!printed) {
@@ -1542,39 +1618,170 @@ class OrderPrinter {
           ),
         );
       }
-    } else {
-      try {
-        // On the desktop build this goes straight to the till printer; in a
-        // browser it can only open the print dialog.
-        final printed = await TillPrinter.printPdf(
-          pdfBytes,
-          jobName: 'Receipt_${orderData['order_id']}',
-        );
-
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              printed
-                  ? TillPrinter.hasPrinter
-                        ? 'Printed Order #${orderData['order_id']} on '
-                              '${TillPrinter.printerName}'
-                        : 'Print job sent for Order #${orderData['order_id']}'
-                  : 'Printing was canceled for Order #${orderData['order_id']}',
-            ),
-            backgroundColor: printed ? Colors.green : Colors.orange,
-          ),
-        );
-      } catch (error) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not print order: $error'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      return;
     }
+
+    try {
+      final bill = await BillData.forOrder(
+        orderData,
+        operatorName: operatorName,
+      );
+      if (!context.mounted) return;
+      await printBill(context, bill);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not print order: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Sends [bill] to the till printer - straight to it on the desktop build,
+  /// through the print dialog in a browser.
+  static Future<void> printBill(BuildContext context, BillData bill) async {
+    final what = bill.isCombined
+        ? 'bill for ${bill.orderIds.length} orders'
+        : 'Order #${bill.orderId}';
+    try {
+      final pdfBytes = await buildReceiptPdf(bill);
+      final printed = await TillPrinter.printPdf(
+        pdfBytes,
+        jobName: 'Receipt_${bill.orderIds.join('_')}',
+      );
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            printed
+                ? TillPrinter.hasPrinter
+                      ? 'Printed $what on ${TillPrinter.printerName}'
+                      : 'Print job sent for $what'
+                : 'Printing was canceled for $what',
+          ),
+          backgroundColor: printed ? Colors.green : Colors.orange,
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not print $what: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// The receipt in the same layout as the restaurant's till receipt: centred
+  /// header, one item per two lines, and a plain sum with no service charge.
+  /// A bill spanning several tables gets a heading and subtotal per table.
+  static Future<Uint8List> buildReceiptPdf(BillData bill) async {
+    final pdf = pw.Document(theme: await ReceiptFonts.theme());
+    const text = pw.TextStyle(fontSize: 11);
+    final bold = pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold);
+    // A fresh divider for every use: a pdf widget is laid out once, so the
+    // same instance placed twice only renders in one of the two spots.
+    pw.Widget dashed() =>
+        pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed);
+
+    pw.Widget centered(String value, {double size = 11, bool isBold = false}) {
+      return pw.Center(
+        child: pw.Text(
+          value,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+            fontSize: size,
+            fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          ),
+        ),
+      );
+    }
+
+    // Each article prints as its name, then its amount underneath.
+    List<pw.Widget> lines(List<BillLine> items) => [
+      for (final line in items)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 4, left: 8),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(line.label, style: text),
+              pw.Text('${BillData.money(line.amount)} CHF', style: text),
+            ],
+          ),
+        ),
+    ];
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(12),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              centered(RestaurantInfo.name, size: 13, isBold: true),
+              centered(RestaurantInfo.street, isBold: true),
+              centered(RestaurantInfo.city, isBold: true),
+              centered(RestaurantInfo.phone, isBold: true),
+              centered(RestaurantInfo.email, isBold: true),
+              centered(RestaurantInfo.vatId, isBold: true),
+              pw.SizedBox(height: 14),
+
+              pw.Text(bill.title, style: text),
+              if (bill.isCombined)
+                pw.Text('Bestellungen: ${bill.orderId}', style: text),
+              pw.SizedBox(height: 12),
+
+              if (!bill.hasTableSections) ...[
+                if (bill.tableLabel.isNotEmpty)
+                  pw.Text(bill.tableLabel, style: text),
+                pw.SizedBox(height: 4),
+                dashed(),
+                ...lines(bill.lines),
+              ] else
+                for (final section in bill.sections) ...[
+                  // A rule between tables; the one before the sum closes the
+                  // last of them.
+                  if (section != bill.sections.first) dashed(),
+                  pw.Text(section.label, style: bold),
+                  pw.SizedBox(height: 4),
+                  ...lines(section.lines),
+                  pw.Text(
+                    'Zwischensumme CHF: ${BillData.money(section.subtotal)}',
+                    style: text,
+                  ),
+                ],
+
+              dashed(),
+              pw.Text(
+                'Summe CHF:     ${bill.sumText}',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Divider(thickness: 1.2, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 10),
+
+              pw.Text('Datum ${bill.dateText}', style: text),
+              pw.Text('Bediener: ${bill.operatorName}', style: text),
+              pw.Text('Kasse: ${RestaurantInfo.till}', style: text),
+              pw.SizedBox(height: 16),
+
+              ...RestaurantInfo.thankYou.map((l) => centered(l, isBold: true)),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
   }
 
   static Future<bool> _printToNetworkPrinter(

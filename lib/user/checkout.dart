@@ -1089,21 +1089,11 @@ class _TablePickerSheetState extends State<TablePickerSheet>
   /// Chair QR codes carry a link; anything else is still treated as a plain
   /// table name, exactly as before, so older printed codes keep working.
   Future<void> _handleScannedCode(String raw) async {
-    final payload = TableRegistry.parseScanPayload(raw);
-
-    if (!payload.isResolvable) {
-      if (!mounted) return;
-      setState(() => _scannedTable = payload.plainText ?? raw);
-      return;
-    }
-
-    final seat = payload.hasChairNumber
-        ? await TableRegistry.resolveByChairNumber(payload.chairNo!)
-        : await TableRegistry.resolveByIds(payload.tableId!, payload.chairId);
+    final seat = await TableRegistry.resolveScan(raw);
     if (!mounted) return;
 
     setState(() {
-      _scannedTable = seat?.tableName ?? raw;
+      _scannedTable = seat?.tableName ?? raw.trim();
       // Prefilled so the whole scan is one confirm tap.
       if (seat?.chair != null) _chairCtrl.text = seat!.chairNo;
     });

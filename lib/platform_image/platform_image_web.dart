@@ -55,6 +55,8 @@ Widget buildUniversalImage({
         ..style.width = '100%'
         ..style.height = '100%'
         ..style.objectFit = objectFit
+        // Let Flutter handle taps on cards that contain this image.
+        ..style.pointerEvents = 'none'
         ..style.border = 'none';
     });
   }
