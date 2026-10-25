@@ -98,6 +98,8 @@ class AppLanguage {
 
       // Menu Page
       'Drinks': 'Getränke',
+      'Drink': 'Getränk',
+      'Food': 'Essen',
       'Foods': 'Speisen',
       'Combos': 'Kombis',
       'All': 'Alle',
@@ -384,6 +386,8 @@ class AppLanguage {
 
       // Menu Page
       'Drinks': 'Drinks',
+      'Drink': 'Drink',
+      'Food': 'Food',
       'Foods': 'Food',
       'Combos': 'Combos',
       'All': 'All',

@@ -8,6 +8,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:restorant/shared/platform_support.dart';
 import 'package:restorant/shared/table_registry.dart';
 import 'payment_page.dart';
+import '../language.dart';
+import '../shared/menu_offer.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -460,6 +462,19 @@ class _CartItemTile extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+
+                  if (comboLines(m).isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '🍱 ${AppLanguage.getText('This Combo Includes')}:',
+                      style: const TextStyle(
+                        color: kPrimary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    ...comboLines(m).map((line) => _Chip('  • $line')),
+                  ],
 
                   // 🟢 SHOWING SIZE
                   if (size != null && size.isNotEmpty && size != 'null')

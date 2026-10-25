@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:restorant/admin/add_food_menu.dart';
 import 'edit_menu_item.dart';
+import 'add_combo.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:restorant/platform_image/platform_image.dart';
@@ -469,10 +470,16 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                                       context,
                                                       MaterialPageRoute(
                                                         builder: (_) =>
-                                                            EditMenuItemPage(
-                                                              docId: doc.id,
-                                                              itemData: data,
-                                                            ),
+                                                            data['itemType'] ==
+                                                                'combo'
+                                                            ? AddComboPage(
+                                                                docId: doc.id,
+                                                                itemData: data,
+                                                              )
+                                                            : EditMenuItemPage(
+                                                                docId: doc.id,
+                                                                itemData: data,
+                                                              ),
                                                       ),
                                                     );
                                                   },

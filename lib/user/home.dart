@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +9,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:restorant/user/menu.dart';
 import 'package:restorant/user/checkout.dart';
 import 'package:restorant/shared/table_registry.dart';
+import 'package:restorant/shared/menu_offer.dart';
+import 'package:restorant/shared/combo_includes.dart';
+import 'package:restorant/platform_image/platform_image.dart';
 import 'package:restorant/user/daily_meal_section.dart';
 import 'package:restorant/user/opening_hours_card.dart';
 import 'package:restorant/user/table_booking_page.dart';
@@ -874,10 +878,39 @@ class _PromoCarouselState extends State<_PromoCarousel> {
   final PageController _ctrl = PageController(viewportFraction: 0.90);
   int _current = 0;
 
+  // Created once: a new `.snapshots()` on every build re-subscribed each time
+  // the page changed, so the carousel fell back to the loading spinner and
+  // lost its place while the guest was swiping or tapping.
+  final Stream<QuerySnapshot> _menuStream = FirebaseFirestore.instance
+      .collection('menu_items')
+      .snapshots();
+  String? _deliveryUid;
+  Stream<DocumentSnapshot>? _deliveryStream;
+
+  Stream<DocumentSnapshot> _deliveryFor(String uid) {
+    if (_deliveryUid != uid || _deliveryStream == null) {
+      _deliveryUid = uid;
+      _deliveryStream = FirebaseFirestore.instance
+          .collection('food_delivery')
+          .doc(uid)
+          .snapshots();
+    }
+    return _deliveryStream!;
+  }
+
   @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _goTo(int index) {
+    if (!_ctrl.hasClients) return;
+    _ctrl.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<bool> _hasSelectedMethod(BuildContext context) async {
@@ -943,10 +976,7 @@ class _PromoCarouselState extends State<_PromoCarousel> {
     if (user == null) return _buildPromoStream(context, null);
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('food_delivery')
-          .doc(user.uid)
-          .snapshots(),
+      stream: _deliveryFor(user.uid),
       builder: (context, deliverySnap) {
         String? tableNo;
         if (deliverySnap.hasData && deliverySnap.data!.exists) {
@@ -962,12 +992,10 @@ class _PromoCarouselState extends State<_PromoCarousel> {
 
   Widget _buildPromoStream(BuildContext context, String? tableNo) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('menu_items')
-          .where('isPromoActive', isEqualTo: true)
-          .snapshots(),
+      stream: _menuStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             height: 280,
             child: Center(child: CircularProgressIndicator(color: kPrimary)),
@@ -977,7 +1005,15 @@ class _PromoCarouselState extends State<_PromoCarousel> {
           return _EmptyPromo();
         }
 
-        var promoDocs = snapshot.data!.docs;
+        var promoDocs = snapshot.data!.docs.where((d) {
+          final data = (d.data() as Map<String, dynamic>?) ?? {};
+          // Combos always show here, with or without an offer; other menus
+          // only when they carry one.
+          return data['status'] != 'off' &&
+              (data['itemType'] == 'combo' ||
+                  menuOfferLabel(data) != null ||
+                  data['isPromoActive'] == true);
+        }).toList();
         if (tableNo == 'Take-Away') {
           promoDocs = promoDocs.where((d) {
             final data = (d.data() as Map<String, dynamic>?) ?? {};
@@ -986,220 +1022,662 @@ class _PromoCarouselState extends State<_PromoCarousel> {
         }
         if (promoDocs.isEmpty) return _EmptyPromo();
 
-        return Column(
-          children: [
-            SizedBox(
-              height: 290,
-              child: PageView.builder(
-                controller: _ctrl,
-                itemCount: promoDocs.length,
-                onPageChanged: (i) => setState(() => _current = i),
-                itemBuilder: (context, index) {
-                  final data = promoDocs[index].data() as Map<String, dynamic>;
-                  final name = data['name'] ?? 'Special Offer';
-                  final imageUrl = (data['imageUrl'] ?? '') as String;
-                  final itemType = (data['itemType'] ?? '')
-                      .toString()
-                      .toLowerCase();
-                  final bool isCombo = itemType == 'combo';
-                  final num originalPrice = data['price'] ?? 0;
-                  final num offerPrice = data['offerPrice'] ?? originalPrice;
-                  final isActive = _current == index;
+        bool isCombo(QueryDocumentSnapshot d) =>
+            ((d.data() as Map<String, dynamic>?)?['itemType'] ?? '')
+                .toString()
+                .toLowerCase() ==
+            'combo';
+        final comboDocs = promoDocs.where(isCombo).toList();
+        final offerDocs = promoDocs.where((d) => !isCombo(d)).toList();
+        // Combo cards show the photos of the menus inside them, read from the
+        // live menu documents so a changed photo shows without re-saving.
+        final liveMenus = {
+          for (final d in snapshot.data!.docs)
+            d.id: (d.data() as Map<String, dynamic>?) ?? <String, dynamic>{},
+        };
 
-                  return GestureDetector(
-                    onTap: () async {
-                      if (!await requireLogin(
-                        context,
-                        reason: AppLanguage.getText('login_to_order'),
-                      )) {
-                        return;
-                      }
-                      if (!context.mounted) return;
-                      _openItemSheet(context, data);
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 350),
-                      curve: Curves.easeOutCubic,
-                      margin: EdgeInsets.only(
-                        left: 8,
-                        right: 8,
-                        top: isActive ? 0 : 16,
-                        bottom: isActive ? 10 : 26,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: isActive
-                            ? [
-                                BoxShadow(
-                                  color: kPrimary.withOpacity(0.35),
-                                  blurRadius: 25,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ]
-                            : [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 5),
-                                ),
-                              ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            imageUrl.isNotEmpty
-                                ? Image.network(imageUrl, fit: BoxFit.cover)
-                                : Container(
-                                    color: kCardBg,
-                                    child: const Icon(
-                                      Icons.fastfood,
-                                      color: kMuted,
-                                      size: 80,
-                                    ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (offerDocs.isNotEmpty) _buildCarousel(context, offerDocs),
+            if (offerDocs.isNotEmpty && comboDocs.isNotEmpty)
+              const SizedBox(height: 20),
+            for (final d in comboDocs)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                child: _ComboOfferCard(
+                  data: d.data() as Map<String, dynamic>,
+                  liveMenus: liveMenus,
+                  onTap: () =>
+                      _onPromoTap(context, d.data() as Map<String, dynamic>),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _onPromoTap(
+    BuildContext context,
+    Map<String, dynamic> data,
+  ) async {
+    if (!await requireLogin(
+      context,
+      reason: AppLanguage.getText('login_to_order'),
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+    _openItemSheet(context, data);
+  }
+
+  Widget _buildCarousel(
+    BuildContext context,
+    List<QueryDocumentSnapshot> promoDocs,
+  ) {
+    final count = promoDocs.length;
+    final current = _current.clamp(0, count - 1);
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 290,
+          child: Stack(
+            children: [
+              ScrollConfiguration(
+                // Mouse and trackpad drags are off by default on web and
+                // desktop, which left guests stuck on the first offer.
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+                child: PageView.builder(
+                  controller: _ctrl,
+                  itemCount: count,
+                  onPageChanged: (i) => setState(() => _current = i),
+                  itemBuilder: (context, index) {
+                    final data =
+                        promoDocs[index].data() as Map<String, dynamic>;
+                    final name = data['name'] ?? 'Special Offer';
+                    final imageUrl = (data['imageUrl'] ?? '') as String;
+                    final itemType = (data['itemType'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final bool isCombo = itemType == 'combo';
+                    final double originalPrice = menuOriginalPrice(data);
+                    final double offerPrice = menuOfferPrice(data);
+                    final offerLabel = menuOfferLabel(data);
+                    final isActive = _current == index;
+
+                    return GestureDetector(
+                      onTap: () async {
+                        if (!isActive) {
+                          _goTo(index);
+                          return;
+                        }
+                        await _onPromoTap(context, data);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOutCubic,
+                        margin: EdgeInsets.only(
+                          left: 8,
+                          right: 8,
+                          top: isActive ? 0 : 16,
+                          bottom: isActive ? 10 : 26,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: isActive
+                              ? [
+                                  BoxShadow(
+                                    color: kPrimary.withOpacity(0.35),
+                                    blurRadius: 25,
+                                    offset: const Offset(0, 10),
                                   ),
-                            Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  stops: const [0.0, 0.4, 0.8, 1.0],
-                                  colors: [
-                                    Colors.black.withOpacity(0.2),
-                                    Colors.transparent,
-                                    Colors.black.withOpacity(0.8),
-                                    Colors.black.withOpacity(0.95),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 16,
-                              left: 16,
-                              child: Row(
-                                children: [
-                                  if (isCombo)
-                                    _Badge(
-                                      label: AppLanguage.getText('Combos'),
-                                      color: const Color(0xFFFF8C00),
-                                      icon: Icons.fastfood_rounded,
-                                    ),
+                                ]
+                              : [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 5),
+                                  ),
                                 ],
-                              ),
-                            ),
-                            Positioned(
-                              top: 16,
-                              right: 16,
-                              child: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: kPrimary,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: kPrimary.withOpacity(0.5),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 26,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 20,
-                              left: 20,
-                              right: 20,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    name,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w900,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black,
-                                          blurRadius: 8,
-                                        ),
-                                      ],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        'CHF ${offerPrice.toStringAsFixed(2)}',
-                                        style: const TextStyle(
-                                          color: kPrimary,
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w900,
-                                        ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              imageUrl.isNotEmpty
+                                  ? Image.network(imageUrl, fit: BoxFit.cover)
+                                  : Container(
+                                      color: kCardBg,
+                                      child: const Icon(
+                                        Icons.fastfood,
+                                        color: kMuted,
+                                        size: 80,
                                       ),
-                                      if (originalPrice > offerPrice) ...[
-                                        const SizedBox(width: 8),
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 2,
-                                          ),
-                                          child: Text(
-                                            'CHF ${originalPrice.toStringAsFixed(2)}',
-                                            style: TextStyle(
-                                              color: kWhite.withOpacity(0.7),
-                                              fontSize: 14,
-                                              decoration:
-                                                  TextDecoration.lineThrough,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                    ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    stops: const [0.0, 0.4, 0.8, 1.0],
+                                    colors: [
+                                      Colors.black.withOpacity(0.2),
+                                      Colors.transparent,
+                                      Colors.black.withOpacity(0.8),
+                                      Colors.black.withOpacity(0.95),
                                     ],
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ],
+                              Positioned(
+                                top: 16,
+                                left: 16,
+                                child: Row(
+                                  children: [
+                                    if (isCombo)
+                                      _Badge(
+                                        label: AppLanguage.getText('Combos'),
+                                        color: const Color(0xFFFF8C00),
+                                        icon: Icons.fastfood_rounded,
+                                      ),
+                                    if (offerLabel != null) ...[
+                                      if (isCombo) const SizedBox(width: 8),
+                                      _Badge(
+                                        label: offerLabel,
+                                        color: kDiscount,
+                                        icon: Icons.local_offer_rounded,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              Positioned(
+                                top: 16,
+                                right: 16,
+                                child: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: kPrimary,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: kPrimary.withOpacity(0.5),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.add,
+                                    color: Colors.white,
+                                    size: 26,
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 20,
+                                left: 20,
+                                right: 20,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w900,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black,
+                                            blurRadius: 8,
+                                          ),
+                                        ],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          'CHF ${offerPrice.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            color: kPrimary,
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        if (originalPrice > offerPrice) ...[
+                                          const SizedBox(width: 8),
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 2,
+                                            ),
+                                            child: Text(
+                                              'CHF ${originalPrice.toStringAsFixed(2)}',
+                                              style: TextStyle(
+                                                color: kWhite.withOpacity(0.7),
+                                                fontSize: 14,
+                                                decoration:
+                                                    TextDecoration.lineThrough,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    if (originalPrice > offerPrice) ...[
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: kDiscount,
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          isCombo
+                                              ? 'Combo offer • You save CHF ${(originalPrice - offerPrice).toStringAsFixed(2)}'
+                                              : 'You save CHF ${(originalPrice - offerPrice).toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-            if (promoDocs.length > 1) ...[
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  promoDocs.length,
-                  (i) => AnimatedContainer(
+              if (count > 1) ...[
+                if (current > 0)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 16,
+                    child: Center(
+                      child: _CarouselArrow(
+                        icon: Icons.chevron_left_rounded,
+                        onTap: () => _goTo(current - 1),
+                      ),
+                    ),
+                  ),
+                if (current < count - 1)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 16,
+                    child: Center(
+                      child: _CarouselArrow(
+                        icon: Icons.chevron_right_rounded,
+                        onTap: () => _goTo(current + 1),
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        if (count > 1) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.center,
+            children: List.generate(
+              count,
+              (i) => GestureDetector(
+                onTap: () => _goTo(i),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 6,
+                  ),
+                  child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _current == i ? 28 : 8,
-                    height: 8,
+                    width: current == i ? 28 : 10,
+                    height: 10,
                     decoration: BoxDecoration(
-                      color: _current == i ? kPrimary : kMuted.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(4),
+                      color: current == i ? kPrimary : kMuted.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(5),
                     ),
                   ),
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${current + 1} / $count',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: kMuted, fontSize: 13),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A combo laid out as a full-width card, with a photo and name for every
+/// menu inside it so guests see what they get before opening it.
+class _ComboOfferCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final Map<String, Map<String, dynamic>> liveMenus;
+  final VoidCallback onTap;
+
+  const _ComboOfferCard({
+    required this.data,
+    required this.liveMenus,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (data['name'] as String?) ?? 'Combo';
+    final double originalPrice = menuOriginalPrice(data);
+    final double offerPrice = menuOfferPrice(data);
+    final offerLabel = menuOfferLabel(data);
+    final items = (data['comboItems'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((e) {
+          final stored = Map<String, dynamic>.from(e);
+          final live = liveMenus[stored['id']];
+          final liveImage = live?['imageUrl'] as String?;
+          return {
+            ...stored,
+            if (live?['name'] != null) 'name': live!['name'],
+            if (liveImage != null && liveImage.isNotEmpty)
+              'imageUrl': liveImage,
+          };
+        })
+        .toList();
+
+    return Material(
+      color: kCardBg,
+      borderRadius: BorderRadius.circular(24),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: kPrimary.withOpacity(0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        _Badge(
+                          label: AppLanguage.getText('Combos'),
+                          color: const Color(0xFFFF8C00),
+                          icon: Icons.fastfood_rounded,
+                        ),
+                        if (offerLabel != null)
+                          _Badge(
+                            label: offerLabel,
+                            color: kDiscount,
+                            icon: Icons.local_offer_rounded,
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: kPrimary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.add, color: Colors.white, size: 24),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                name,
+                style: const TextStyle(
+                  color: kWhite,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 14),
+              if (items.isNotEmpty) ...[
+                Text(
+                  '${AppLanguage.getText('This Combo Includes')} (${items.length})',
+                  style: const TextStyle(
+                    color: kMuted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _ComboPhotoRow(items: items),
+              ] else
+                _ComboPhoto(
+                  imageUrl: (data['imageUrl'] as String?) ?? '',
+                  isDrink: false,
+                  height: 160,
+                ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'CHF ${offerPrice.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: kPrimary,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (originalPrice > offerPrice) ...[
+                    Text(
+                      'CHF ${originalPrice.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: kWhite.withOpacity(0.6),
+                        fontSize: 14,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: kDiscount,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        'You save CHF ${(originalPrice - offerPrice).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The menus of a combo side by side, joined by "+". Up to four share the
+/// card width; a longer combo scrolls sideways so no photo gets too small.
+class _ComboPhotoRow extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _ComboPhotoRow({required this.items});
+
+  static const double _plusWidth = 22;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final visible = items.length.clamp(1, 4);
+        final tileWidth =
+            (constraints.maxWidth - _plusWidth * (visible - 1)) / visible;
+        final children = <Widget>[];
+        for (var i = 0; i < items.length; i++) {
+          if (i > 0) {
+            children.add(
+              const SizedBox(
+                width: _plusWidth,
+                child: Center(
+                  child: Icon(Icons.add, color: kPrimary, size: 18),
+                ),
+              ),
+            );
+          }
+          children.add(
+            SizedBox(
+              width: tileWidth,
+              child: _ComboItemTile(item: items[i]),
+            ),
+          );
+        }
+        final row = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        );
+        if (items.length <= 4) return row;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: row,
         );
       },
+    );
+  }
+}
+
+class _ComboItemTile extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _ComboItemTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: _ComboPhoto(
+            imageUrl: (item['imageUrl'] as String?) ?? '',
+            isDrink: item['itemType'] == 'drink',
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          (item['name'] as String?) ?? '',
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: kWhite,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ComboPhoto extends StatelessWidget {
+  final String imageUrl;
+  final bool isDrink;
+  final double? height;
+  const _ComboPhoto({
+    required this.imageUrl,
+    required this.isDrink,
+    this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Container(
+      color: Colors.black.withOpacity(0.25),
+      alignment: Alignment.center,
+      child: Icon(
+        isDrink ? Icons.local_drink : Icons.restaurant,
+        color: kMuted,
+        size: 28,
+      ),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: imageUrl.isEmpty
+            ? fallback
+            : buildUniversalImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                fallback: fallback,
+              ),
+      ),
+    );
+  }
+}
+
+class _CarouselArrow extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _CarouselArrow({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withOpacity(0.55),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, color: kWhite, size: 30),
+        ),
+      ),
     );
   }
 }
@@ -1454,16 +1932,11 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
   }
 
   double get _basePrice {
-    final bool hasMultipleSizes = widget.itemData['hasMultipleSizes'] ?? false;
-    if (hasMultipleSizes && _selectedSize != null) {
-      return (_selectedSize!['price'] as num?)?.toDouble() ?? 0.0;
-    }
-
-    final bool isPromo = widget.itemData['isPromoActive'] ?? false;
-    final num priceVal = isPromo
-        ? (widget.itemData['offerPrice'] ?? widget.itemData['price'] ?? 0)
-        : (widget.itemData['price'] ?? 0);
-    return (priceVal as num).toDouble();
+    final hasSizes = widget.itemData['hasMultipleSizes'] == true;
+    final sizePrice = hasSizes && _selectedSize != null
+        ? ((_selectedSize!['price'] as num?)?.toDouble() ?? 0)
+        : null;
+    return menuOfferPrice(widget.itemData, sizePrice: sizePrice);
   }
 
   double get _totalPrice {
@@ -1489,6 +1962,8 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
       'additionalOptions': _selectedAddons,
       'menuChoices': _selectedChoice != null ? {'Choice': _selectedChoice} : {},
       'createdAt': FieldValue.serverTimestamp(),
+      if (comboOrderItems(widget.itemData).isNotEmpty)
+        'comboItems': comboOrderItems(widget.itemData),
     };
 
     try {
@@ -1542,6 +2017,7 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
     final bool hasMultipleSizes = widget.itemData['hasMultipleSizes'] ?? false;
     final List<dynamic> choices = widget.itemData['menuChoices'] ?? [];
     final List<dynamic> addons = widget.itemData['additionalOptions'] ?? [];
+    final List<dynamic> comboItems = widget.itemData['comboItems'] ?? [];
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.88,
@@ -1616,6 +2092,16 @@ class _PromoItemSheetState extends State<_PromoItemSheet> {
                     ],
                   ),
                   const SizedBox(height: 24),
+                  if (widget.itemData['itemType'] == 'combo' &&
+                      comboItems.isNotEmpty) ...[
+                    ComboIncludes(
+                      comboItems: comboItems,
+                      savings: menuOriginalPrice(widget.itemData) > _basePrice
+                          ? menuOriginalPrice(widget.itemData) - _basePrice
+                          : null,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                   if (hasMultipleSizes && sizes.isNotEmpty) ...[
                     Text(
                       AppLanguage.getText('Select Portion / Size'),

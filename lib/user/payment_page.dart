@@ -131,6 +131,10 @@ class _PaymentPageState extends State<PaymentPage> {
               : Timestamp.now(),
         };
 
+        if (m['comboItems'] is List && (m['comboItems'] as List).isNotEmpty) {
+          itemMap['comboItems'] = m['comboItems'];
+        }
+
         if (kind == 'drink') {
           itemMap['type'] = m['type'] ?? '';
           itemMap['sugar'] = m['sugar'] ?? '';
@@ -159,6 +163,7 @@ class _PaymentPageState extends State<PaymentPage> {
           'size': m['size'],          
           'additionalOptions': m['additionalOptions'] ?? [],
           'menuChoices': m['menuChoices'] ?? {},
+          if (m['comboItems'] != null) 'comboItems': m['comboItems'],
           'timestamp': (m['createdAt'] is Timestamp)
         };
       }).toList();

@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:restorant/shared/menu_offer.dart';
 
 import 'package:restorant/admin/admin_order.dart' show OrderPrinter;
 import 'package:restorant/kitchen/station_orders.dart';
@@ -322,10 +323,9 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(line.label, style: _receiptStyle()),
-            Text(
-              '${BillData.money(line.amount)} CHF',
-              style: _receiptStyle(),
-            ),
+            for (final detail in line.details)
+              Text('   - $detail', style: _receiptStyle(size: 12)),
+            Text('${BillData.money(line.amount)} CHF', style: _receiptStyle()),
           ],
         ),
       ),
@@ -670,7 +670,9 @@ class _ServiceBoardPageState extends State<ServiceBoardPage> {
       final qty = ((item['qty'] as num?) ?? 1).toInt();
       final name = (item['name'] ?? 'Item').toString();
       final size = (item['size'] ?? '').toString();
-      return '${qty}x ${size.isEmpty ? name : '$name ($size)'}';
+      final combo = comboLines(item);
+      final line = '${qty}x ${size.isEmpty ? name : '$name ($size)'}';
+      return combo.isEmpty ? line : '$line (${combo.join(', ')})';
     }).toList();
     final color = !hasItems
         ? kStMuted

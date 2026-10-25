@@ -42,6 +42,7 @@
 //     ...
 //   Summe CHF:              31,10
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:restorant/shared/menu_offer.dart';
 
 /// Printed at the top of every bill. Change it here and both the paper receipt
 /// and the on-screen bill follow.
@@ -65,10 +66,18 @@ class RestaurantInfo {
 
 /// One printed line: what it was, and what it cost.
 class BillLine {
-  const BillLine({required this.qty, required this.name, required this.amount});
+  const BillLine({
+    required this.qty,
+    required this.name,
+    required this.amount,
+    this.details = const [],
+  });
 
   final int qty;
   final String name;
+
+  /// Printed under the line without a price - the menus inside a combo.
+  final List<String> details;
 
   /// Line total, i.e. unit price times [qty].
   final double amount;
@@ -136,7 +145,12 @@ class BillData {
     // merged, under a single table heading.
     final lines = [
       for (final item in _items(order))
-        BillLine(qty: item.qty, name: item.name, amount: item.amount),
+        BillLine(
+          qty: item.qty,
+          name: item.name,
+          amount: item.amount,
+          details: item.details,
+        ),
     ];
 
     final Timestamp? ts = order['timestamp'] as Timestamp?;
@@ -213,9 +227,10 @@ class BillData {
 
   // -------------------------------------------------------------- helpers
 
-  static List<({int qty, String name, double unit, double amount})> _items(
-    Map<String, dynamic> order,
-  ) {
+  static List<
+    ({int qty, String name, double unit, double amount, List<String> details})
+  >
+  _items(Map<String, dynamic> order) {
     final rawItems = order['items'] as List<dynamic>? ?? [];
     return [
       for (final raw in rawItems)
@@ -231,6 +246,7 @@ class BillData {
               name: size.isEmpty ? name : '$name $size',
               unit: unit,
               amount: unit * qty,
+              details: comboLines(item),
             );
           }(),
     ];
@@ -290,6 +306,7 @@ class BillData {
         '------------------------------',
         for (final line in lines) ...[
           '  ${line.label}',
+          for (final detail in line.details) '     - $detail',
           '  ${money(line.amount)} CHF',
         ],
       ] else
@@ -298,6 +315,7 @@ class BillData {
           section.label,
           for (final line in section.lines) ...[
             '  ${line.label}',
+            for (final detail in line.details) '     - $detail',
             '  ${money(line.amount)} CHF',
           ],
           'Zwischensumme CHF: ${money(section.subtotal)}',
@@ -323,17 +341,30 @@ class _TableAccumulator {
   final Set<String> chairs = <String>{};
 
   // Same article at the same price, however many chairs ordered it.
-  final Map<String, ({int qty, String name, double amount})> _lines = {};
+  final Map<
+    String,
+    ({int qty, String name, double amount, List<String> details})
+  >
+  _lines = {};
 
-  void add(({int qty, String name, double unit, double amount}) item) {
-    final key = '${item.name}|${item.unit}';
+  void add(
+    ({int qty, String name, double unit, double amount, List<String> details})
+    item,
+  ) {
+    final key = '${item.name}|${item.unit}|${item.details.join(',')}';
     final seen = _lines[key];
     _lines[key] = seen == null
-        ? (qty: item.qty, name: item.name, amount: item.amount)
+        ? (
+            qty: item.qty,
+            name: item.name,
+            amount: item.amount,
+            details: item.details,
+          )
         : (
             qty: seen.qty + item.qty,
             name: item.name,
             amount: seen.amount + item.amount,
+            details: item.details,
           );
   }
 
@@ -347,7 +378,12 @@ class _TableAccumulator {
       label: label,
       lines: [
         for (final line in _lines.values)
-          BillLine(qty: line.qty, name: line.name, amount: line.amount),
+          BillLine(
+            qty: line.qty,
+            name: line.name,
+            amount: line.amount,
+            details: line.details,
+          ),
       ],
     );
   }

@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:restorant/shared/menu_offer.dart';
 import 'package:restorant/shared/receipt_fonts.dart';
 import 'package:restorant/shared/till_printer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -372,6 +373,10 @@ class StationTicketPrinter {
               ),
             ],
           ),
+          if (comboLines(item).isNotEmpty) ...[
+            _ticketDetail('COMBO:', bold: true),
+            ...comboLines(item).map((l) => _ticketDetail('  - $l', bold: true)),
+          ],
           if (type.isNotEmpty) _ticketDetail('Type: $type'),
           if (sugar.isNotEmpty) _ticketDetail('Sugar: $sugar'),
           ...choices.entries.map((e) => _ticketDetail('${e.key}: ${e.value}')),
@@ -428,6 +433,9 @@ class StationTicketPrinter {
       final size = (item['size'] ?? '').toString();
       final qty = ((item['qty'] as num?) ?? 1).toInt();
       lines.add('${qty}x ${size.isEmpty ? name : '$name ($size)'}');
+      for (final combo in comboLines(item)) {
+        lines.add('   - $combo');
+      }
 
       final Map<String, dynamic> choices = Map<String, dynamic>.from(
         item['menuChoices'] as Map? ?? {},
@@ -1178,6 +1186,10 @@ class _StationOrdersPageState extends State<StationOrdersPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                if (comboLines(item).isNotEmpty) ...[
+                  _detailText('🍱 Combo includes:', highlight: true),
+                  ...comboLines(item).map((l) => _detailText('   • $l')),
+                ],
                 if (type.isNotEmpty) _detailText('☕ Type: $type'),
                 if (sugar.isNotEmpty) _detailText('🍬 Sugar: $sugar'),
                 ...choices.entries.map(

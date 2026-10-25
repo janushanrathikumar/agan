@@ -1,8 +1,7 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:restorant/shared/image_upload.dart';
+import 'package:restorant/shared/menu_offer.dart';
+import 'add_combo.dart';
 
 // --- Palette ---
 const kPrimary = Color(0xFFB59410);
@@ -32,7 +31,10 @@ class AdminPromotionsPage extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: kPrimary,
         foregroundColor: kWhite,
-        onPressed: () => _showAddComboSheet(context),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AddComboPage()),
+        ),
         icon: const Icon(Icons.add_box),
         label: const Text(
           'Add Combo',
@@ -83,13 +85,15 @@ class AdminPromotionsPage extends StatelessWidget {
               final data = doc.data() as Map<String, dynamic>;
 
               final String name = data['name'] ?? 'Unknown Item';
-              final num originalPrice = data['price'] ?? 0;
+              final double originalPrice = menuOriginalPrice(data);
               final String imageUrl = data['imageUrl'] ?? '';
               final String itemType = data['itemType'] ?? 'food';
 
               // Promo fields
-              final bool isPromoActive = data['isPromoActive'] ?? false;
-              final num offerPrice = data['offerPrice'] ?? 0;
+              final bool isPromoActive =
+                  data['isPromoActive'] == true || hasMenuOffer(data);
+              final double offerPrice = menuOfferPrice(data);
+              final offerLabel = menuOfferLabel(data);
 
               // Check if it's a combo
               final bool isCombo = itemType == 'combo';
@@ -157,6 +161,15 @@ class AdminPromotionsPage extends StatelessWidget {
                             ),
                           ),
                         ),
+                      if (offerLabel != null)
+                        Text(
+                          '  $offerLabel',
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
                     ],
                   ),
                   subtitle: Padding(
@@ -209,7 +222,15 @@ class AdminPromotionsPage extends StatelessWidget {
                       ),
                     ),
                   ),
-                  onTap: () => _showDiscountBottomSheet(context, doc),
+                  onTap: () => isCombo
+                      ? Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                AddComboPage(docId: doc.id, itemData: data),
+                          ),
+                        )
+                      : _showDiscountBottomSheet(context, doc),
                 ),
               );
             },
@@ -231,23 +252,10 @@ class AdminPromotionsPage extends StatelessWidget {
     );
   }
 
-  // --- Open Add Combo Sheet ---
-  void _showAddComboSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: kBg,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => const _CreateComboWidget(),
-    );
-  }
-
   // --- Open Edit Promo Price Sheet ---
   void _showDiscountBottomSheet(BuildContext context, DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    final num currentPrice = data['price'] ?? 0;
+    final num currentPrice = menuOriginalPrice(data);
 
     showModalBottomSheet(
       context: context,
@@ -260,373 +268,13 @@ class AdminPromotionsPage extends StatelessWidget {
         return _PromoFormWidget(
           docId: doc.id,
           originalPrice: currentPrice,
-          initialOfferPrice: data['offerPrice'] ?? currentPrice,
+          initialOfferPrice: menuOfferPrice(data),
           initialIsActive: data['isPromoActive'] ?? false,
+          initialDiscountType: data['discountType'] as String?,
+          initialDiscountValue: (data['discountValue'] as num?)?.toDouble(),
+          initialHasDiscount: data['hasDiscount'] == true,
         );
       },
-    );
-  }
-}
-
-// ==========================================
-// Stateful Form for Adding a New Combo
-// ==========================================
-class _CreateComboWidget extends StatefulWidget {
-  const _CreateComboWidget();
-
-  @override
-  State<_CreateComboWidget> createState() => _CreateComboWidgetState();
-}
-
-class _CreateComboWidgetState extends State<_CreateComboWidget> {
-  final _nameController = TextEditingController();
-  final _descController = TextEditingController();
-  final _priceController = TextEditingController();
-  bool _isSaving = false;
-
-  // 🟢 New — combos created here previously always saved with
-  // imageUrl: '', so every combo showed the generic fastfood placeholder
-  // icon instead of a real photo, unlike every other menu item.
-  Uint8List? _imgBytes;
-  String? _imgFileName;
-
-  // 🟢 New — previously this hardcoded 'category': 'promos', a string
-  // that doesn't correspond to any real category document, so it
-  // couldn't carry a categoryIconUrl or show up correctly anywhere that
-  // groups items by category. Now it picks a real category tagged
-  // type == 'combo' from menu_category, same as add_menu_item.dart.
-  String? _selectedCategory;
-  String? _selectedCategoryIconUrl;
-
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final x = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 90,
-    );
-    if (x == null) return;
-    final bytes = await x.readAsBytes();
-    setState(() {
-      _imgBytes = bytes;
-      _imgFileName = x.name;
-    });
-  }
-
-  Future<void> _createCombo() async {
-    if (_nameController.text.isEmpty || _priceController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter name and price'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a Combo category'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSaving = true);
-    double comboPrice = double.tryParse(_priceController.text) ?? 0.0;
-
-    try {
-      // 🟢 Image is optional here (quick-create flow), but if one is
-      // picked it's uploaded exactly like add_menu_item.dart does.
-      String imageUrl = '';
-      String? imageFileName;
-      if (_imgBytes != null) {
-        final uploaded = await ImageUploader.upload(
-          _imgBytes!,
-          folder: 'menu_images',
-          nameHint: _imgFileName ?? _nameController.text,
-          use: ImageUse.menuPhoto,
-        );
-        imageFileName = uploaded.fileName;
-        imageUrl = uploaded.url;
-      }
-
-      // Create a new document in menu_items
-      await FirebaseFirestore.instance.collection('menu_items').add({
-        'name': _nameController.text.trim(),
-        'note': _descController.text.trim(),
-        'price': comboPrice,
-        'offerPrice': comboPrice, // Combo is already a promo price usually
-        'isPromoActive': true, // Active by default
-        'itemType': 'combo', // Custom tag to identify combos
-        'category': _selectedCategory,
-        'categoryIconUrl': _selectedCategoryIconUrl,
-        'imageUrl': imageUrl,
-        'imageFileName': imageFileName,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': 'on',
-        'menuChoices': [],
-        'additionalOptions': [],
-      });
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Combo Created!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Create New Combo',
-              style: TextStyle(
-                color: kWhite,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 🟢 Combo image picker — previously missing entirely, so
-            // every combo showed a generic placeholder icon everywhere
-            // (order details, My Orders, this very list) instead of a
-            // real photo like food/drink items get.
-            InkWell(
-              onTap: _pickImage,
-              child: Container(
-                height: 140,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: kCardBg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: kItemBg),
-                ),
-                alignment: Alignment.center,
-                child: _imgBytes != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.memory(
-                          _imgBytes!,
-                          height: 120,
-                          fit: BoxFit.contain,
-                        ),
-                      )
-                    : const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.add_photo_alternate,
-                            size: 32,
-                            color: kPrimary,
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Add Combo Image (optional)',
-                            style: TextStyle(color: kMuted),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            _buildTextField(
-              _nameController,
-              'Combo Name (e.g. Burger + Soda)',
-              Icons.fastfood,
-            ),
-            const SizedBox(height: 12),
-            _buildTextField(
-              _descController,
-              'Description (Optional)',
-              Icons.description,
-            ),
-            const SizedBox(height: 12),
-            _buildTextField(
-              _priceController,
-              // 🟢 RM -> CHF
-              'Combo Price (CHF)',
-              Icons.attach_money,
-              isNumber: true,
-            ),
-            const SizedBox(height: 12),
-
-            // 🟢 Real Combo category dropdown — replaces the old
-            // hardcoded 'category': 'promos' string, which didn't match
-            // any actual menu_category document (and therefore couldn't
-            // carry an icon or group correctly with real categories).
-            Container(
-              decoration: BoxDecoration(
-                color: kCardBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: kItemBg),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('menu_category')
-                    .snapshots(),
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: LinearProgressIndicator(color: kPrimary),
-                    );
-                  }
-
-                  final matchingDocs = snap.data!.docs.where((d) {
-                    final data = d.data() as Map<String, dynamic>? ?? {};
-                    final catType = (data['type'] as String?) ?? 'food';
-                    return catType == 'combo';
-                  }).toList();
-
-                  if (matchingDocs.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'No Combo categories yet — add one on the '
-                        'Add Menu Category page first.',
-                        style: TextStyle(color: kMuted),
-                      ),
-                    );
-                  }
-
-                  final names = matchingDocs.map((d) => d.id).toList();
-                  final safeValue = names.contains(_selectedCategory)
-                      ? _selectedCategory
-                      : null;
-
-                  return DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: safeValue,
-                      isExpanded: true,
-                      dropdownColor: kCardBg,
-                      hint: const Text(
-                        'Combo Category',
-                        style: TextStyle(color: kMuted),
-                      ),
-                      items: names
-                          .map(
-                            (n) => DropdownMenuItem(
-                              value: n,
-                              child: Text(
-                                n,
-                                style: const TextStyle(color: kWhite),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        final match = matchingDocs.firstWhere((d) => d.id == v);
-                        final matchData =
-                            match.data() as Map<String, dynamic>? ?? {};
-                        setState(() {
-                          _selectedCategory = v;
-                          _selectedCategoryIconUrl =
-                              matchData['iconUrl'] as String?;
-                        });
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: _isSaving ? null : _createCombo,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: kWhite,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text(
-                        'Save Combo',
-                        style: TextStyle(
-                          color: kWhite,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label,
-    IconData icon, {
-    bool isNumber = false,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: isNumber
-          ? const TextInputType.numberWithOptions(decimal: true)
-          : TextInputType.text,
-      style: const TextStyle(color: kWhite),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: kMuted),
-        filled: true,
-        fillColor: kCardBg,
-        prefixIcon: Icon(icon, color: kPrimary),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: kItemBg),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: kPrimary),
-        ),
-      ),
     );
   }
 }
@@ -639,12 +287,18 @@ class _PromoFormWidget extends StatefulWidget {
   final num originalPrice;
   final num initialOfferPrice;
   final bool initialIsActive;
+  final String? initialDiscountType;
+  final double? initialDiscountValue;
+  final bool initialHasDiscount;
 
   const _PromoFormWidget({
     required this.docId,
     required this.originalPrice,
     required this.initialOfferPrice,
     required this.initialIsActive,
+    required this.initialDiscountType,
+    required this.initialDiscountValue,
+    required this.initialHasDiscount,
   });
 
   @override
@@ -654,12 +308,19 @@ class _PromoFormWidget extends StatefulWidget {
 class _PromoFormWidgetState extends State<_PromoFormWidget> {
   late TextEditingController _priceController;
   late bool _isActive;
+  late bool _usePercent;
+  late TextEditingController _percentController;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _isActive = widget.initialIsActive;
+    _isActive = widget.initialIsActive || widget.initialHasDiscount;
+    _usePercent =
+        widget.initialHasDiscount && widget.initialDiscountType == 'percent';
+    _percentController = TextEditingController(
+      text: _usePercent ? widget.initialDiscountValue?.toString() ?? '' : '',
+    );
     _priceController = TextEditingController(
       text: widget.initialOfferPrice == widget.originalPrice
           ? ''
@@ -669,12 +330,36 @@ class _PromoFormWidgetState extends State<_PromoFormWidget> {
 
   Future<void> _savePromotion() async {
     setState(() => _isSaving = true);
-    double newOfferPrice = double.tryParse(_priceController.text) ?? 0.0;
+    final percent = double.tryParse(_percentController.text.trim());
+    final enteredPrice = double.tryParse(_priceController.text.trim());
+    if (_isActive &&
+        (_usePercent
+            ? percent == null || percent <= 0 || percent > 100
+            : enteredPrice == null ||
+                  enteredPrice < 0 ||
+                  enteredPrice >= widget.originalPrice)) {
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid offer: 1–100% or a lower promo price.'),
+        ),
+      );
+      return;
+    }
+    final newOfferPrice = _usePercent
+        ? widget.originalPrice * (1 - (percent ?? 0) / 100)
+        : enteredPrice ?? widget.originalPrice.toDouble();
     try {
       await FirebaseFirestore.instance
           .collection('menu_items')
           .doc(widget.docId)
-          .update({'offerPrice': newOfferPrice, 'isPromoActive': _isActive});
+          .update({
+            'offerPrice': newOfferPrice,
+            'isPromoActive': _isActive,
+            'hasDiscount': _isActive && _usePercent,
+            'discountType': _isActive && _usePercent ? 'percent' : null,
+            'discountValue': _isActive && _usePercent ? percent : 0,
+          });
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -695,6 +380,13 @@ class _PromoFormWidgetState extends State<_PromoFormWidget> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _priceController.dispose();
+    _percentController.dispose();
+    super.dispose();
   }
 
   @override
@@ -725,13 +417,26 @@ class _PromoFormWidgetState extends State<_PromoFormWidget> {
             style: const TextStyle(color: kMuted, fontSize: 14),
           ),
           const SizedBox(height: 24),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Percentage offer',
+              style: TextStyle(color: kWhite),
+            ),
+            subtitle: const Text(
+              'Apply to the full menu price',
+              style: TextStyle(color: kMuted),
+            ),
+            value: _usePercent,
+            onChanged: (value) => setState(() => _usePercent = value),
+          ),
           TextField(
-            controller: _priceController,
+            controller: _usePercent ? _percentController : _priceController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(color: kWhite, fontSize: 18),
             decoration: InputDecoration(
               // 🟢 RM -> CHF
-              labelText: 'New Promo Price (CHF)',
+              labelText: _usePercent ? 'Offer (%)' : 'New Promo Price (CHF)',
               labelStyle: const TextStyle(color: kPrimary),
               filled: true,
               fillColor: kCardBg,
