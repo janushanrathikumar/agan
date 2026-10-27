@@ -15,6 +15,7 @@ import 'package:restorant/platform_image/platform_image.dart';
 import 'package:restorant/user/daily_meal_section.dart';
 import 'package:restorant/user/opening_hours_card.dart';
 import 'package:restorant/user/table_booking_page.dart';
+import 'package:restorant/user/app_offer_dialog.dart';
 import '../language.dart';
 import 'package:restorant/shared/platform_support.dart';
 import 'package:restorant/startup%20page/auth_dialog.dart';
@@ -1012,6 +1013,7 @@ class _PromoCarouselState extends State<_PromoCarousel> {
           return data['status'] != 'off' &&
               (data['itemType'] == 'combo' ||
                   menuOfferLabel(data) != null ||
+                  hasAppOffer(data) ||
                   data['isPromoActive'] == true);
         }).toList();
         if (tableNo == 'Take-Away') {
@@ -1062,6 +1064,10 @@ class _PromoCarouselState extends State<_PromoCarousel> {
     BuildContext context,
     Map<String, dynamic> data,
   ) async {
+    if (_isAppOnlyOffer(data) && !await showAppOnlyOfferDialog(context, data)) {
+      return;
+    }
+    if (!context.mounted) return;
     if (!await requireLogin(
       context,
       reason: AppLanguage.getText('login_to_order'),
@@ -1105,8 +1111,8 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                         .toLowerCase();
                     final bool isCombo = itemType == 'combo';
                     final double originalPrice = menuOriginalPrice(data);
-                    final double offerPrice = menuOfferPrice(data);
-                    final offerLabel = menuOfferLabel(data);
+                    final double offerPrice = _shownOfferPrice(data);
+                    final offerLabel = _shownOfferLabel(data);
                     final isActive = _current == index;
 
                     return GestureDetector(
@@ -1192,6 +1198,10 @@ class _PromoCarouselState extends State<_PromoCarousel> {
                                         color: kDiscount,
                                         icon: Icons.local_offer_rounded,
                                       ),
+                                    ],
+                                    if (hasAppOffer(data)) ...[
+                                      const SizedBox(width: 8),
+                                      _AppOfferBadge(data: data),
                                     ],
                                   ],
                                 ),
@@ -1380,6 +1390,34 @@ class _PromoCarouselState extends State<_PromoCarousel> {
   }
 }
 
+/// An offer the admin gave to app orders only. The website shows it too,
+/// priced as in the app, but tapping it points the guest to the stores.
+bool _isAppOnlyOffer(Map<String, dynamic> data) =>
+    !appOffersApply && hasAppOffer(data);
+
+double _shownOfferPrice(Map<String, dynamic> data) =>
+    _isAppOnlyOffer(data) ? menuAppOfferPrice(data) : menuOfferPrice(data);
+
+String? _shownOfferLabel(Map<String, dynamic> data) =>
+    _isAppOnlyOffer(data) ? appOfferLabel(data) : menuOfferLabel(data);
+
+class _AppOfferBadge extends StatelessWidget {
+  final Map<String, dynamic> data;
+
+  const _AppOfferBadge({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return _Badge(
+      label: AppLanguage.getText(
+        _isAppOnlyOffer(data) ? 'app_offer_only_badge' : 'app_offer_badge',
+      ),
+      color: const Color(0xFF2F80ED),
+      icon: Icons.phone_iphone_rounded,
+    );
+  }
+}
+
 /// A combo laid out as a full-width card, with a photo and name for every
 /// menu inside it so guests see what they get before opening it.
 class _ComboOfferCard extends StatelessWidget {
@@ -1397,8 +1435,8 @@ class _ComboOfferCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = (data['name'] as String?) ?? 'Combo';
     final double originalPrice = menuOriginalPrice(data);
-    final double offerPrice = menuOfferPrice(data);
-    final offerLabel = menuOfferLabel(data);
+    final double offerPrice = _shownOfferPrice(data);
+    final offerLabel = _shownOfferLabel(data);
     final items = (data['comboItems'] as List<dynamic>? ?? const [])
         .whereType<Map>()
         .map((e) {
@@ -1447,6 +1485,7 @@ class _ComboOfferCard extends StatelessWidget {
                             color: kDiscount,
                             icon: Icons.local_offer_rounded,
                           ),
+                        if (hasAppOffer(data)) _AppOfferBadge(data: data),
                       ],
                     ),
                   ),

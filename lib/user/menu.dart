@@ -36,6 +36,7 @@ double _effectivePrice(Map<String, dynamic> m, {String? tableNo}) =>
 String _discountBadgeText(Map<String, dynamic> m) => menuOfferLabel(m) ?? '';
 
 bool _isDiscounted(Map<String, dynamic> m) =>
+    (appOffersApply && hasAppOffer(m)) ||
     hasMenuOffer(m) ||
     (m['isPromoActive'] == true && menuOfferPrice(m) < menuOriginalPrice(m));
 
