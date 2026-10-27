@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../language.dart';
+import '../shared/menu_offer.dart';
 
 // --- Modern Palette ---
 const kPrimary = Color(0xFFB59410);
@@ -580,6 +581,24 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                                                   ),
                                                 ],
                                               ),
+
+                                              if (comboLines(
+                                                itemMap,
+                                              ).isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 4.0,
+                                                      ),
+                                                  child: Text(
+                                                    '🍱 ${AppLanguage.getText('This Combo Includes')}:\n${comboLines(itemMap).map((l) => '   • $l').join('\n')}',
+                                                    style: const TextStyle(
+                                                      color: kWhite,
+                                                      fontSize: 12,
+                                                      height: 1.4,
+                                                    ),
+                                                  ),
+                                                ),
 
                                               if (iSize.isNotEmpty &&
                                                   iSize != 'null')

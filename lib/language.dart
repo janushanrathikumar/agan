@@ -98,8 +98,17 @@ class AppLanguage {
 
       // Menu Page
       'Drinks': 'Getränke',
+      'Drink': 'Getränk',
+      'Food': 'Essen',
       'Foods': 'Speisen',
       'Combos': 'Kombis',
+      'app_offer_badge': 'App-Angebot',
+      'app_offer_only_badge': 'Nur in der App',
+      'app_offer_only_title': 'Angebot nur in der App',
+      'app_offer_only_text':
+          'Dieses Angebot gibt es nur in unserer App. Laden Sie die App herunter und bestellen Sie dort zum Angebotspreis.',
+      'download_app': 'App herunterladen',
+      'order_regular_price': 'Hier zum normalen Preis bestellen',
       'All': 'Alle',
       'no_categories': 'Keine Kategorien',
       'no_items': 'Keine Artikel',
@@ -384,8 +393,17 @@ class AppLanguage {
 
       // Menu Page
       'Drinks': 'Drinks',
+      'Drink': 'Drink',
+      'Food': 'Food',
       'Foods': 'Food',
       'Combos': 'Combos',
+      'app_offer_badge': 'App offer',
+      'app_offer_only_badge': 'App only',
+      'app_offer_only_title': 'Offer only available in the app',
+      'app_offer_only_text':
+          'This offer is only available in our app. Download the app and order there at the offer price.',
+      'download_app': 'Download the app',
+      'order_regular_price': 'Order here at the regular price',
       'All': 'All',
       'no_categories': 'No categories',
       'no_items': 'No items',

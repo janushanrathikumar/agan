@@ -19,6 +19,7 @@ import 'package:restorant/kitchen/bar.dart';
 import 'package:restorant/kitchen/kitchen.dart';
 import 'package:restorant/kitchen/station_orders.dart';
 import 'package:restorant/shared/bill_receipt.dart';
+import 'package:restorant/shared/menu_offer.dart';
 import 'package:restorant/shared/receipt_fonts.dart';
 import 'edit_order_page.dart';
 
@@ -1454,20 +1455,37 @@ class AdminOrderDetailsPage extends StatelessWidget {
     final Map<String, dynamic> choices = Map<String, dynamic>.from(
       item['menuChoices'] ?? {},
     );
-    if (choices.isEmpty) return const SizedBox.shrink();
+    final combo = comboLines(item);
+    if (choices.isEmpty && combo.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: choices.entries
-            .map(
-              (e) => Text(
-                '✔️ ${e.key}: ${e.value}',
-                style: const TextStyle(color: kMuted, fontSize: 13),
+        children: [
+          if (combo.isNotEmpty) ...[
+            const Text(
+              '🍱 Combo includes:',
+              style: TextStyle(
+                color: kPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
               ),
-            )
-            .toList(),
+            ),
+            ...combo.map(
+              (line) => Text(
+                '   • $line',
+                style: const TextStyle(color: kWhite, fontSize: 13),
+              ),
+            ),
+          ],
+          ...choices.entries.map(
+            (e) => Text(
+              '✔️ ${e.key}: ${e.value}',
+              style: const TextStyle(color: kMuted, fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1710,6 +1728,8 @@ class OrderPrinter {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(line.label, style: text),
+              for (final detail in line.details)
+                pw.Text('   - $detail', style: text),
               pw.Text('${BillData.money(line.amount)} CHF', style: text),
             ],
           ),

@@ -12,6 +12,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:restorant/shared/menu_offer.dart';
 
 import 'package:restorant/admin/admin_order.dart' show OrderPrinter;
 import 'package:restorant/kitchen/station_orders.dart';
@@ -54,7 +55,11 @@ class _OpenOrder {
     final items = data['items'] as List<dynamic>? ?? [];
     return items
         .whereType<Map>()
-        .map((i) => '${i['qty'] ?? 1}x ${i['name'] ?? ''}')
+        .map((i) {
+          final combo = comboLines(i);
+          final line = '${i['qty'] ?? 1}x ${i['name'] ?? ''}';
+          return combo.isEmpty ? line : '$line (${combo.join(', ')})';
+        })
         .join(', ');
   }
 }

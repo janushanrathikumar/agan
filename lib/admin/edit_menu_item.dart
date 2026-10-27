@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:restorant/shared/image_upload.dart';
+import 'package:restorant/shared/menu_offer.dart';
+import 'offer_preview.dart';
 import 'choice_dialog.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -335,7 +337,9 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
             .map((e) => e['dineInPrice'] as double)
             .reduce((a, b) => a < b ? a : b);
       } else {
-        basePrice = double.tryParse(_price.text.trim());
+        basePrice = _itemType == 'combo' && _hasDiscount
+            ? menuComboTotal({'comboItems': _selectedComboItems})
+            : double.tryParse(_price.text.trim());
         if (basePrice == null) {
           throw Exception('A valid standard price is required.');
         }
@@ -731,13 +735,18 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                 const SizedBox(height: 8),
 
                 if (_itemType == 'combo')
-                  _input(
-                    label: 'Combo Price',
-                    controller: _price,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                  )
+                  _hasDiscount
+                      ? Text(
+                          'Selected menus total: CHF ${menuComboTotal({'comboItems': _selectedComboItems}).toStringAsFixed(2)}. Offer is calculated from this total.',
+                          style: const TextStyle(color: kPrimary),
+                        )
+                      : _input(
+                          label: 'Combo Price',
+                          controller: _price,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                        )
                 else if (!_hasMultipleSizes)
                   _input(
                     label: 'Standard Price',
@@ -922,6 +931,20 @@ class _EditMenuItemPageState extends State<EditMenuItemPage> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                  ),
+                  OfferPreview(
+                    discountType: _discountType,
+                    discountValue: _discountValue,
+                    priceListenable: _price,
+                    originalPrice: () {
+                      if (_itemType == 'combo') {
+                        return menuComboTotal({
+                          'comboItems': _selectedComboItems,
+                        });
+                      }
+                      if (_hasMultipleSizes) return null;
+                      return double.tryParse(_price.text.trim()) ?? 0;
+                    },
                   ),
                 ],
               ],

@@ -9,6 +9,7 @@
 // Nothing is added on top of the items - there is no service charge.
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:restorant/shared/menu_offer.dart';
 
 const kPrimary = Color(0xFFB59410);
 const kBg = Color(0xFF2A2928);
@@ -238,9 +239,8 @@ class _EditOrderPageState extends State<EditOrderPage> {
               label: 'Payment',
               value: _paymentMethod.isEmpty ? 'Not paid' : _paymentMethod,
               items: const ['Not paid', 'Cash', 'Card'],
-              onChanged: (v) => setState(
-                () => _paymentMethod = v == 'Not paid' ? '' : v,
-              ),
+              onChanged: (v) =>
+                  setState(() => _paymentMethod = v == 'Not paid' ? '' : v),
             ),
 
             const SizedBox(height: 24),
@@ -328,6 +328,11 @@ class _EditOrderPageState extends State<EditOrderPage> {
                     fontSize: 15,
                   ),
                 ),
+                if (comboLines(item).isNotEmpty)
+                  Text(
+                    '🍱 ${comboLines(item).join(', ')}',
+                    style: const TextStyle(color: kMuted, fontSize: 12),
+                  ),
                 Text(
                   'CHF ${price.toStringAsFixed(2)} each',
                   style: const TextStyle(color: kMuted, fontSize: 12),

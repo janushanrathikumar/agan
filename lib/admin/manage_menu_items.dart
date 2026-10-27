@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:restorant/admin/add_food_menu.dart';
 import 'edit_menu_item.dart';
+import 'add_combo.dart';
+import 'app_offer_sheet.dart';
+import 'package:restorant/shared/menu_offer.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:restorant/platform_image/platform_image.dart';
@@ -352,6 +355,7 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                           final category = data['category'] ?? '';
 
                           final price = _getDisplayPrice(data);
+                          final appOffer = appOfferLabel(data);
 
                           return Container(
                             decoration: BoxDecoration(
@@ -413,6 +417,30 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                             ),
                                           ),
                                         ),
+                                      if (appOffer != null)
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.shade700,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'APP $appOffer',
+                                              style: const TextStyle(
+                                                color: kWhite,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -463,16 +491,59 @@ class _ManageMenuItemsPageState extends State<ManageMenuItemsPage> {
                                             ),
                                             Row(
                                               children: [
+                                                Tooltip(
+                                                  message: 'App offer price',
+                                                  child: GestureDetector(
+                                                    onTap: () =>
+                                                        showAppOfferSheet(
+                                                          context,
+                                                          doc.id,
+                                                          data,
+                                                        ),
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            6,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color:
+                                                            (appOffer != null
+                                                                    ? Colors
+                                                                          .greenAccent
+                                                                    : kPrimary)
+                                                                .withOpacity(
+                                                                  0.15,
+                                                                ),
+                                                        shape: BoxShape.circle,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .phone_iphone_rounded,
+                                                        color: appOffer != null
+                                                            ? Colors.greenAccent
+                                                            : kPrimary,
+                                                        size: 16,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
                                                 GestureDetector(
                                                   onTap: () {
                                                     Navigator.push(
                                                       context,
                                                       MaterialPageRoute(
                                                         builder: (_) =>
-                                                            EditMenuItemPage(
-                                                              docId: doc.id,
-                                                              itemData: data,
-                                                            ),
+                                                            data['itemType'] ==
+                                                                'combo'
+                                                            ? AddComboPage(
+                                                                docId: doc.id,
+                                                                itemData: data,
+                                                              )
+                                                            : EditMenuItemPage(
+                                                                docId: doc.id,
+                                                                itemData: data,
+                                                              ),
                                                       ),
                                                     );
                                                   },

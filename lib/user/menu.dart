@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'checkout.dart';
+import '../shared/menu_offer.dart';
+import '../shared/combo_includes.dart';
 import '../language.dart';
 import 'package:restorant/startup%20page/auth_dialog.dart';
 import 'package:restorant/platform_image/platform_image.dart';
@@ -28,45 +30,17 @@ String _itemTypeFor(_MenuKind kind) {
   }
 }
 
-double _effectivePrice(Map<String, dynamic> m, {String? tableNo}) {
-  final price = (m['price'] as num?)?.toDouble() ?? 0;
-  final hasDiscount = m['hasDiscount'] == true;
-  final discountValue = (m['discountValue'] as num?)?.toDouble() ?? 0;
-  if (!hasDiscount || discountValue <= 0) return price;
+double _effectivePrice(Map<String, dynamic> m, {String? tableNo}) =>
+    menuOfferPrice(m);
 
-  final discountType = (m['discountType'] as String?) ?? 'percent';
-  double discounted = discountType == 'percent'
-      ? price - (price * discountValue / 100)
-      : price - discountValue;
+String _discountBadgeText(Map<String, dynamic> m) => menuOfferLabel(m) ?? '';
 
-  if (discounted < 0) discounted = 0;
-  return discounted;
-}
+bool _isDiscounted(Map<String, dynamic> m) =>
+    (appOffersApply && hasAppOffer(m)) ||
+    hasMenuOffer(m) ||
+    (m['isPromoActive'] == true && menuOfferPrice(m) < menuOriginalPrice(m));
 
-String _discountBadgeText(Map<String, dynamic> m) {
-  final discountType = (m['discountType'] as String?) ?? 'percent';
-  final discountValue = (m['discountValue'] as num?)?.toDouble() ?? 0;
-  if (discountType == 'percent') {
-    return '-${discountValue.toStringAsFixed(discountValue % 1 == 0 ? 0 : 1)}%';
-  }
-  return '-CHF ${discountValue.toStringAsFixed(2)}';
-}
-
-bool _isDiscounted(Map<String, dynamic> m) {
-  final discountValue = (m['discountValue'] as num?)?.toDouble() ?? 0;
-  return m['hasDiscount'] == true && discountValue > 0;
-}
-
-double _comboItemsSum(Map<String, dynamic> m) {
-  final items = (m['comboItems'] as List<dynamic>?) ?? [];
-  double total = 0;
-  for (final it in items) {
-    if (it is Map) {
-      total += (it['price'] as num?)?.toDouble() ?? 0;
-    }
-  }
-  return total;
-}
+double _comboItemsSum(Map<String, dynamic> m) => menuComboTotal(m);
 
 class _WebSafeImage extends StatelessWidget {
   final String imageUrl;
@@ -1088,7 +1062,7 @@ class _MenuGrid extends StatelessWidget {
               else if (typeStr == 'combo')
                 actualKind = _MenuKind.combos;
 
-              var displayPrice = price;
+              var displayPrice = menuOriginalPrice(tempMap);
               String? badgeText;
               Color badgeColor = kDiscount;
               if (actualKind == _MenuKind.combos) {
@@ -1096,8 +1070,9 @@ class _MenuGrid extends StatelessWidget {
                 if (comboSum > finalPrice) {
                   discounted = true;
                   displayPrice = comboSum;
-                  badgeText =
-                      '-CHF ${(comboSum - finalPrice).toStringAsFixed(2)}';
+                  badgeText = _discountBadgeText(m).isNotEmpty
+                      ? _discountBadgeText(m)
+                      : '-CHF ${(comboSum - finalPrice).toStringAsFixed(2)}';
                   badgeColor = const Color(0xFFFF8C00);
                 }
               }
@@ -1141,7 +1116,7 @@ class _MenuGrid extends StatelessWidget {
             else if (typeStr == 'combo')
               actualKind = _MenuKind.combos;
 
-            var displayPrice = price;
+            var displayPrice = menuOriginalPrice(tempMap);
             String? badgeText;
             Color badgeColor = kDiscount;
             if (actualKind == _MenuKind.combos) {
@@ -1149,8 +1124,9 @@ class _MenuGrid extends StatelessWidget {
               if (comboSum > finalPrice) {
                 discounted = true;
                 displayPrice = comboSum;
-                badgeText =
-                    '-CHF ${(comboSum - finalPrice).toStringAsFixed(2)}';
+                badgeText = _discountBadgeText(m).isNotEmpty
+                    ? _discountBadgeText(m)
+                    : '-CHF ${(comboSum - finalPrice).toStringAsFixed(2)}';
                 badgeColor = const Color(0xFFFF8C00);
               }
             }
@@ -1262,26 +1238,18 @@ void _showItemSheet(
       }
 
       double computeTotal() {
-        double original = ((item['price'] as num?) ?? 0).toDouble();
+        double? sizePrice;
         if (hasMultipleSizes &&
             displaySizes.isNotEmpty &&
             selectedSizeName != null) {
-          original = getPriceForSize(
+          sizePrice = getPriceForSize(
             displaySizes.firstWhere(
               (s) => s['name'] == selectedSizeName,
               orElse: () => displaySizes.first,
             ),
           );
         }
-        double effective = original;
-        if (_isDiscounted(item)) {
-          final dType = (item['discountType'] as String?) ?? 'percent';
-          final dVal = (item['discountValue'] as num?)?.toDouble() ?? 0;
-          effective = dType == 'percent'
-              ? original - (original * dVal / 100)
-              : original - dVal;
-          if (effective < 0) effective = 0;
-        }
+        final effective = menuOfferPrice(item, sizePrice: sizePrice);
         double addOnTotal = 0;
         for (final idx in selectedAddOns)
           addOnTotal += ((additionalOptions[idx]['price'] as num?) ?? 0)
@@ -1300,7 +1268,7 @@ void _showItemSheet(
             ),
           );
         }
-        return ((item['price'] as num?) ?? 0).toDouble();
+        return menuOriginalPrice(item);
       }
 
       Future<bool> addToChat(StateSetter setS) async {
@@ -1376,6 +1344,8 @@ void _showItemSheet(
         };
         if (hasMultipleSizes && selectedSizeName != null)
           payload['size'] = selectedSizeName;
+        final comboContents = comboOrderItems(item);
+        if (comboContents.isNotEmpty) payload['comboItems'] = comboContents;
 
         await FirebaseFirestore.instance
             .collection('chat')
@@ -1388,19 +1358,18 @@ void _showItemSheet(
       return StatefulBuilder(
         builder: (ctx, setS) {
           final orig = getCurrentDisplayOriginalPrice();
-          double eff = orig;
-          if (_isDiscounted(item)) {
-            final dType = (item['discountType'] as String?) ?? 'percent';
-            final dVal = (item['discountValue'] as num?)?.toDouble() ?? 0;
-            eff = dType == 'percent' ? orig - (orig * dVal / 100) : orig - dVal;
-            if (eff < 0) eff = 0;
-          }
+          final eff = menuOfferPrice(
+            item,
+            sizePrice: hasMultipleSizes ? orig : null,
+          );
 
           final bool comboHasSavings = isCombo && comboSum > eff;
           final bool showCompare = _isDiscounted(item) || comboHasSavings;
           final double compareOriginal = comboHasSavings ? comboSum : orig;
           final String compareBadgeText = comboHasSavings
-              ? '-CHF ${(comboSum - eff).toStringAsFixed(2)}'
+              ? (_discountBadgeText(item).isNotEmpty
+                    ? _discountBadgeText(item)
+                    : '-CHF ${(comboSum - eff).toStringAsFixed(2)}')
               : _discountBadgeText(item);
           final Color compareBadgeColor = comboHasSavings
               ? const Color(0xFFFF8C00)
@@ -1581,82 +1550,9 @@ void _showItemSheet(
                       ],
 
                       if (isCombo && comboItemsList.isNotEmpty) ...[
-                        _SectionTitle(
-                          AppLanguage.getText('This Combo Includes'),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: kWhite.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: kWhite.withOpacity(0.1)),
-                          ),
-                          child: Column(
-                            children: [
-                              for (final ci in comboItemsList)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 6,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.check_circle,
-                                        color: kPrimary,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          (ci['name'] as String?) ?? '',
-                                          style: const TextStyle(
-                                            color: kWhite,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                      Text(
-                                        'CHF ${(((ci['price'] as num?) ?? 0).toDouble()).toStringAsFixed(2)}',
-                                        style: const TextStyle(
-                                          color: kMuted,
-                                          fontSize: 12,
-                                          decoration:
-                                              TextDecoration.lineThrough,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              if (comboSum > eff) ...[
-                                const Divider(color: kMuted, height: 18),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        AppLanguage.getText('You Save'),
-                                        style: const TextStyle(
-                                          color: kWhite,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      'CHF ${(comboSum - eff).toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        color: Color(0xFFFF8C00),
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
+                        ComboIncludes(
+                          comboItems: comboItemsList,
+                          savings: comboSum > eff ? comboSum - eff : null,
                         ),
                         const SizedBox(height: 20),
                       ],
