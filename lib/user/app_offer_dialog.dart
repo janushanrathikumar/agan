@@ -16,11 +16,31 @@ const String kPlayStoreUrl = String.fromEnvironment(
       'https://play.google.com/store/apps/details?id=ch.restaurantkleefeld.app',
 );
 
-/// App Store listing. Set this to the app's page (https://apps.apple.com/app/id…)
-/// once it is published; until then guests land on an App Store search.
+/// While the Android app is in closed testing, guests join this Google group
+/// and opt in as testers before the Play Store lets them install it.
+const String kTesterGroupUrl = String.fromEnvironment(
+  'TESTER_GROUP_URL',
+  defaultValue: 'https://groups.google.com/g/restaurant-kleefeld',
+);
+
+const String kTesterOptInUrl = String.fromEnvironment(
+  'TESTER_OPT_IN_URL',
+  defaultValue:
+      'https://play.google.com/apps/testing/ch.restaurantkleefeld.app',
+);
+
+/// Whether Android guests go through the tester steps first. Turn this off
+/// with `--dart-define=PLAY_CLOSED_TESTING=false` once the app is public.
+const bool kPlayClosedTesting = bool.fromEnvironment(
+  'PLAY_CLOSED_TESTING',
+  defaultValue: true,
+);
+
+/// App Store listing. Left without a country so Apple opens it in the
+/// guest's own store (Switzerland, Germany, …).
 const String kAppStoreUrl = String.fromEnvironment(
   'APP_STORE_URL',
-  defaultValue: 'https://apps.apple.com/ch/search?term=Restaurant%20Kleefeld',
+  defaultValue: 'https://apps.apple.com/app/restaurantkleefeld/id6804714931',
 );
 
 const _kPrimary = Color(0xFFB59410);
@@ -43,20 +63,20 @@ Future<bool> showAppOnlyOfferDialog(
   return result ?? false;
 }
 
+Future<void> _openUrl(BuildContext context, String url) async {
+  final launched = await launchUrl(
+    Uri.parse(url),
+    mode: LaunchMode.externalApplication,
+  );
+  if (!launched && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(url)));
+  }
+}
+
 class _AppOnlyOfferDialog extends StatelessWidget {
   final Map<String, dynamic> item;
 
   const _AppOnlyOfferDialog({required this.item});
-
-  Future<void> _open(BuildContext context, String url) async {
-    final launched = await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
-    );
-    if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(url)));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +202,7 @@ class _AppOnlyOfferDialog extends StatelessWidget {
                   label: singleStore
                       ? AppLanguage.getText('download_app')
                       : 'App Store',
-                  onTap: () => _open(context, kAppStoreUrl),
+                  onTap: () => _openUrl(context, kAppStoreUrl),
                 ),
               if (showApple && showGoogle) const SizedBox(height: 10),
               if (showGoogle)
@@ -191,7 +211,12 @@ class _AppOnlyOfferDialog extends StatelessWidget {
                   label: singleStore
                       ? AppLanguage.getText('download_app')
                       : 'Google Play',
-                  onTap: () => _open(context, kPlayStoreUrl),
+                  onTap: () => kPlayClosedTesting
+                      ? showDialog<void>(
+                          context: context,
+                          builder: (_) => const _PlayInstallGuide(),
+                        )
+                      : _openUrl(context, kPlayStoreUrl),
                 ),
               const SizedBox(height: 8),
               TextButton(
@@ -239,6 +264,235 @@ class _StoreButton extends StatelessWidget {
           label,
           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
         ),
+      ),
+    );
+  }
+}
+
+/// The three steps a guest takes to install the Android app while it is in
+/// closed testing. Each step lights up once its link was opened, so the guest
+/// always sees which one comes next.
+class _PlayInstallGuide extends StatefulWidget {
+  const _PlayInstallGuide();
+
+  @override
+  State<_PlayInstallGuide> createState() => _PlayInstallGuideState();
+}
+
+class _PlayInstallGuideState extends State<_PlayInstallGuide> {
+  int _done = 0;
+
+  static const _steps = [
+    (
+      url: kTesterGroupUrl,
+      icon: Icons.group_add_rounded,
+      title: 'install_step1_title',
+      text: 'install_step1_text',
+      button: 'install_step1_button',
+    ),
+    (
+      url: kTesterOptInUrl,
+      icon: Icons.verified_user_rounded,
+      title: 'install_step2_title',
+      text: 'install_step2_text',
+      button: 'install_step2_button',
+    ),
+    (
+      url: kPlayStoreUrl,
+      icon: Icons.download_rounded,
+      title: 'install_step3_title',
+      text: 'install_step3_text',
+      button: 'install_step3_button',
+    ),
+  ];
+
+  Future<void> _openStep(int index) async {
+    await _openUrl(context, _steps[index].url);
+    if (mounted && _done <= index) setState(() => _done = index + 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: _kCardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.android_rounded, color: _kPrimary, size: 40),
+              const SizedBox(height: 10),
+              Text(
+                AppLanguage.getText('install_guide_title'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: _kWhite,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                AppLanguage.getText('install_guide_text'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: _kMuted, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              for (var i = 0; i < _steps.length; i++)
+                _GuideStep(
+                  number: i + 1,
+                  icon: _steps[i].icon,
+                  title: AppLanguage.getText(_steps[i].title),
+                  text: AppLanguage.getText(_steps[i].text),
+                  button: AppLanguage.getText(_steps[i].button),
+                  done: i < _done,
+                  current: i == _done,
+                  onTap: () => _openStep(i),
+                ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _kPrimary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      color: _kPrimary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        AppLanguage.getText('install_guide_tip'),
+                        style: const TextStyle(color: _kWhite, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  AppLanguage.getText('close'),
+                  style: const TextStyle(color: _kMuted),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GuideStep extends StatelessWidget {
+  final int number;
+  final IconData icon;
+  final String title;
+  final String text;
+  final String button;
+  final bool done;
+  final bool current;
+  final VoidCallback onTap;
+
+  const _GuideStep({
+    required this.number,
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.button,
+    required this.done,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = done ? Colors.greenAccent : _kPrimary;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(current ? 0.25 : 0.15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: current || done
+              ? accent.withOpacity(0.7)
+              : Colors.white.withOpacity(0.08),
+          width: current ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: accent,
+                child: done
+                    ? const Icon(Icons.check, color: Colors.black, size: 16)
+                    : Text(
+                        '$number',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: _kWhite,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(text, style: const TextStyle(color: _kMuted, fontSize: 12.5)),
+          const SizedBox(height: 10),
+          current
+              ? FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _kPrimary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: onTap,
+                  icon: Icon(icon, size: 18),
+                  label: Text(
+                    button,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                )
+              : OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: done ? Colors.greenAccent : _kWhite,
+                    side: BorderSide(color: accent.withOpacity(0.6)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: onTap,
+                  icon: Icon(done ? Icons.refresh_rounded : icon, size: 18),
+                  label: Text(button),
+                ),
+        ],
       ),
     );
   }
