@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:ui';
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -876,9 +875,6 @@ class _PromoCarousel extends StatefulWidget {
 }
 
 class _PromoCarouselState extends State<_PromoCarousel> {
-  final PageController _ctrl = PageController(viewportFraction: 0.90);
-  int _current = 0;
-
   // Created once: a new `.snapshots()` on every build re-subscribed each time
   // the page changed, so the carousel fell back to the loading spinner and
   // lost its place while the guest was swiping or tapping.
@@ -897,21 +893,6 @@ class _PromoCarouselState extends State<_PromoCarousel> {
           .snapshots();
     }
     return _deliveryStream!;
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _goTo(int index) {
-    if (!_ctrl.hasClients) return;
-    _ctrl.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   Future<bool> _hasSelectedMethod(BuildContext context) async {
@@ -1041,9 +1022,15 @@ class _PromoCarouselState extends State<_PromoCarousel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (offerDocs.isNotEmpty) _buildCarousel(context, offerDocs),
-            if (offerDocs.isNotEmpty && comboDocs.isNotEmpty)
-              const SizedBox(height: 20),
+            for (final d in offerDocs)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                child: _OfferCard(
+                  data: d.data() as Map<String, dynamic>,
+                  onTap: () =>
+                      _onPromoTap(context, d.data() as Map<String, dynamic>),
+                ),
+              ),
             for (final d in comboDocs)
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -1077,321 +1064,11 @@ class _PromoCarouselState extends State<_PromoCarousel> {
     if (!context.mounted) return;
     _openItemSheet(context, data);
   }
-
-  Widget _buildCarousel(
-    BuildContext context,
-    List<QueryDocumentSnapshot> promoDocs,
-  ) {
-    final count = promoDocs.length;
-    final current = _current.clamp(0, count - 1);
-
-    return Column(
-      children: [
-        SizedBox(
-          height: 290,
-          child: Stack(
-            children: [
-              ScrollConfiguration(
-                // Mouse and trackpad drags are off by default on web and
-                // desktop, which left guests stuck on the first offer.
-                behavior: ScrollConfiguration.of(
-                  context,
-                ).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
-                child: PageView.builder(
-                  controller: _ctrl,
-                  itemCount: count,
-                  onPageChanged: (i) => setState(() => _current = i),
-                  itemBuilder: (context, index) {
-                    final data =
-                        promoDocs[index].data() as Map<String, dynamic>;
-                    final name = data['name'] ?? 'Special Offer';
-                    final imageUrl = (data['imageUrl'] ?? '') as String;
-                    final itemType = (data['itemType'] ?? '')
-                        .toString()
-                        .toLowerCase();
-                    final bool isCombo = itemType == 'combo';
-                    final double originalPrice = menuOriginalPrice(data);
-                    final double offerPrice = _shownOfferPrice(data);
-                    final offerLabel = _shownOfferLabel(data);
-                    final isActive = _current == index;
-
-                    return GestureDetector(
-                      onTap: () async {
-                        if (!isActive) {
-                          _goTo(index);
-                          return;
-                        }
-                        await _onPromoTap(context, data);
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 350),
-                        curve: Curves.easeOutCubic,
-                        margin: EdgeInsets.only(
-                          left: 8,
-                          right: 8,
-                          top: isActive ? 0 : 16,
-                          bottom: isActive ? 10 : 26,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(28),
-                          boxShadow: isActive
-                              ? [
-                                  BoxShadow(
-                                    color: kPrimary.withOpacity(0.35),
-                                    blurRadius: 25,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ]
-                              : [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(28),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              imageUrl.isNotEmpty
-                                  ? Image.network(imageUrl, fit: BoxFit.cover)
-                                  : Container(
-                                      color: kCardBg,
-                                      child: const Icon(
-                                        Icons.fastfood,
-                                        color: kMuted,
-                                        size: 80,
-                                      ),
-                                    ),
-                              Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    stops: const [0.0, 0.4, 0.8, 1.0],
-                                    colors: [
-                                      Colors.black.withOpacity(0.2),
-                                      Colors.transparent,
-                                      Colors.black.withOpacity(0.8),
-                                      Colors.black.withOpacity(0.95),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                top: 16,
-                                left: 16,
-                                child: Row(
-                                  children: [
-                                    if (isCombo)
-                                      _Badge(
-                                        label: AppLanguage.getText('Combos'),
-                                        color: const Color(0xFFFF8C00),
-                                        icon: Icons.fastfood_rounded,
-                                      ),
-                                    if (offerLabel != null) ...[
-                                      if (isCombo) const SizedBox(width: 8),
-                                      _Badge(
-                                        label: offerLabel,
-                                        color: kDiscount,
-                                        icon: Icons.local_offer_rounded,
-                                      ),
-                                    ],
-                                    if (hasAppOffer(data)) ...[
-                                      const SizedBox(width: 8),
-                                      _AppOfferBadge(data: data),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              Positioned(
-                                top: 16,
-                                right: 16,
-                                child: Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: kPrimary,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: kPrimary.withOpacity(0.5),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Icon(
-                                    Icons.add,
-                                    color: Colors.white,
-                                    size: 26,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 20,
-                                left: 20,
-                                right: 20,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      name,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w900,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.black,
-                                            blurRadius: 8,
-                                          ),
-                                        ],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          'CHF ${offerPrice.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            color: kPrimary,
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                        if (originalPrice > offerPrice) ...[
-                                          const SizedBox(width: 8),
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              bottom: 2,
-                                            ),
-                                            child: Text(
-                                              'CHF ${originalPrice.toStringAsFixed(2)}',
-                                              style: TextStyle(
-                                                color: kWhite.withOpacity(0.7),
-                                                fontSize: 14,
-                                                decoration:
-                                                    TextDecoration.lineThrough,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    if (originalPrice > offerPrice) ...[
-                                      const SizedBox(height: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: kDiscount,
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          isCombo
-                                              ? 'Combo offer • You save CHF ${(originalPrice - offerPrice).toStringAsFixed(2)}'
-                                              : 'You save CHF ${(originalPrice - offerPrice).toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              if (count > 1) ...[
-                if (current > 0)
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 16,
-                    child: Center(
-                      child: _CarouselArrow(
-                        icon: Icons.chevron_left_rounded,
-                        onTap: () => _goTo(current - 1),
-                      ),
-                    ),
-                  ),
-                if (current < count - 1)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    bottom: 16,
-                    child: Center(
-                      child: _CarouselArrow(
-                        icon: Icons.chevron_right_rounded,
-                        onTap: () => _goTo(current + 1),
-                      ),
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-        if (count > 1) ...[
-          const SizedBox(height: 12),
-          Wrap(
-            alignment: WrapAlignment.center,
-            children: List.generate(
-              count,
-              (i) => GestureDetector(
-                onTap: () => _goTo(i),
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 6,
-                  ),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    width: current == i ? 28 : 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: current == i ? kPrimary : kMuted.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${current + 1} / $count',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: kMuted, fontSize: 13),
-          ),
-        ],
-      ],
-    );
-  }
 }
 
-/// An offer the admin gave to app orders only. The website shows it too,
-/// priced as in the app, but tapping it points the guest to the stores.
+/// An offer the admin gave to app orders only. The website shows it like
+/// any other offer, priced as in the app, but tapping it points the guest
+/// to the stores.
 bool _isAppOnlyOffer(Map<String, dynamic> data) =>
     !appOffersApply && hasAppOffer(data);
 
@@ -1401,19 +1078,157 @@ double _shownOfferPrice(Map<String, dynamic> data) =>
 String? _shownOfferLabel(Map<String, dynamic> data) =>
     _isAppOnlyOffer(data) ? appOfferLabel(data) : menuOfferLabel(data);
 
-class _AppOfferBadge extends StatelessWidget {
+/// A single menu on offer, laid out like the combo cards: its photo on one
+/// side and the name, offer and price on the other.
+class _OfferCard extends StatelessWidget {
   final Map<String, dynamic> data;
+  final VoidCallback onTap;
 
-  const _AppOfferBadge({required this.data});
+  const _OfferCard({required this.data, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return _Badge(
-      label: AppLanguage.getText(
-        _isAppOnlyOffer(data) ? 'app_offer_only_badge' : 'app_offer_badge',
+    final name = (data['name'] as String?) ?? 'Special Offer';
+    final note = ((data['note'] as String?) ?? '').trim();
+    final double originalPrice = menuOriginalPrice(data);
+    final double offerPrice = _shownOfferPrice(data);
+    final offerLabel = _shownOfferLabel(data);
+
+    return Material(
+      color: kCardBg,
+      borderRadius: BorderRadius.circular(24),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: kPrimary.withOpacity(0.35)),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 120),
+                    child: _ComboPhoto(
+                      imageUrl: (data['imageUrl'] as String?) ?? '',
+                      isDrink: data['itemType'] == 'drink',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: offerLabel == null
+                                ? const SizedBox.shrink()
+                                : Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _Badge(
+                                      label: offerLabel,
+                                      color: kDiscount,
+                                      icon: Icons.local_offer_rounded,
+                                    ),
+                                  ),
+                          ),
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: const BoxDecoration(
+                              color: kPrimary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: kWhite,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (note.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          note,
+                          style: const TextStyle(color: kMuted, fontSize: 12.5),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'CHF ${offerPrice.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: kPrimary,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          if (originalPrice > offerPrice)
+                            Text(
+                              'CHF ${originalPrice.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: kWhite.withOpacity(0.6),
+                                fontSize: 13,
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (originalPrice > offerPrice) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kDiscount,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'You save CHF ${(originalPrice - offerPrice).toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      color: const Color(0xFF2F80ED),
-      icon: Icons.phone_iphone_rounded,
     );
   }
 }
@@ -1485,7 +1300,6 @@ class _ComboOfferCard extends StatelessWidget {
                             color: kDiscount,
                             icon: Icons.local_offer_rounded,
                           ),
-                        if (hasAppOffer(data)) _AppOfferBadge(data: data),
                       ],
                     ),
                   ),
@@ -1694,28 +1508,6 @@ class _ComboPhoto extends StatelessWidget {
                 fit: BoxFit.cover,
                 fallback: fallback,
               ),
-      ),
-    );
-  }
-}
-
-class _CarouselArrow extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _CarouselArrow({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black.withOpacity(0.55),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, color: kWhite, size: 30),
-        ),
       ),
     );
   }
